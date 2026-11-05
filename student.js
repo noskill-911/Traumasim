@@ -50,8 +50,9 @@ function animateWaves(){if(!document.getElementById('ecgTrace'))return;const v=s
     el('elapsed').textContent = api.clock(snapshot.elapsed);
     if (snapshot.triage) {
       const { red, reason, condition } = snapshot.triage;
-      el('triageBox').className = 'triage ' + (red ? 'red' : 'yellow');
-      el('triage').textContent = red ? 'SK I · ROT' : 'SK II · GELB';
+      const category = snapshot.triage.category ?? (red ? 'red' : 'yellow');
+      el('triageBox').className = 'triage ' + category;
+      el('triage').textContent = { red: 'SK I · ROT', yellow: 'SK II · GELB', green: 'SK III · GRÜN' }[category];
       el('triageReason').textContent = reason;
       el('patientCondition').textContent = condition;
     }

@@ -126,7 +126,7 @@ $$;
 
 create or replace function traumasim_private.student(
  p_case text, p_patient text, p_code text, p_start_revision integer default null
-) returns jsonb language plpgsql security definer set search_path = '' as $$
+) returns jsonb language plpgsql security definer set search_path = '' as $
 declare
  exercise public.traumasim_sessions%rowtype;
  patient public.traumasim_patients%rowtype;
@@ -135,9 +135,134 @@ declare
  seconds numeric;
  vitals jsonb;
  red boolean;
+ category text;
+ triage_delay integer;
  condition_index integer;
 begin
- if p_code is null or p_code !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.j?[0-9a-f]{64}$' then
+ if p_code is null or p_code !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.j?[0-9a-f]{64}
+
+create or replace function traumasim_private.trainer(
+ p_action text default 'list', p_session uuid default null, p_patient text default null, p_title text default null
+) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+ trainer uuid := auth.uid();
+ exercise public.traumasim_sessions%rowtype;
+ snapshot_time timestamptz;
+ result jsonb;
+begin
+ if not exists (
+   select 1 from auth.users u
+   join traumasim_private.trainers t on t.email = lower(u.email)
+   where u.id = trainer and u.email_confirmed_at is not null
+ ) then
+   raise exception using errcode = '42501', message = 'Konto nicht für die Ausbilderansicht freigegeben';
+ end if;
+
+ if p_action = 'list' then
+   select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'title', s.title, 'expires_at', s.expires_at)
+     order by s.created_at desc), '[]'::jsonb) into result
+   from public.traumasim_sessions s
+   where s.trainer_id = trainer and s.expires_at > clock_timestamp();
+   return result;
+ end if;
+
+ if p_action = 'create' then
+   if p_title is null or length(btrim(p_title)) not between 1 and 120 then
+     raise exception using errcode = '22023', message = 'Übungstitel muss 1 bis 120 Zeichen enthalten';
+   end if;
+   insert into public.traumasim_sessions (title, trainer_id)
+   values (btrim(p_title), trainer) returning * into exercise;
+   insert into public.traumasim_patients (session_id, patient_key)
+   select exercise.id, m.patient_key from traumasim_private.models m where m.case_key = exercise.case_key;
+ else
+   select s.* into exercise
+   from public.traumasim_sessions s
+   where s.id = p_session and s.trainer_id = trainer and s.expires_at > clock_timestamp()
+   for update;
+   if not found or exercise.expires_at <= clock_timestamp() then
+     raise exception using errcode = '42501', message = 'Übung nicht verfügbar oder abgelaufen';
+   end if;
+
+   if p_action in ('reset', 'pause', 'resume') and not exists (
+     select 1 from public.traumasim_patients p where p.session_id = exercise.id and p.patient_key = p_patient
+   ) then
+     raise exception using errcode = '22023', message = 'Patient gehört nicht zu dieser Übung';
+   end if;
+   snapshot_time := clock_timestamp();
+   case p_action
+     when 'status' then null;
+     when 'reset', 'reset_all' then
+       update public.traumasim_patients
+       set started_at = null, paused_at = null, accumulated_pause_seconds = 0,
+           state = '{}'::jsonb, updated_at = snapshot_time, revision = revision + 1
+       where session_id = exercise.id and (p_action = 'reset_all' or patient_key = p_patient);
+     when 'pause' then
+       update public.traumasim_patients
+       set paused_at = snapshot_time, updated_at = snapshot_time
+       where session_id = exercise.id and patient_key = p_patient
+         and started_at is not null and paused_at is null
+         and traumasim_private.elapsed(started_at, paused_at, accumulated_pause_seconds, snapshot_time) < 1500;
+     when 'resume' then
+       update public.traumasim_patients
+       set accumulated_pause_seconds = accumulated_pause_seconds + extract(epoch from (snapshot_time - paused_at)),
+           paused_at = null, updated_at = snapshot_time
+       where session_id = exercise.id and patient_key = p_patient and paused_at is not null;
+     else raise exception using errcode = '22023', message = 'Unbekannte Übungsaktion';
+   end case;
+ end if;
+
+ snapshot_time := clock_timestamp();
+ select jsonb_agg(jsonb_build_object(
+   'id', p.patient_key,
+   'code', traumasim_private.patient_code(exercise.id, p.patient_key, exercise.signing_key),
+   'model', m.model,
+   'elapsed', floor(t.seconds),
+   'status', case when p.started_at is null then 'ready'
+     when t.seconds >= 1500 then 'finished' when p.paused_at is not null then 'paused' else 'running' end
+ ) order by p.patient_key) into result
+ from public.traumasim_patients p
+ join traumasim_private.models m on m.case_key = exercise.case_key and m.patient_key = p.patient_key
+ cross join lateral (select traumasim_private.elapsed(p.started_at, p.paused_at, p.accumulated_pause_seconds, snapshot_time) as seconds) t
+ where p.session_id = exercise.id;
+ return jsonb_build_object('id', exercise.id, 'title', exercise.title, 'case', exercise.case_key,
+   'expires_at', exercise.expires_at, 'patients', result,
+   'join_code', traumasim_private.exercise_code(exercise.id, exercise.case_key, exercise.signing_key));
+end;
+$$;
+
+-- Keep the privileged implementations out of PostgREST's exposed schema.
+create or replace function public.traumasim_join(p_code text)
+returns jsonb language sql security invoker set search_path = '' as $$
+ select traumasim_private.join_exercise(p_code);
+$$;
+
+create or replace function public.traumasim_student(
+ p_case text, p_patient text, p_code text, p_start_revision integer default null
+) returns jsonb language sql security invoker set search_path = '' as $$
+ select traumasim_private.student(p_case, p_patient, p_code, p_start_revision);
+$$;
+
+create or replace function public.traumasim_trainer(
+ p_action text default 'list', p_session uuid default null, p_patient text default null, p_title text default null
+) returns jsonb language sql security invoker set search_path = '' as $$
+ select traumasim_private.trainer(p_action, p_session, p_patient, p_title);
+$$;
+
+revoke all on all functions in schema traumasim_private from public, anon, authenticated;
+revoke all on function public.traumasim_join(text) from public, anon, authenticated;
+revoke all on function public.traumasim_student(text, text, text, integer) from public, anon, authenticated;
+revoke all on function public.traumasim_trainer(text, uuid, text, text) from public, anon, authenticated;
+grant usage on schema traumasim_private to anon, authenticated;
+grant execute on function traumasim_private.join_exercise(text) to anon, authenticated;
+grant execute on function public.traumasim_join(text) to anon, authenticated;
+grant execute on function traumasim_private.student(text, text, text, integer) to anon, authenticated;
+grant execute on function traumasim_private.trainer(text, uuid, text, text) to authenticated;
+grant execute on function public.traumasim_student(text, text, text, integer) to anon, authenticated;
+grant execute on function public.traumasim_trainer(text, uuid, text, text) to authenticated;
+
+notify pgrst, 'reload schema';
+commit;
+ then
    raise exception using errcode = '42501', message = 'Patientenzugang ungültig oder abgelaufen';
  end if;
 
@@ -182,6 +307,12 @@ begin
  seconds := traumasim_private.elapsed(patient.started_at, patient.paused_at, patient.accumulated_pause_seconds, snapshot_time);
  vitals := traumasim_private.vitals(model, seconds);
  red := p_patient = 'fahrer' and ((vitals->>'s')::integer < 100 or (vitals->>'g')::integer < 15 or (vitals->>'h')::integer >= 120);
+ category := case
+   when red then 'red'
+   when model->'walkable' = 'true'::jsonb then 'green'
+   else 'yellow' end;
+ -- Training timings follow the category available at the current patient time.
+ triage_delay := case category when 'green' then 10 when 'yellow' then 20 else 35 end;
  condition_index := case
    when p_patient = 'beifahrer' then least(3, floor(seconds / 420)::integer)
    when (vitals->>'g')::integer <= 12 then 3
@@ -193,16 +324,17 @@ begin
    'status', case when patient.started_at is null then 'ready'
      when seconds >= 1500 then 'finished' when patient.paused_at is not null then 'paused' else 'running' end,
    'elapsed', floor(seconds),
-   'triage', case when seconds >= 60 then jsonb_build_object(
-     'red', red, 'condition', model->'condition'->>condition_index,
+   'triage', case when seconds >= triage_delay then jsonb_build_object(
+     'category', category, 'red', red, 'condition', model->'condition'->>condition_index,
      'reason', case when red then 'Didaktische Einstufung: Zeichen eines kritischen Schocks'
+       when category = 'green' then 'Gehfähig; Nachsichtung vorgesehen'
        when p_patient = 'beifahrer' then 'Schwer verletzt, zunächst ohne erkennbare vitale Bedrohung'
        else 'Schwere Verletzung, Kreislauf zunächst kompensiert' end
    ) end,
    'vitals', case when seconds >= 120 then vitals end
  );
 end;
-$$;
+$;
 
 create or replace function traumasim_private.trainer(
  p_action text default 'list', p_session uuid default null, p_patient text default null, p_title text default null

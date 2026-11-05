@@ -9,8 +9,10 @@ Patientensimulator für die Feuerwehr- und Rettungsdienstausbildung.
 
 Ausbilder legen eine Übung an und zeigen den Übungs-QR. Teilnehmende scannen ihn
 einmal und öffnen danach im selben Browser die vorhandenen Patienten-QR-Codes.
-Der erste gültige Patientenaufruf startet den Patienten geräteübergreifend. Beim erneuten Öffnen läuft derselbe Verlauf weiter. Sichtung und
-Vitalwerte werden nach 60 bzw. 120 Sekunden freigegeben.
+Der erste gültige Patientenaufruf startet den Patienten geräteübergreifend. Beim erneuten Öffnen läuft derselbe Verlauf weiter.
+Die simulierte Vorsichtung erscheint ab 10 Sekunden (SK III, grün),
+20 Sekunden (SK II, gelb) oder 35 Sekunden (SK I, rot) gemeinsamer Patientenzeit.
+Der Monitor mit Vitalwerten erscheint ab 120 Sekunden.
 
 Die Ausbilderansicht erlaubt Pausieren, Fortsetzen und das Zurücksetzen eines
 Patienten oder der ganzen Übung. Eine Übung ist 24 Stunden zugänglich. Der
