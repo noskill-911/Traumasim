@@ -16,8 +16,23 @@
 4. Beim Zurücksetzen bleibt der Zugangscode gültig. Bereits geöffnete Geräte
    zeigen „Wartet auf Start“. Ein erneuter Aufruf oder „Patient starten“ startet
    die neue Runde. Einzelreset und Übungsreset ändern den zentralen Zustand.
-5. Die Ausbildervorschau hat eine eigene Uhr. Änderungen an der Vorschau
+5. **Übung beenden** schließt die Übung samt QR-Zugängen. Die Patientenübersicht
+   zeigt den Status und die Übungszeit aller Patienten.
+6. Die Ausbildervorschau hat eine eigene Uhr. Änderungen an der Vorschau
    wirken sich auf die Live-Übung erst über die gesonderten Steuerknöpfe aus.
+
+## Eigene Szenarien
+
+Im Szenarioeditor Patienten, Texte, Gehfähigkeit und Vitalverläufe pflegen.
+Danach den gespeicherten Entwurf oder eine exportierte JSON-Datei in der
+Ausbilderansicht als Live-Übung starten. Unterstützt werden bis zu 30
+Patienten. Ein Live-Durchlauf verwendet eine eigene Kopie der Falldaten.
+
+Teilnehmende scannen den Übungs-QR und wählen auf der Beitrittsseite einen
+Patienten oder nutzen den Stations-QR im selben Browser. Der Stations-QR
+eines eigenen Falls gehört zu diesem Live-Durchlauf. Bei der Beispielübung
+gelten weiterhin die vorhandenen Fahrer- und Beifahrer-QRs. Ausbildertexte
+aus eigenen Szenarien sind nur in der Ausbilderansicht verfügbar.
 
 ## Einrichtung und Rechte
 

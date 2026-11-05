@@ -29,8 +29,14 @@
       <label>Aktive Übung <select id="exercise"></select></label>
       <form id="create">
         <label>Titel für neue Übung <input id="exerciseTitle" maxlength="120" required></label>
-        <button>Übung anlegen</button>
+        <button>Beispielübung anlegen</button>
       </form>
+      <details>
+        <summary>Eigenes Szenario als Übung starten</summary>
+        <p>Verwende deinen zuletzt gespeicherten Entwurf aus dem <a href="editor.html">Szenarioeditor</a> oder lade dessen JSON-Datei hoch.</p>
+        <label>JSON-Datei (optional) <input id="scenarioFile" type="file" accept="application/json,.json"></label>
+        <button id="createCustom" type="button">Eigenes Szenario starten</button>
+      </details>
     </section>
     <section id="exerciseJoin" class="panel" hidden>
       <h2>Übungs-QR zum Einstieg</h2>
@@ -42,15 +48,18 @@
     <section id="live" class="panel" hidden>
       <h2>Geräteübergreifender Verlauf</h2>
       <p id="expiry" class="muted small"></p>
+      <ul id="patientOverview" class="patient-overview" aria-label="Status aller Patienten"></ul>
       <label>Patient auswählen <select id="choose"></select></label>
       <p id="patientStatus" aria-live="off"></p>
       <button id="pausePatient" data-action="pause">Patient pausieren</button>
       <button id="resumePatient" data-action="resume">Patient fortsetzen</button>
       <button id="resetPatient" data-action="reset">Patient zurücksetzen</button>
+      <button id="closeExercise" data-action="close">Übung beenden</button>
       <button id="resetAll" data-action="reset_all">Ganze Übung zurücksetzen</button>
       <p class="muted small">Nach dem Zurücksetzen wartet der Patient auf einen neuen Aufruf oder auf „Patient starten“.</p>
       <p><label>Patientenlink <input id="patientLink" readonly></label>
       <button id="copyLink">Patientenlink kopieren</button></p>
+      <div id="station" hidden><h3>Stations-QR für diesen Patienten</h3><div id="stationQr" class="exercise-qr"></div></div>
     </section>
     <section id="preview" class="panel" hidden>
       <h2>Ausbildervorschau</h2>

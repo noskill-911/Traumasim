@@ -18,8 +18,14 @@ Puls und SpO₂ nach 25 Sekunden, Atemfrequenz nach 40 Sekunden, GCS nach
 90 Sekunden. Diese Zeiten bilden einen Übungsablauf ab.
 
 Die Ausbilderansicht erlaubt Pausieren, Fortsetzen und das Zurücksetzen eines
-Patienten oder der ganzen Übung. Eine Übung ist 24 Stunden zugänglich. Der
-Szenarioeditor bleibt lokal und erstellt JSON-Entwürfe.
+Patienten oder der ganzen Übung. Die Übersicht zeigt alle Patienten der
+gewählten Übung. Die Ausbilder können eine Übung beenden und damit die
+QR-Zugänge schließen. Übungen laufen spätestens nach 24 Stunden ab.
+
+Eigene Szenarien im Szenarioeditor bearbeiten und als Entwurf speichern.
+In der Ausbilderansicht **Eigenes Szenario als Übung starten** öffnen und
+den gespeicherten Entwurf verwenden oder eine exportierte JSON-Datei
+hochladen. Die Live-Übung erhält eine eigene Kopie des Entwurfs.
 
 Die Verläufe dienen der Ausbildung. Sie sind didaktische Beispiele und kein
 validiertes medizinisches Verfahren. Keine personenbezogenen Daten verwenden.

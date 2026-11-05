@@ -5,17 +5,17 @@
   const caseId = params.get('case') || 'vu-baum';
   const patientId = params.get('patient') || 'fahrer';
   const scenario = window.TRAUMA_CASES.find((item) => item.id === caseId);
-  const patient = scenario?.patients.find((item) => item.id === patientId);
+  const preset = scenario?.patients.find((item) => item.id === patientId);
   const el = (id) => document.getElementById(id);
   const api = window.TraumaSync;
 
-  if (!patient) {
+  if (!preset && !/^custom-[0-9a-f-]{36}$/.test(caseId)) {
     el('content').innerHTML = '<div class="panel"><h1>Patient nicht gefunden</h1><a href="index.html">Zur Übersicht</a></div>';
     return;
   }
 
-  el('caseTitle').textContent = scenario.title;
-  el('patientTitle').textContent = patient.name;
+  el('caseTitle').textContent = scenario?.title ?? 'TraumaSim';
+  el('patientTitle').textContent = preset?.name ?? 'Übungspatient';
   const storageKey = 'traumasim-access:' + caseId + ':' + patientId;
   const linkCode = new URLSearchParams(location.hash.slice(1)).get('code');
   if (linkCode) {
@@ -47,9 +47,12 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
   }
 
   function render() {
-    el('intro').textContent = snapshot ? patient.intro : '';
-    el('story').textContent = snapshot ? patient.story : '';
-    el('questions').textContent = snapshot ? patient.questions : '';
+    const brief = snapshot && (snapshot.brief ?? preset);
+    el('caseTitle').textContent = brief?.title ?? scenario?.title ?? 'TraumaSim';
+    el('patientTitle').textContent = brief?.name ?? preset?.name ?? 'Übungspatient';
+    el('intro').textContent = brief?.intro ?? '';
+    el('story').textContent = brief?.story ?? '';
+    el('questions').textContent = brief?.questions ?? '';
     el('storyPanel').hidden = !snapshot;
     el('clockPanel').hidden = !snapshot;
     el('startPatient').hidden = snapshot?.status !== 'ready';

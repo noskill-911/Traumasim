@@ -1,18 +1,45 @@
-<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TraumaSim · Szenarioeditor</title><link rel="stylesheet" href="style.css"></head><body><main>
-<div class="panel"><div class="muted">TRAUMASIM · 2.0 PROTOTYP</div><h1>Szenarioeditor</h1><p>Erstelle eine Übungslage mit mehreren Patienten. Die Daten bleiben auf diesem Gerät und können als JSON-Datei exportiert werden.</p><p class="warning small">Dieser Editor speichert seine Entwürfe lokal. Bitte keine personenbezogenen Daten eingeben.</p><a href="index.html">Zur Patientenbibliothek</a></div>
-<div class="panel"><label>Bezeichnung der Übungslage<input id="caseTitle" style="width:100%;padding:12px" maxlength="120"></label><label>Patient auswählen<select id="choose"></select></label><button id="add">+ Patient hinzufügen</button><button id="remove">Patient entfernen</button></div>
-<div class="panel"><label>Name / Kennung<input id="name" style="width:100%;padding:12px" maxlength="100"></label><label>Für Schüler sichtbare Lagebeschreibung<textarea id="intro" rows="3" style="width:100%"></textarea></label><label>Patientenaussage<textarea id="story" rows="4" style="width:100%"></textarea></label><label>Auf Nachfrage<textarea id="questions" rows="3" style="width:100%"></textarea></label><label>Ausbilderinformation (nur in der lokalen Bearbeitung)<textarea id="secret" rows="3" style="width:100%"></textarea></label><p class="muted small">Neue Entwürfe verwenden neutrale Beispielwerte. Ein eigener Kurveneditor folgt.</p><button id="save">Auf diesem Gerät speichern</button><button id="export">JSON exportieren</button><label>JSON-Datei importieren<input id="import" type="file" accept=".json,application/json"></label><p id="message" role="status"></p></div>
-</main><script src="patients.js"></script><script>
-(function(){const $=id=>document.getElementById(id),key='traumasim-editor-v1';let data;try{data=JSON.parse(localStorage.getItem(key))}catch(e){}if(!data||!Array.isArray(data.patients))data=JSON.parse(JSON.stringify(window.TRAUMA_CASES[0]));let current=0;
-const templatePoints = [0, 5, 10, 15, 20, 25].map(t => ({t, s:120, d:80, h:80, r:16, o:98, g:15}));
-for (const patient of data.patients) if (!patient.points) patient.points = templatePoints;
-const fields=['name','intro','story','questions','secret'];function commit(){const p=data.patients[current];if(!p)return;fields.forEach(k=>p[k]=$(k).value);data.title=$('caseTitle').value}
-function render(){const select=$('choose');select.innerHTML='';data.patients.forEach((p,i)=>{const o=document.createElement('option');o.value=i;o.textContent=p.name||'Patient '+(i+1);select.appendChild(o)});current=Math.min(current,data.patients.length-1);select.value=current;$('caseTitle').value=data.title||'';const p=data.patients[current];fields.forEach(k=>$(k).value=p[k]||'')}
-$('choose').onchange=()=>{commit();current=Number($('choose').value);render()};
-$('add').onclick=()=>{commit();const template=JSON.parse(JSON.stringify(window.TRAUMA_CASES[0].patients[1]));template.id='patient-'+Date.now();template.name='Neuer Patient '+(data.patients.length+1);template.intro='';template.story='';template.questions='';template.secret='';template.points=templatePoints;data.patients.push(template);current=data.patients.length-1;render()};
-$('remove').onclick=()=>{if(data.patients.length<=1){$('message').textContent='Mindestens ein Patient erforderlich.';return}data.patients.splice(current,1);current=0;render()};
-$('save').onclick=()=>{commit();try{localStorage.setItem(key,JSON.stringify(data));$('message').textContent='Lokal gespeichert.'}catch(e){$('message').textContent='Lokales Speichern nicht möglich.'}};
-$('export').onclick=()=>{commit();const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='traumasim-szenario.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
-$('import').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{const incoming=JSON.parse(await file.text());if(!incoming||typeof incoming.title!=='string'||!Array.isArray(incoming.patients)||incoming.patients.length<1||incoming.patients.length>100||incoming.patients.some(p=>!p||typeof p.name!=='string'||!Array.isArray(p.points)||p.points.length<2))throw Error('Ungültiges Format');data=incoming;current=0;render();$('message').textContent='Szenario importiert. Noch nicht gespeichert.'}catch(err){$('message').textContent='Import fehlgeschlagen: '+err.message}};
-render()})();
-</script></body></html>
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TraumaSim · Szenarioeditor</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body><main>
+  <section class="panel">
+    <h1>Szenarioeditor</h1>
+    <p>Speichere einen Entwurf und starte ihn anschließend in der Ausbilderansicht als gemeinsame Übung.</p>
+    <a href="trainer.html">Zur Ausbilderansicht</a> · <a href="index.html">Zur Patientenbibliothek</a>
+    <label>Bezeichnung der Übungslage <input id="caseTitle" maxlength="120"></label>
+    <label>Patient auswählen <select id="choose"></select></label>
+    <button id="add">Patient hinzufügen</button>
+    <button id="remove">Patient entfernen</button>
+  </section>
+  <section class="panel">
+    <h2>Patient</h2>
+    <label>Name / Kennung <input id="name" maxlength="100"></label>
+    <label><input id="walkable" type="checkbox"> Gehfähig</label>
+    <label>Für Schüler sichtbare Lagebeschreibung <textarea id="intro" rows="3" maxlength="2000"></textarea></label>
+    <label>Patientenaussage <textarea id="story" rows="4" maxlength="2000"></textarea></label>
+    <label>Auf Nachfrage <textarea id="questions" rows="3" maxlength="2000"></textarea></label>
+    <label>Information nur für Ausbilder <textarea id="secret" rows="3" maxlength="2000"></textarea></label>
+    <h2>Simulierter Vitalverlauf</h2>
+    <p>Gib Werte für sechs Zeitpunkte ein. TraumaSim berechnet die Zwischenwerte.</p>
+    <div class="curve-table"><table>
+      <thead><tr><th scope="col">Minute</th><th scope="col">Sys.</th><th scope="col">Dia.</th><th scope="col">Puls</th><th scope="col">AF</th><th scope="col">SpO₂</th><th scope="col">GCS</th></tr></thead>
+      <tbody id="points"></tbody>
+    </table></div>
+  </section>
+  <section class="panel">
+    <p>Entwürfe werden in diesem Browser gespeichert. Bitte verwende fiktive Patientendaten.</p>
+    <button id="save">Entwurf speichern</button>
+    <button id="export">JSON exportieren</button>
+    <label>JSON-Datei importieren <input id="import" type="file" accept=".json,application/json"></label>
+    <p id="message" role="status"></p>
+  </section>
+</main>
+<script src="patients.js"></script>
+<script src="editor.js"></script>
+</body>
+</html>

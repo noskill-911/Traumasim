@@ -30,7 +30,8 @@ alter table public.traumasim_sessions
  add column if not exists case_key text not null default 'vu-baum',
  add column if not exists signing_key uuid not null default gen_random_uuid();
 alter table public.traumasim_patients
- add column if not exists revision integer not null default 0;
+ add column if not exists revision integer not null default 0,
+ add column if not exists scenario_model jsonb;
 create index if not exists traumasim_sessions_trainer on public.traumasim_sessions (trainer_id, created_at desc);
 
 alter table public.traumasim_sessions enable row level security;
@@ -99,7 +100,11 @@ begin
    raise exception using errcode = '42501', message = 'Übungszugang ungültig oder abgelaufen';
  end if;
 
- return jsonb_build_object('case', exercise.case_key, 'title', exercise.title, 'expires_at', exercise.expires_at);
+ return jsonb_build_object('case', exercise.case_key, 'title', exercise.title, 'expires_at', exercise.expires_at)
+   || case when exercise.case_key like 'custom-%' then jsonb_build_object('patients', (
+      select jsonb_agg(jsonb_build_object('id', p.patient_key, 'name', p.scenario_model->>'name') order by p.patient_key)
+      from public.traumasim_patients p where p.session_id = exercise.id
+   )) else '{}'::jsonb end;
 end;
 $$;
 
@@ -156,16 +161,19 @@ begin
    raise exception using errcode = '42501', message = 'Patientenzugang ungültig oder abgelaufen';
  end if;
 
- select m.model into model from traumasim_private.models m
- where m.case_key = p_case and m.patient_key = p_patient;
- if not found then
+ select coalesce(p.scenario_model, m.model) into model
+ from public.traumasim_patients p
+ left join traumasim_private.models m on m.case_key = p_case and m.patient_key = p.patient_key
+ where p.session_id = exercise.id and p.patient_key = p_patient;
+ if model is null then
    raise exception using errcode = '42501', message = 'Patientenzugang ungültig oder abgelaufen';
  end if;
 
  if p_start_revision is not null then
    -- Serialize starts with whole-exercise resets and instructor commands.
-   perform 1 from public.traumasim_sessions s where s.id = exercise.id for update;
-   if not found or exercise.expires_at <= clock_timestamp() then
+   perform 1 from public.traumasim_sessions s
+   where s.id = exercise.id and s.expires_at > clock_timestamp() for update;
+   if not found then
      raise exception using errcode = '42501', message = 'Patientenzugang ungültig oder abgelaufen';
    end if;
    update public.traumasim_patients
@@ -183,7 +191,7 @@ begin
  snapshot_time := clock_timestamp();
  seconds := traumasim_private.elapsed(patient.started_at, patient.paused_at, patient.accumulated_pause_seconds, snapshot_time);
  vitals := traumasim_private.vitals(model, seconds);
- red := p_patient = 'fahrer' and ((vitals->>'s')::integer < 100 or (vitals->>'g')::integer < 15 or (vitals->>'h')::integer >= 120);
+ red := (p_patient = 'fahrer' or patient.scenario_model is not null) and ((vitals->>'s')::integer < 100 or (vitals->>'g')::integer < 15 or (vitals->>'h')::integer >= 120);
  category := case
    when red then 'red'
    when model->'walkable' = 'true'::jsonb then 'green'
@@ -205,6 +213,7 @@ begin
      'category', category, 'red', red, 'condition', model->'condition'->>condition_index,
      'reason', case when red then 'Didaktische Einstufung: Zeichen eines kritischen Schocks'
        when category = 'green' then 'Gehfähig; Nachsichtung vorgesehen'
+       when patient.scenario_model is not null then 'Schwer verletzt, ohne erkennbare vitale Bedrohung (Übungsmodell)'
        when p_patient = 'beifahrer' then 'Schwer verletzt, zunächst ohne erkennbare vitale Bedrohung'
        else 'Schwere Verletzung, Kreislauf zunächst kompensiert' end
    ) end,
@@ -219,18 +228,17 @@ begin
    )) end,
    -- Preserve the complete snapshot for previously loaded student pages.
    'vitals', case when seconds >= 120 then vitals end
- );
+ ) || case when patient.scenario_model is not null then jsonb_build_object('brief', jsonb_build_object(
+   'title', exercise.title, 'name', model->>'name', 'intro', model->>'intro',
+   'story', model->>'story', 'questions', model->>'questions'
+ )) else '{}'::jsonb end;
 end;
 $$;
 
-create or replace function traumasim_private.trainer(
- p_action text default 'list', p_session uuid default null, p_patient text default null, p_title text default null
-) returns jsonb language plpgsql security definer set search_path = '' as $$
+create or replace function traumasim_private.require_trainer()
+returns uuid language plpgsql stable set search_path = '' as $$
 declare
  trainer uuid := auth.uid();
- exercise public.traumasim_sessions%rowtype;
- snapshot_time timestamptz;
- result jsonb;
 begin
  if not exists (
    select 1 from auth.users u
@@ -239,6 +247,20 @@ begin
  ) then
    raise exception using errcode = '42501', message = 'Konto nicht für die Ausbilderansicht freigegeben';
  end if;
+ return trainer;
+end;
+$$;
+
+create or replace function traumasim_private.trainer(
+ p_action text default 'list', p_session uuid default null, p_patient text default null, p_title text default null
+) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+ trainer uuid := traumasim_private.require_trainer();
+ exercise public.traumasim_sessions%rowtype;
+ snapshot_time timestamptz;
+ result jsonb;
+begin
+
 
  if p_action = 'list' then
    select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'title', s.title, 'expires_at', s.expires_at)
@@ -273,6 +295,9 @@ begin
    snapshot_time := clock_timestamp();
    case p_action
      when 'status' then null;
+     when 'close' then
+       update public.traumasim_sessions set expires_at = snapshot_time where id = exercise.id;
+       return jsonb_build_object('id', exercise.id, 'closed', true);
      when 'reset', 'reset_all' then
        update public.traumasim_patients
        set started_at = null, paused_at = null, accumulated_pause_seconds = 0,
@@ -297,18 +322,86 @@ begin
  select jsonb_agg(jsonb_build_object(
    'id', p.patient_key,
    'code', traumasim_private.patient_code(exercise.id, p.patient_key, exercise.signing_key),
-   'model', m.model,
+   'model', coalesce(p.scenario_model, m.model),
+   'custom', p.scenario_model is not null,
    'elapsed', floor(t.seconds),
    'status', case when p.started_at is null then 'ready'
      when t.seconds >= 1500 then 'finished' when p.paused_at is not null then 'paused' else 'running' end
  ) order by p.patient_key) into result
  from public.traumasim_patients p
- join traumasim_private.models m on m.case_key = exercise.case_key and m.patient_key = p.patient_key
+ left join traumasim_private.models m on m.case_key = exercise.case_key and m.patient_key = p.patient_key
  cross join lateral (select traumasim_private.elapsed(p.started_at, p.paused_at, p.accumulated_pause_seconds, snapshot_time) as seconds) t
  where p.session_id = exercise.id;
  return jsonb_build_object('id', exercise.id, 'title', exercise.title, 'case', exercise.case_key,
    'expires_at', exercise.expires_at, 'patients', result,
    'join_code', traumasim_private.exercise_code(exercise.id, exercise.case_key, exercise.signing_key));
+end;
+$$;
+
+create or replace function traumasim_private.create_custom(p_scenario jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+ trainer uuid := traumasim_private.require_trainer();
+ exercise_id uuid := gen_random_uuid();
+ title text := btrim(p_scenario->>'title');
+ models jsonb := p_scenario->'patients';
+ model jsonb;
+ points jsonb;
+ point jsonb;
+ field text;
+ point_index integer;
+ patient_index integer := 0;
+begin
+ if jsonb_typeof(p_scenario) is distinct from 'object' or octet_length(p_scenario::text) > 200000
+    or jsonb_typeof(p_scenario->'title') is distinct from 'string'
+    or length(title) not between 1 and 120 or jsonb_typeof(models) is distinct from 'array' then
+   raise exception using errcode = '22023', message = 'Der Szenarioentwurf ist ungültig.';
+ end if;
+ if jsonb_array_length(models) not between 1 and 30 then
+   raise exception using errcode = '22023', message = 'Eine Übung benötigt 1 bis 30 Patienten.';
+ end if;
+
+ insert into public.traumasim_sessions (id, title, case_key, trainer_id)
+ values (exercise_id, title, 'custom-' || exercise_id::text, trainer);
+ for model in select value from jsonb_array_elements(models) loop
+   patient_index := patient_index + 1;
+   points := model->'points';
+   if jsonb_typeof(model->'name') is distinct from 'string' or length(btrim(model->>'name')) not between 1 and 100
+      or jsonb_typeof(points) is distinct from 'array' then
+     raise exception using errcode = '22023', message = 'Jeder Patient benötigt einen Namen und Vitalwerte.';
+   end if;
+   if jsonb_array_length(points) <> 6 then
+     raise exception using errcode = '22023', message = 'Die Vitalwerte benötigen sechs Zeitpunkte von Minute 0 bis 25.';
+   end if;
+   foreach field in array array['intro', 'story', 'questions', 'secret'] loop
+     if model ? field and (jsonb_typeof(model->field) <> 'string' or length(model->>field) > 2000) then
+       raise exception using errcode = '22023', message = 'Patiententexte dürfen bis zu 2000 Zeichen enthalten.';
+     end if;
+   end loop;
+   for point_index in 0..5 loop
+     point := points->point_index;
+     if point->'t' is distinct from to_jsonb(point_index * 5) then
+       raise exception using errcode = '22023', message = 'Vitalwerte bitte für die Minuten 0, 5, 10, 15, 20 und 25 angeben.';
+     end if;
+     foreach field in array array['s','d','h','r','o','g'] loop
+       if jsonb_typeof(point->field) is distinct from 'number'
+          or (point->>field)::numeric not between 0 and 350 then
+         raise exception using errcode = '22023', message = 'Ein Vitalwert fehlt oder liegt außerhalb des Eingabebereichs.';
+       end if;
+     end loop;
+     if (point->>'o')::numeric > 100 or (point->>'g')::numeric not between 3 and 15 then
+       raise exception using errcode = '22023', message = 'SpO₂ muss zwischen 0 und 100, GCS zwischen 3 und 15 liegen.';
+     end if;
+   end loop;
+   insert into public.traumasim_patients (session_id, patient_key, scenario_model)
+   values (exercise_id, 'patient-' || lpad(patient_index::text, 2, '0'), jsonb_build_object(
+     'name', btrim(model->>'name'), 'intro', coalesce(model->>'intro', ''),
+     'story', coalesce(model->>'story', ''), 'questions', coalesce(model->>'questions', ''),
+     'secret', coalesce(model->>'secret', ''), 'walkable', model->'walkable' = 'true'::jsonb,
+     'points', points
+   ));
+ end loop;
+ return traumasim_private.trainer('status', exercise_id);
 end;
 $$;
 
@@ -330,7 +423,13 @@ create or replace function public.traumasim_trainer(
  select traumasim_private.trainer(p_action, p_session, p_patient, p_title);
 $$;
 
+create or replace function public.traumasim_create_custom(p_scenario jsonb)
+returns jsonb language sql security invoker set search_path = '' as $$
+ select traumasim_private.create_custom(p_scenario);
+$$;
+
 revoke all on all functions in schema traumasim_private from public, anon, authenticated;
+revoke all on function public.traumasim_create_custom(jsonb) from public, anon, authenticated;
 revoke all on function public.traumasim_join(text) from public, anon, authenticated;
 revoke all on function public.traumasim_student(text, text, text, integer) from public, anon, authenticated;
 revoke all on function public.traumasim_trainer(text, uuid, text, text) from public, anon, authenticated;
@@ -340,6 +439,8 @@ grant execute on function public.traumasim_join(text) to anon, authenticated;
 grant execute on function traumasim_private.student(text, text, text, integer) to anon, authenticated;
 grant execute on function traumasim_private.trainer(text, uuid, text, text) to authenticated;
 grant execute on function public.traumasim_student(text, text, text, integer) to anon, authenticated;
+grant execute on function traumasim_private.create_custom(jsonb) to authenticated;
+grant execute on function public.traumasim_create_custom(jsonb) to authenticated;
 grant execute on function public.traumasim_trainer(text, uuid, text, text) to authenticated;
 
 notify pgrst, 'reload schema';

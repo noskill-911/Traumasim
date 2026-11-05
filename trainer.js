@@ -26,8 +26,9 @@
   }
 
   function patientName(id) {
-    return window.TRAUMA_CASES.find((item) => item.id === exercise.case)
-      ?.patients.find((patient) => patient.id === id)?.name || id;
+    return exercise.patients.find((patient) => patient.id === id)?.model?.name
+      ?? window.TRAUMA_CASES.find((item) => item.id === exercise.case)
+      ?.patients.find((patient) => patient.id === id)?.name ?? id;
   }
 
   function options(select, items, label) {
@@ -42,12 +43,13 @@
     const [a, b] = patient.model.points.slice(index, index + 2);
     const v = {};
     for (const key of ['s', 'd', 'h', 'r', 'o', 'g']) v[key] = Math.round(a[key] + (b[key] - a[key]) * (minute - a.t) / 5);
-    const red = patient.id === 'fahrer' && (v.s < 100 || v.g < 15 || v.h >= 120);
+    const red = (patient.id === 'fahrer' || patient.custom) && (v.s < 100 || v.g < 15 || v.h >= 120);
     el('secret').textContent = patient.model.secret;
     el('clock').textContent = api.clock(previewTime);
     el('seek').value = Math.floor(minute);
-    el('triage').className = 'triage ' + (red ? 'red' : 'yellow');
-    el('triage').textContent = red ? 'SK I · ROT (Übungsmodell)' : 'SK II · GELB (Übungsmodell)';
+    const category = red ? 'red' : patient.model.walkable ? 'green' : 'yellow';
+    el('triage').className = 'triage ' + category;
+    el('triage').textContent = { red: 'SK I · ROT', yellow: 'SK II · GELB', green: 'SK III · GRÜN' }[category] + ' (Übungsmodell)';
     el('vitals').innerHTML = [
       ['Blutdruck', v.s + '/' + v.d + ' mmHg'], ['Puls', v.h + '/min'], ['Atemfrequenz', v.r + '/min'],
       ['SpO₂', v.o + ' %'], ['GCS', v.g + '/15']
@@ -67,10 +69,12 @@
     el('live').hidden = !next;
     el('preview').hidden = !next;
     renderJoin(next?.join_code);
+    renderOverview();
     if (!next) {
       el('choose').replaceChildren();
       for (const id of ['secret', 'vitals', 'triage', 'patientStatus', 'expiry']) el(id).textContent = '';
       el('patientLink').value = '';
+      renderStation(null);
       resetPreview();
       return;
     }
@@ -93,11 +97,40 @@
     const url = new URL('join.html', location.href);
     url.hash = new URLSearchParams({ access: code });
     if (el('joinLink').value === url.href) return;
-    const qr = window.qrcode(0, 'M');
-    qr.addData(url.href);
-    qr.make();
-    el('joinQr').innerHTML = qr.createSvgTag({ cellSize: 5, scalable: true, title: 'QR-Code zum Übungsbeitritt' });
+    drawQr(el('joinQr'), url.href, 'QR-Code zum Übungsbeitritt');
     el('joinLink').value = url.href;
+  }
+
+  function drawQr(container, url, title) {
+    const qr = window.qrcode(0, 'M');
+    qr.addData(url);
+    qr.make();
+    container.innerHTML = qr.createSvgTag({ cellSize: 5, scalable: true, title });
+  }
+
+  function renderStation(url) {
+    const target = el('stationQr');
+    el('station').hidden = !url;
+    if (!url) {
+      target.replaceChildren();
+      delete target.dataset.url;
+    } else if (target.dataset.url !== url) {
+      drawQr(target, url, 'Stations-QR für diesen Patienten');
+      target.dataset.url = url;
+    }
+  }
+
+  function renderOverview() {
+    const rows = (exercise?.patients ?? []).map((patient) => {
+      const row = document.createElement('li');
+      const name = document.createElement('strong');
+      name.textContent = patientName(patient.id);
+      const status = document.createElement('span');
+      status.textContent = api.labels[patient.status] + ' · ' + api.clock(patient.elapsed);
+      row.append(name, status);
+      return row;
+    });
+    el('patientOverview').replaceChildren(...rows);
   }
 
   function renderPatient() {
@@ -105,6 +138,7 @@
     if (!patient) return;
     const url = new URL('patient.html', location.href);
     url.search = new URLSearchParams({ case: exercise.case, patient: patient.id });
+    renderStation(patient.custom ? url.href : null);
     url.hash = new URLSearchParams({ code: patient.code });
     el('patientLink').value = url.href;
     el('patientStatus').textContent = api.labels[patient.status] + ' · ' + api.clock(patient.elapsed);
@@ -120,7 +154,7 @@
     auth = { ...data, deadline: Date.now() + data.expires_in * 1000 };
   }
 
-  async function rpc(params) {
+  async function rpc(params, call = api.trainer) {
     if (Date.now() + 30000 >= auth.deadline) {
       if (!refreshing) {
         const current = auth;
@@ -131,7 +165,7 @@
       await refreshing;
     }
     if (!auth) throw new Error('Bitte erneut anmelden.');
-    return api.trainer(params, auth.access_token);
+    return call(params, auth.access_token);
   }
 
   function signedOut() {
@@ -149,7 +183,7 @@
     if (busy) return;
     busy = true;
     actionVersion++;
-    for (const control of document.querySelectorAll('form button, #logout, #exercise')) control.disabled = true;
+    for (const control of document.querySelectorAll('form button, #logout, #exercise, #createCustom')) control.disabled = true;
     renderPatient();
     try {
       await work();
@@ -158,7 +192,7 @@
       message(error.message);
     } finally {
       busy = false;
-      for (const control of document.querySelectorAll('form button, #logout, #exercise')) control.disabled = false;
+      for (const control of document.querySelectorAll('form button, #logout, #exercise, #createCustom')) control.disabled = false;
       renderPatient();
     }
   }
@@ -208,11 +242,28 @@
     event.preventDefault();
     void run(async () => {
       const created = await rpc({ p_action: 'create', p_title: el('exerciseTitle').value });
-      el('exercise').add(new Option(created.title, created.id), 1);
-      el('exercise').value = created.id;
+      openCreatedExercise(created);
       el('exerciseTitle').value = '';
-      renderExercise(created);
-      message('Übung angelegt.');
+    });
+  });
+  function openCreatedExercise(created) {
+    el('exercise').add(new Option(created.title, created.id), 1);
+    el('exercise').value = created.id;
+    renderExercise(created);
+    message('Übung angelegt.');
+  }
+
+  el('createCustom').addEventListener('click', () => {
+    void run(async () => {
+      const input = el('scenarioFile');
+      const file = input.files[0];
+      if (file?.size > 200000) throw new Error('Die JSON-Datei ist zu groß.');
+      const source = file ? await file.text() : localStorage.getItem('traumasim-editor-v1');
+      if (!source) throw new Error('Speichere zuerst einen Entwurf im Szenarioeditor oder wähle eine JSON-Datei.');
+      let draft;
+      try { draft = JSON.parse(source); } catch { throw new Error('Der Entwurf ist keine gültige JSON-Datei.'); }
+      openCreatedExercise(await rpc(draft, api.createCustom));
+      input.value = '';
     });
   });
   el('choose').addEventListener('change', () => { renderPatient(); resetPreview(); });
@@ -223,8 +274,18 @@
       if (!exercise || !patient || busy) return;
       if (action.startsWith('reset') && !confirm(action === 'reset_all'
         ? 'Alle Patienten dieser Übung zurücksetzen?' : patientName(patient.id) + ' zurücksetzen?')) return;
+      if (action === 'close' && !confirm('Übung beenden und alle Zugänge schließen?')) return;
       void run(async () => {
-        renderExercise(await rpc({ p_action: action, p_session: exercise.id, p_patient: patient.id }));
+        const next = await rpc({ p_action: action, p_session: exercise.id, p_patient: patient.id });
+        if (next.closed) {
+          const select = el('exercise');
+          Array.from(select.options).find((option) => option.value === next.id)?.remove();
+          select.value = '';
+          renderExercise(null);
+          message('Übung beendet. Die QR-Zugänge sind geschlossen.');
+          return;
+        }
+        renderExercise(next);
         if (action.startsWith('reset')) message('Zurückgesetzt.');
       });
     });

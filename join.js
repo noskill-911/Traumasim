@@ -34,7 +34,22 @@
     history.replaceState(null, '', location.pathname + '?' + new URLSearchParams({ case: exercise.case }));
     el('joinTitle').textContent = exercise.title;
     el('joinStatus').textContent = 'Du bist der Übung beigetreten. Scanne jetzt einen Patienten-QR im selben Browser oder öffne die Patientenübersicht.';
-    el('joinPatients').hidden = false;
+    if (exercise.patients) {
+      el('joinStatus').textContent = 'Du bist der Übung beigetreten. Wähle einen Patienten oder scanne seinen Stations-QR im selben Browser.';
+      const items = exercise.patients.map((patient) => {
+        const item = document.createElement('li');
+        const link = document.createElement('a');
+        link.className = 'action';
+        link.href = 'patient.html?' + new URLSearchParams({ case: exercise.case, patient: patient.id });
+        link.textContent = patient.name;
+        item.append(link);
+        return item;
+      });
+      el('customPatients').replaceChildren(...items);
+      el('customPatients').hidden = false;
+    } else {
+      el('joinPatients').hidden = false;
+    }
   }
 
   el('joinRetry').addEventListener('click', join);
