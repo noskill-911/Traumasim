@@ -125,13 +125,13 @@ create or replace function traumasim_private.elapsed(
  p_started timestamptz, p_paused timestamptz, p_pause_seconds numeric, p_now timestamptz
 ) returns numeric language sql immutable set search_path = '' as $$
  select case when p_started is null then 0
-   else greatest(0, least(1500, extract(epoch from (coalesce(p_paused, p_now) - p_started)) - p_pause_seconds)) end;
+   else greatest(0, extract(epoch from (coalesce(p_paused, p_now) - p_started)) - p_pause_seconds) end;
 $$;
 
 create or replace function traumasim_private.patient_duration(p_model jsonb)
 returns integer language sql immutable set search_path = '' as $$
  select case when p_model->'progression'->>'to' = 'black'
-   then (p_model->'progression'->>'at_seconds')::integer else 1500 end;
+   then (p_model->'progression'->>'at_seconds')::integer else 2700 end;
 $$;
 
 create or replace function traumasim_private.vitals(p_model jsonb, p_elapsed numeric)
@@ -140,16 +140,17 @@ returns jsonb language sql immutable strict set search_path = '' as $$
  with transition as (
    select (p_model->'progression'->>'at_seconds')::numeric as at_seconds
  ), curve as (
-   select case when at_seconds is null then p_elapsed
+   select case when at_seconds is null then least(p_elapsed, 1500)
      when p_elapsed <= at_seconds then p_elapsed * 300 / at_seconds
-     else 300 + (p_elapsed - at_seconds) * 1200 / (1500 - at_seconds) end as seconds
+     else least(1500, 300 + (p_elapsed - at_seconds) * 1200
+       / (traumasim_private.patient_duration(null) - at_seconds)) end as seconds
    from transition
  ), frame as (
    select seconds, least(4, floor(seconds / 300)::integer) as i from curve
  )
  select jsonb_object_agg(k, round(a + (b - a) * (seconds / 300 - i) + case
    when phase is null then 0
-   when k = 'h' then (3 * sin(2 * pi() * phase / 17) + 2 * sin(2 * pi() * phase / 43))::numeric
+   when k = 'h' then (1.4 * sin(2 * pi() * phase / 31) + 0.6 * sin(2 * pi() * phase / 67))::numeric
    when k = 'r' then (1.15 * sin(2 * pi() * phase / 33))::numeric
    else 0 end))
  from frame
@@ -267,7 +268,8 @@ begin
    end if;
  end if;
  next_bp_time := coalesce(bp_time + bp_interval, 70);
- if patient.paused_at is null and next_bp_time <= 1500 and (duration = 1500 or next_bp_time < duration) then
+ if patient.paused_at is null and next_bp_time <= duration
+    and (progression->>'to' is distinct from 'black' or next_bp_time < duration) then
    next_bp_wall_time := patient.started_at + make_interval(
      secs => (next_bp_time + patient.accumulated_pause_seconds)::double precision);
    if next_bp_wall_time >= exercise.expires_at then
@@ -643,8 +645,8 @@ begin
    end if;
    progression := null;
    if profile in ('urgent-red','red-ex') then
-     if coalesce(person->>'transition_minute', '') !~ '^([1-9]|1[0-9]|2[0-4])$' then
-       raise exception using errcode = '22023', message = 'Der Wechsel muss zwischen Minute 1 und 24 liegen.';
+     if coalesce(person->>'transition_minute', '') !~ '^([1-9]|[1-3][0-9]|4[0-4])$' then
+       raise exception using errcode = '22023', message = 'Der Wechsel muss zwischen Minute 1 und 44 liegen.';
      end if;
      transition_minute := (person->>'transition_minute')::integer;
      progression := jsonb_build_object('at_seconds', transition_minute * 60,

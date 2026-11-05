@@ -18,8 +18,12 @@
    die neue Runde. Einzelreset und Übungsreset ändern den zentralen Zustand.
 5. **Übung beenden** schließt die Übung samt QR-Zugängen. Die Patientenübersicht
    zeigt den Status und die Übungszeit aller Patienten.
-6. Die Ausbildervorschau hat eine eigene Uhr. Änderungen an der Vorschau
-   wirken sich auf die Live-Übung erst über die gesonderten Steuerknöpfe aus.
+6. Die Übung ist auf 45 Minuten ausgelegt. Die Zeit zählt ab dem jeweiligen
+   Patientenstart. Bei älteren 25-Minuten-Profilen gelten danach die letzten
+   Basiswerte weiter. Die letzten Werte und die Fallinformationen bleiben
+   nach Ablauf der Patientenzeit abrufbar, solange die Übung offen ist.
+   Die Ausbildervorschau hat eine eigene Uhr bis Minute 45. Sie verändert
+   den Live-Verlauf nicht.
 
 ## Eigene Szenarien
 
@@ -53,7 +57,9 @@ Unter **Übungselement Pkw mit Insassen** bis zu fünf Sitzplätze besetzen.
 Verletzungsprofil und Einklemmung werden je Person gewählt. Eine eigene
 Beschreibung und die Fahrzeuglage können ergänzt werden. Die Profile
 **SK II → SK I** und **SK I → EX (schwarz)** wechseln zur gewählten Minute
-ab Patientenstart. Voreingestellt sind Minute 6 beziehungsweise 8.
+ab Patientenstart (Minute 1 bis 44). Voreingestellt sind Minute 6
+beziehungsweise 8. Nach dem Wechsel zu SK I entwickelt sich der Verlauf
+bis Minute 45 weiter.
 Die Simulationszeit hält bei einer Pause an. Bei EX endet der Verlauf
 und der simulierte Monitor wird ausgeblendet. Puls und Atemfrequenz schwanken
 leicht und für alle Geräte gleich über der Vitalwertkurve. Der Pkw kann als

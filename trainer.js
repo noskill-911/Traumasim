@@ -3,6 +3,7 @@
 
   const el = (id) => document.getElementById(id);
   const api = window.TraumaSync;
+  const previewDuration = Number(el('seek').max) * 60;
   const actions = Array.from(document.querySelectorAll('[data-action]'));
   let auth = null;
   let exercise = null;
@@ -63,8 +64,8 @@
 
     // The second curve point marks the chosen transition, as in the live calculation.
     const curveMinute = progression
-      ? (previewTime <= at ? previewTime * 5 / at : 5 + (previewTime - at) * 20 / (1500 - at))
-      : minute;
+      ? (previewTime <= at ? previewTime * 5 / at : 5 + (previewTime - at) * 20 / (previewDuration - at))
+      : Math.min(minute, 25);
     const index = Math.min(4, Math.floor(curveMinute / 5));
     const [a, b] = patient.model.points.slice(index, index + 2);
     const v = {};
@@ -72,7 +73,7 @@
     const phase = patient.model.car_number == null ? null : previewTime
       + patient.model.car_number * 13 + patient.model.car_patient_number * 7;
     const pulseOffset = phase == null ? 0
-      : 3 * Math.sin(2 * Math.PI * phase / 17) + 2 * Math.sin(2 * Math.PI * phase / 43);
+      : 1.4 * Math.sin(2 * Math.PI * phase / 31) + 0.6 * Math.sin(2 * Math.PI * phase / 67);
     const breathsOffset = phase == null ? 0 : 1.15 * Math.sin(2 * Math.PI * phase / 33);
     for (const key of ['s', 'd', 'h', 'r', 'o', 'g']) {
       const offset = key === 'h' ? pulseOffset : key === 'r' ? breathsOffset : 0;
@@ -345,7 +346,7 @@
       </label>
       <div class="seat-details" hidden>
         <label class="seat-transition-label" hidden>Kategorienwechsel nach Minuten ab Patientenstart
-          <input class="seat-transition" type="number" min="1" max="24" step="1" disabled required>
+          <input class="seat-transition" type="number" min="1" max="44" step="1" disabled required>
         </label>
         <label>Einklemmung
           <select class="seat-entrapment">
@@ -437,7 +438,7 @@
   }
 
   el('play').addEventListener('click', () => {
-    if (previewTime >= 1500) previewTime = 0;
+    if (previewTime >= previewDuration) previewTime = 0;
     previewTick = performance.now();
   });
   el('pause').addEventListener('click', () => { previewTick = null; });
@@ -450,8 +451,8 @@
   setInterval(() => {
     if (previewTick === null) return;
     const now = performance.now();
-    previewTime = Math.min(1500, previewTime + (now - previewTick) / 1000 * Number(el('speed').value));
-    previewTick = previewTime < 1500 ? now : null;
+    previewTime = Math.min(previewDuration, previewTime + (now - previewTick) / 1000 * Number(el('speed').value));
+    previewTick = previewTime < previewDuration ? now : null;
     drawPreview();
   }, 200);
   async function poll() {
