@@ -12,7 +12,10 @@ einmal und öffnen danach im selben Browser die vorhandenen Patienten-QR-Codes.
 Der erste gültige Patientenaufruf startet den Patienten geräteübergreifend. Beim erneuten Öffnen läuft derselbe Verlauf weiter.
 Die simulierte Vorsichtung erscheint ab 10 Sekunden (SK III, grün),
 20 Sekunden (SK II, gelb) oder 35 Sekunden (SK I, rot) gemeinsamer Patientenzeit.
-Der Monitor mit Vitalwerten erscheint ab 120 Sekunden.
+Die simulierten Vitalwerte erscheinen gestaffelt ab Patientenstart:
+Puls und SpO₂ nach 25 Sekunden, Atemfrequenz nach 40 Sekunden, GCS nach
+45 Sekunden, Blutdruck nach 70 Sekunden und die EKG-Monitorkurve nach
+90 Sekunden. Diese Zeiten bilden einen Übungsablauf ab.
 
 Die Ausbilderansicht erlaubt Pausieren, Fortsetzen und das Zurücksetzen eines
 Patienten oder der ganzen Übung. Eine Übung ist 24 Stunden zugänglich. Der
