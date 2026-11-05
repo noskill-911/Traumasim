@@ -143,6 +143,13 @@ declare
  bp_time integer;
  bp_values jsonb;
  previous_bp_values jsonb;
+ bp_wall_time timestamptz;
+ previous_bp_wall_time timestamptz;
+ next_bp_wall_time timestamptz;
+ next_bp_time integer;
+ tracked_pause_seconds numeric;
+ bp_pause_seconds numeric;
+ previous_bp_pause_seconds numeric;
  red boolean;
  category text;
  triage_delay integer;
@@ -195,13 +202,35 @@ begin
  snapshot_time := clock_timestamp();
  seconds := traumasim_private.elapsed(patient.started_at, patient.paused_at, patient.accumulated_pause_seconds, snapshot_time);
  vitals := traumasim_private.vitals(model, seconds);
+ bp_interval := case when model->'nibpFastCycle' = 'true'::jsonb then 180 else 300 end;
  if seconds >= 70 then
-   bp_interval := case when model->'nibpFastCycle' = 'true'::jsonb then 180 else 300 end;
    -- Hold the result from the last completed cuff cycle until the next one completes.
    bp_time := 70 + floor((seconds - 70) / bp_interval)::integer * bp_interval;
    bp_values := traumasim_private.vitals(model, bp_time);
    if bp_time > 70 then
      previous_bp_values := traumasim_private.vitals(model, bp_time - bp_interval);
+   end if;
+   -- Only pauses before a completed measurement shift its wall-clock timestamp.
+   select coalesce(sum(p.duration), 0),
+          coalesce(sum(p.duration) filter (where p.at < bp_time), 0),
+          coalesce(sum(p.duration) filter (where p.at < bp_time - bp_interval), 0)
+   into tracked_pause_seconds, bp_pause_seconds, previous_bp_pause_seconds
+   from jsonb_to_recordset(coalesce(patient.state->'monitor_pauses', '[]'::jsonb)) as p(at numeric, duration numeric);
+   -- Older exercises may contain pauses without a recorded position.
+   if tracked_pause_seconds = patient.accumulated_pause_seconds then
+     bp_wall_time := patient.started_at + make_interval(secs => (bp_time + bp_pause_seconds)::double precision);
+     if previous_bp_values is not null then
+       previous_bp_wall_time := patient.started_at + make_interval(
+         secs => (bp_time - bp_interval + previous_bp_pause_seconds)::double precision);
+     end if;
+   end if;
+ end if;
+ next_bp_time := coalesce(bp_time + bp_interval, 70);
+ if patient.paused_at is null and next_bp_time <= 1500 then
+   next_bp_wall_time := patient.started_at + make_interval(
+     secs => (next_bp_time + patient.accumulated_pause_seconds)::double precision);
+   if next_bp_wall_time >= exercise.expires_at then
+     next_bp_wall_time := null;
    end if;
  end if;
  red := (p_patient = 'fahrer' or patient.scenario_model is not null) and ((vitals->>'s')::integer < 100 or (vitals->>'g')::integer < 15 or (vitals->>'h')::integer >= 120);
@@ -222,6 +251,7 @@ begin
    'status', case when patient.started_at is null then 'ready'
      when seconds >= 1500 then 'finished' when patient.paused_at is not null then 'paused' else 'running' end,
    'elapsed', floor(seconds),
+   'server_time', snapshot_time,
    'triage', case when seconds >= triage_delay then jsonb_build_object(
      'category', category, 'red', red, 'condition', model->'condition'->>condition_index,
      'reason', case when red then 'Didaktische Einstufung: Zeichen eines kritischen Schocks'
@@ -238,8 +268,11 @@ begin
      's', bp_values->'s',
      'd', bp_values->'d',
      'bp_at', bp_time,
+     'bp_wall_at', bp_wall_time,
+     'bp_next_wall_at', next_bp_wall_time,
      'bp_previous', case when previous_bp_values is not null then jsonb_build_object(
-       's', previous_bp_values->'s', 'd', previous_bp_values->'d', 'at', bp_time - bp_interval
+       's', previous_bp_values->'s', 'd', previous_bp_values->'d', 'at', bp_time - bp_interval,
+       'wall_at', previous_bp_wall_time
      ) end,
      'ecg', case when seconds >= 90 then true end
    )) end,
@@ -329,6 +362,11 @@ begin
      when 'resume' then
        update public.traumasim_patients
        set accumulated_pause_seconds = accumulated_pause_seconds + extract(epoch from (snapshot_time - paused_at)),
+           state = jsonb_set(state, '{monitor_pauses}', coalesce(state->'monitor_pauses', '[]'::jsonb)
+             || jsonb_build_array(jsonb_build_object(
+               'at', extract(epoch from (paused_at - started_at)) - accumulated_pause_seconds,
+               'duration', extract(epoch from (snapshot_time - paused_at))
+             ))),
            paused_at = null, updated_at = snapshot_time
        where session_id = exercise.id and patient_key = p_patient and paused_at is not null;
      else raise exception using errcode = '22023', message = 'Unbekannte Übungsaktion';

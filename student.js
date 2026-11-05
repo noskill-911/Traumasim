@@ -32,6 +32,10 @@
   let busy = false;
   let animation = null;
   let monitor = null;
+  let serverClockOffset = NaN;
+  const berlinClock = new Intl.DateTimeFormat('de-DE', {
+    timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+  });
 
 function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+=2){let p=(x/width*6-phase)%1;if(p<0)p+=1;let y=45;if(kind==='ecg'){if(p<.58)y=45;else if(p<.64)y=43-4*Math.sin((p-.58)/.06*Math.PI);else if(p<.69)y=45+10*(p-.64)/.05;else if(p<.72)y=55-47*(p-.69)/.03;else if(p<.75)y=8+58*(p-.72)/.03;else if(p<.79)y=66-21*(p-.75)/.04;else if(p<.95)y=45-7*Math.sin((p-.79)/.16*Math.PI)}else if(kind==='pleth'){y=62-34*Math.pow(Math.max(0,Math.sin(Math.PI*p)),5)-8*Math.sin(Math.PI*p)}else{y=45-19*Math.sin(2*Math.PI*p)}out+=(x===0?'M':'L')+x+' '+y.toFixed(1)+' '}return out}
   function animateWaves() {
@@ -44,6 +48,15 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     if (monitor.o != null) el('plethTrace').setAttribute('d', wavePath('pleth', now * monitor.h / 60 * .16));
     if (monitor.r != null) el('respTrace').setAttribute('d', wavePath('resp', now * monitor.r / 60 * .16));
     animation = requestAnimationFrame(animateWaves);
+  }
+
+  function drawEcgClock() {
+    const clock = el('ecgClock');
+    if (!clock) return;
+    clock.hidden = !monitor?.ecg;
+    if (clock.hidden) return;
+    const now = Number.isFinite(serverClockOffset) ? serverClockOffset + performance.now() : Date.now();
+    clock.textContent = berlinClock.format(now);
   }
 
   function render() {
@@ -59,6 +72,8 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     el('triagePanel').hidden = !snapshot?.triage;
     monitor = snapshot?.monitor ?? (snapshot?.vitals && { ...snapshot.vitals, ecg: true });
     el('vitalsPanel').hidden = !monitor;
+    serverClockOffset = Date.parse(snapshot?.server_time) - performance.now();
+    drawEcgClock();
     if (!snapshot) return;
 
     el('syncStatus').textContent = api.labels[snapshot.status];
@@ -72,19 +87,26 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
       el('patientCondition').textContent = condition;
     }
     if (monitor) {
-      const { s, d, h, r, o, g, ecg, bp_at, bp_previous } = monitor;
+      const { s, d, h, r, o, g, ecg, bp_at, bp_wall_at, bp_next_wall_at, bp_previous } = monitor;
       el('bp').textContent = s != null && d != null ? s + '/' + d : '—';
       const bpTime = el('bpTime');
       const bpPrevious = el('bpPrevious');
+      const bpNext = el('bpNext');
       if (bpTime) {
         bpTime.hidden = bp_at == null;
-        bpTime.textContent = bp_at == null ? '' : 'Messzeit ' + api.clock(bp_at);
+        bpTime.textContent = bp_wall_at ? 'Messzeit ' + berlinClock.format(Date.parse(bp_wall_at))
+          : bp_at != null ? 'Messzeit +' + api.clock(bp_at) + ' (Übungszeit)' : '';
       }
       if (bpPrevious) {
         bpPrevious.hidden = !bp_previous;
-        bpPrevious.textContent = bp_previous
-          ? 'Vorher ' + bp_previous.s + '/' + bp_previous.d + ' · ' + api.clock(bp_previous.at)
-          : '';
+        bpPrevious.textContent = bp_previous ? 'Vorher ' + bp_previous.s + '/' + bp_previous.d + ' · '
+          + (bp_previous.wall_at ? berlinClock.format(Date.parse(bp_previous.wall_at))
+            : '+' + api.clock(bp_previous.at) + ' (Übungszeit)') : '';
+      }
+      if (bpNext) {
+        bpNext.hidden = !bp_next_wall_at && snapshot.status !== 'paused';
+        bpNext.textContent = bp_next_wall_at ? 'Nächster Messwert ' + berlinClock.format(Date.parse(bp_next_wall_at))
+          : snapshot.status === 'paused' ? 'Nächste Messung pausiert' : '';
       }
       const rateLabel = el('rateLabel');
       if (rateLabel) rateLabel.textContent = ecg ? 'HF' : 'Puls';
@@ -142,6 +164,7 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     showJoinHint();
     el('syncStatus').textContent = 'Übungszugang erforderlich.';
   }
+  setInterval(drawEcgClock, 1000);
   setInterval(() => { if (!document.hidden) void synchronize(); }, 2000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void synchronize(); });
 })();

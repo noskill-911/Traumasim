@@ -17,8 +17,10 @@ Puls und SpO₂ nach 25 Sekunden, Atemfrequenz nach 40 Sekunden, GCS nach
 45 Sekunden, Blutdruck nach 70 Sekunden und die EKG-Monitorkurve nach
 90 Sekunden. Der Blutdruck bleibt bis zur nächsten abgeschlossenen Messung
 stehen. Der Fahrer hat ein 3-Minuten-Intervall, der Beifahrer ein 5-Minuten-Intervall.
-Ab der zweiten Messung zeigt der Monitor den vorherigen Wert mit Messzeit.
-Diese Zeiten bilden einen Übungsablauf ab.
+Der Monitor zeigt die Uhrzeit der letzten und der vorherigen Messung sowie
+die geplante Uhrzeit des nächsten Messwerts in der Zeitzone Europe/Berlin.
+Bei einer Pause ruht die Messplanung. Die Uhr am EKG zeigt die laufende
+Berliner Ortszeit. Die Freigabezeiten bilden einen Übungsablauf ab.
 
 Die Ausbilderansicht erlaubt Pausieren, Fortsetzen und das Zurücksetzen eines
 Patienten oder der ganzen Übung. Die Übersicht zeigt alle Patienten der
