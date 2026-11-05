@@ -7,6 +7,9 @@
   let auth = null;
   let exercise = null;
   let busy = false;
+  let polling = false;
+  let actionVersion = 0;
+  let refreshing = null;
   let previewTime = 0;
   let previewTick = null;
 
@@ -102,7 +105,16 @@
   }
 
   async function rpc(params) {
-    if (Date.now() + 30000 >= auth.deadline) session(await api.refresh(auth.refresh_token));
+    if (Date.now() + 30000 >= auth.deadline) {
+      if (!refreshing) {
+        const current = auth;
+        refreshing = api.refresh(current.refresh_token).then((data) => {
+          if (auth === current) session(data);
+        }).finally(() => { refreshing = null; });
+      }
+      await refreshing;
+    }
+    if (!auth) throw new Error('Bitte erneut anmelden.');
     return api.trainer(params, auth.access_token);
   }
 
@@ -117,13 +129,12 @@
     if (token) void api.signOut(token).catch(() => {});
   }
 
-  async function run(work, { quiet = false } = {}) {
+  async function run(work) {
     if (busy) return;
     busy = true;
-    if (!quiet) {
-      for (const control of document.querySelectorAll('form button, #logout, #exercise')) control.disabled = true;
-      renderPatient();
-    }
+    actionVersion++;
+    for (const control of document.querySelectorAll('form button, #logout, #exercise')) control.disabled = true;
+    renderPatient();
     try {
       await work();
     } catch (error) {
@@ -234,9 +245,22 @@
     previewTick = previewTime < 1500 ? now : null;
     drawPreview();
   }, 200);
-  setInterval(() => {
-    if (auth && exercise && !document.hidden) {
-      void run(async () => renderExercise(await rpc({ p_action: 'status', p_session: exercise.id })), { quiet: true });
+  async function poll() {
+    if (!auth || !exercise || busy || polling || document.hidden) return;
+    polling = true;
+    const version = actionVersion;
+    try {
+      const next = await rpc({ p_action: 'status', p_session: exercise.id });
+      if (auth && version === actionVersion) renderExercise(next);
+    } catch (error) {
+      if (auth && version === actionVersion) {
+        if (error.status === 401 || error.code === '42501') signedOut();
+        message(error.message);
+      }
+    } finally {
+      polling = false;
     }
-  }, 3000);
+  }
+
+  setInterval(poll, 3000);
 })();

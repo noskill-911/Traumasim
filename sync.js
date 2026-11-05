@@ -12,7 +12,7 @@
         method: 'POST',
         headers,
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(8000)
+        signal: AbortSignal.timeout(20000)
       });
     } catch {
       throw new Error('Supabase ist momentan nicht erreichbar.');
