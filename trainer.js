@@ -48,15 +48,29 @@
       el('vitals').replaceChildren();
       return;
     }
-    const index = Math.min(4, Math.floor(minute / 5));
-    const [a, b] = patient.model.points.slice(index, index + 2);
-    const v = {};
-    for (const key of ['s', 'd', 'h', 'r', 'o', 'g']) v[key] = Math.round(a[key] + (b[key] - a[key]) * (minute - a.t) / 5);
-    const red = (patient.id === 'fahrer' || patient.custom) && (v.s < 100 || v.g < 15 || v.h >= 120);
-    el('secret').textContent = patient.model.secret;
+    const progression = patient.model.progression;
+    const at = progression?.at_seconds;
+    let category = progression && (previewTime >= at ? progression.to : progression.from);
+    el('secret').textContent = patient.model.secret + (progression ? ' · Wechsel bei Minute ' + at / 60 : '');
     el('clock').textContent = api.clock(previewTime);
     el('seek').value = Math.floor(minute);
-    const category = red ? 'red' : patient.model.walkable ? 'green' : 'yellow';
+    if (category === 'black') {
+      el('triage').className = 'triage black';
+      el('triage').textContent = 'EX · SCHWARZ (Übungsmodell)';
+      el('vitals').replaceChildren();
+      return;
+    }
+
+    // The second curve point marks the chosen transition, as in the live calculation.
+    const curveMinute = progression
+      ? (previewTime <= at ? previewTime * 5 / at : 5 + (previewTime - at) * 20 / (1500 - at))
+      : minute;
+    const index = Math.min(4, Math.floor(curveMinute / 5));
+    const [a, b] = patient.model.points.slice(index, index + 2);
+    const v = {};
+    for (const key of ['s', 'd', 'h', 'r', 'o', 'g']) v[key] = Math.round(a[key] + (b[key] - a[key]) * (curveMinute - a.t) / 5);
+    const red = (patient.id === 'fahrer' || patient.custom) && (v.s < 100 || v.g < 15 || v.h >= 120);
+    category ||= red ? 'red' : patient.model.walkable ? 'green' : 'yellow';
     el('triage').className = 'triage ' + category;
     el('triage').textContent = { red: 'SK I · ROT', yellow: 'SK II · GELB', green: 'SK III · GRÜN' }[category] + ' (Übungsmodell)';
     el('vitals').innerHTML = [
@@ -316,9 +330,14 @@
           <option value="">Leer</option><option value="affected">Unverletzt betroffen</option>
           <option value="minor">Leicht verletzt · SK III</option><option value="urgent">Schwer verletzt · SK II</option>
           <option value="critical">Vital bedroht · SK I</option>
+          <option value="urgent-red">Verlauf · SK II → SK I</option>
+          <option value="red-ex">Verlauf · SK I → EX (schwarz)</option>
         </select>
       </label>
       <div class="seat-details" hidden>
+        <label class="seat-transition-label" hidden>Kategorienwechsel nach Minuten ab Patientenstart
+          <input class="seat-transition" type="number" min="1" max="24" step="1" disabled required>
+        </label>
         <label>Einklemmung
           <select class="seat-entrapment">
             <option value="none">Keine</option><option value="door">Tür / B-Säule</option>
@@ -332,9 +351,16 @@
       </div>`;
     const profile = group.querySelector('.seat-profile');
     const details = group.querySelector('.seat-details');
-    profile.addEventListener('change', () => { details.hidden = !profile.value; });
+    const transition = group.querySelector('.seat-transition');
+    const transitionLabel = group.querySelector('.seat-transition-label');
+    profile.addEventListener('change', () => {
+      details.hidden = !profile.value;
+      const defaultMinute = { 'urgent-red': 6, 'red-ex': 8 }[profile.value];
+      transition.disabled = transitionLabel.hidden = defaultMinute == null;
+      transition.value = defaultMinute ?? '';
+    });
     el('carSeats').append(group);
-    return { seat, profile, entrapment: group.querySelector('.seat-entrapment'), injury: group.querySelector('.seat-injury') };
+    return { seat, profile, transition, entrapment: group.querySelector('.seat-entrapment'), injury: group.querySelector('.seat-injury') };
   });
 
   el('carForm').addEventListener('submit', (event) => {
@@ -342,7 +368,8 @@
     const attach = event.submitter?.id === 'attachCar';
     void run(async () => {
       const occupants = seatControls.filter((row) => row.profile.value).map((row) => ({
-        seat: row.seat, profile: row.profile.value, entrapment: row.entrapment.value, injury: row.injury.value
+        seat: row.seat, profile: row.profile.value, entrapment: row.entrapment.value, injury: row.injury.value,
+        transition_minute: row.transition.disabled ? null : row.transition.valueAsNumber
       }));
       if (!occupants.length) throw new Error('Wähle mindestens einen besetzten Sitzplatz.');
       const next = await rpc({ p_config: { vehicle: el('carSituation').value, occupants },

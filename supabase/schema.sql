@@ -128,12 +128,26 @@ create or replace function traumasim_private.elapsed(
    else greatest(0, least(1500, extract(epoch from (coalesce(p_paused, p_now) - p_started)) - p_pause_seconds)) end;
 $$;
 
+create or replace function traumasim_private.patient_duration(p_model jsonb)
+returns integer language sql immutable set search_path = '' as $$
+ select case when p_model->'progression'->>'to' = 'black'
+   then (p_model->'progression'->>'at_seconds')::integer else 1500 end;
+$$;
+
 create or replace function traumasim_private.vitals(p_model jsonb, p_elapsed numeric)
 returns jsonb language sql immutable strict set search_path = '' as $$
- with frame as (
-   select least(4, floor(p_elapsed / 300)::integer) as i
+ -- The second curve point marks the selected transition for scripted profiles.
+ with transition as (
+   select (p_model->'progression'->>'at_seconds')::numeric as at_seconds
+ ), curve as (
+   select case when at_seconds is null then p_elapsed
+     when p_elapsed <= at_seconds then p_elapsed * 300 / at_seconds
+     else 300 + (p_elapsed - at_seconds) * 1200 / (1500 - at_seconds) end as seconds
+   from transition
+ ), frame as (
+   select seconds, least(4, floor(seconds / 300)::integer) as i from curve
  )
- select jsonb_object_agg(k, round(a + (b - a) * (p_elapsed / 300 - i)))
+ select jsonb_object_agg(k, round(a + (b - a) * (seconds / 300 - i)))
  from frame
  cross join unnest(array['s','d','h','r','o','g']) as fields(k)
  cross join lateral (
@@ -151,6 +165,8 @@ declare
  model jsonb;
  snapshot_time timestamptz;
  seconds numeric;
+ duration integer;
+ progression jsonb;
  vitals jsonb;
  bp_interval integer;
  bp_time integer;
@@ -215,7 +231,9 @@ begin
  end if;
 
  snapshot_time := clock_timestamp();
- seconds := traumasim_private.elapsed(patient.started_at, patient.paused_at, patient.accumulated_pause_seconds, snapshot_time);
+ duration := traumasim_private.patient_duration(model);
+ progression := model->'progression';
+ seconds := least(duration, traumasim_private.elapsed(patient.started_at, patient.paused_at, patient.accumulated_pause_seconds, snapshot_time));
  vitals := traumasim_private.vitals(model, seconds);
  bp_interval := case when model->'nibpFastCycle' = 'true'::jsonb then 180 else 300 end;
  if seconds >= 70 then
@@ -241,7 +259,7 @@ begin
    end if;
  end if;
  next_bp_time := coalesce(bp_time + bp_interval, 70);
- if patient.paused_at is null and next_bp_time <= 1500 then
+ if patient.paused_at is null and next_bp_time <= 1500 and (duration = 1500 or next_bp_time < duration) then
    next_bp_wall_time := patient.started_at + make_interval(
      secs => (next_bp_time + patient.accumulated_pause_seconds)::double precision);
    if next_bp_wall_time >= exercise.expires_at then
@@ -252,6 +270,9 @@ begin
  red := not affected and (p_patient = 'fahrer' or patient.scenario_model is not null) and ((vitals->>'s')::integer < 100 or (vitals->>'g')::integer < 15 or (vitals->>'h')::integer >= 120);
  category := case
    when affected then 'affected'
+   when progression->>'from' is not null then case
+     when seconds >= (progression->>'at_seconds')::integer then progression->>'to'
+     else progression->>'from' end
    when red then 'red'
    when model->'walkable' = 'true'::jsonb then 'green'
    else 'yellow' end;
@@ -266,19 +287,24 @@ begin
  return jsonb_build_object(
    'revision', patient.revision,
    'status', case when patient.started_at is null then 'ready'
-     when seconds >= 1500 then 'finished' when patient.paused_at is not null then 'paused' else 'running' end,
+     when seconds >= duration then 'finished' when patient.paused_at is not null then 'paused' else 'running' end,
    'elapsed', floor(seconds),
    'server_time', snapshot_time,
    'triage', case when seconds >= triage_delay then jsonb_build_object(
-     'category', category, 'red', red, 'condition', model->'condition'->>condition_index,
-     'reason', case when affected then 'Unverletzt, aufgewühlt und betreuungsbedürftig'
-       when red then coalesce(model->>'triageReason', 'Didaktische Einstufung: Zeichen eines kritischen Schocks')
+     'category', category, 'red', category = 'red',
+     'condition', case
+       when category = 'black' then 'Die Person reagiert im Übungsmodell nicht mehr.'
+       when progression->>'to' = 'red' and category = 'red' then 'Die Person wird blass und benommen. Der Kreislauf verschlechtert sich.'
+       else model->'condition'->>condition_index end,
+     'reason', case when category = 'black' then 'Im Übungsmodell verstorben'
+       when affected then 'Unverletzt, aufgewühlt und betreuungsbedürftig'
+       when category = 'red' then coalesce(model->>'triageReason', 'Didaktische Einstufung: Zeichen eines kritischen Schocks')
        when category = 'green' then 'Gehfähig; Nachsichtung vorgesehen'
        when patient.scenario_model is not null then 'Schwer verletzt, ohne erkennbare vitale Bedrohung (Übungsmodell)'
        when p_patient = 'beifahrer' then 'Schwer verletzt, zunächst ohne erkennbare vitale Bedrohung'
        else 'Schwere Verletzung, Kreislauf zunächst kompensiert' end
    ) end,
-   'monitor', case when not affected and seconds >= 25 then jsonb_strip_nulls(jsonb_build_object(
+   'monitor', case when not affected and category <> 'black' and seconds >= 25 then jsonb_strip_nulls(jsonb_build_object(
      'h', vitals->'h',
      'o', vitals->'o',
      'r', case when seconds >= 40 then vitals->'r' end,
@@ -295,10 +321,11 @@ begin
      'ecg', case when seconds >= 90 then true end
    )) end,
    -- Preserve the complete snapshot for previously loaded student pages.
-   'vitals', case when not affected and seconds >= 120 then vitals || jsonb_build_object('s', bp_values->'s', 'd', bp_values->'d') end
+   'vitals', case when not affected and category <> 'black' and seconds >= 120 then vitals || jsonb_build_object('s', bp_values->'s', 'd', bp_values->'d') end
  ) || case when patient.scenario_model is not null then jsonb_build_object('brief', jsonb_build_object(
    'title', exercise.title, 'name', model->>'name', 'intro', model->>'intro',
-   'story', model->>'story', 'questions', model->>'questions'
+   'story', case when category = 'black' then 'Die Person gibt im Übungsmodell keine Antwort mehr.' else model->>'story' end,
+   'questions', case when category <> 'black' then model->>'questions' end
  )) else '{}'::jsonb end;
 end;
 $$;
@@ -376,7 +403,8 @@ begin
        set paused_at = snapshot_time, updated_at = snapshot_time
        where session_id = exercise.id and patient_key = p_patient
          and started_at is not null and paused_at is null
-         and traumasim_private.elapsed(started_at, paused_at, accumulated_pause_seconds, snapshot_time) < 1500;
+         and traumasim_private.elapsed(started_at, paused_at, accumulated_pause_seconds, snapshot_time)
+           < traumasim_private.patient_duration(scenario_model);
      when 'resume' then
        update public.traumasim_patients
        set accumulated_pause_seconds = accumulated_pause_seconds + extract(epoch from (snapshot_time - paused_at)),
@@ -399,11 +427,13 @@ begin
    'custom', p.scenario_model is not null,
    'elapsed', floor(t.seconds),
    'status', case when p.started_at is null then 'ready'
-     when t.seconds >= 1500 then 'finished' when p.paused_at is not null then 'paused' else 'running' end
+     when t.seconds >= limit_time.duration then 'finished' when p.paused_at is not null then 'paused' else 'running' end
  ) order by p.patient_key) into result
  from public.traumasim_patients p
  left join traumasim_private.models m on m.case_key = exercise.case_key and m.patient_key = p.patient_key
- cross join lateral (select traumasim_private.elapsed(p.started_at, p.paused_at, p.accumulated_pause_seconds, snapshot_time) as seconds) t
+ cross join lateral (select traumasim_private.patient_duration(p.scenario_model) as duration) limit_time
+ cross join lateral (select least(limit_time.duration,
+   traumasim_private.elapsed(p.started_at, p.paused_at, p.accumulated_pause_seconds, snapshot_time)) as seconds) t
  where p.session_id = exercise.id;
  return jsonb_build_object('id', exercise.id, 'title', exercise.title, 'case', exercise.case_key,
    'expires_at', exercise.expires_at, 'patients', result,
@@ -549,6 +579,8 @@ declare
  person_label text;
  seat_name text;
  profile text;
+ transition_minute integer;
+ progression jsonb;
  entrapment text;
  injury text;
  points jsonb;
@@ -597,18 +629,47 @@ begin
      when 'dashboard' then 'zwischen Sitz und Armaturenbrett eingeklemmt'
      when 'roof' then 'im Bereich von Dach und Sitz eingeklemmt'
    end;
-   if seat_name is null or profile is null or profile not in ('affected','minor','urgent','critical')
+   if seat_name is null or profile is null or profile not in ('affected','minor','urgent','critical','urgent-red','red-ex')
       or entrapment is null or length(coalesce(person->>'injury', '')) > 400 then
      raise exception using errcode = '22023', message = 'Sitzplatz, Verletzungsprofil oder Einklemmung sind ungültig.';
+   end if;
+   progression := null;
+   if profile in ('urgent-red','red-ex') then
+     if coalesce(person->>'transition_minute', '') !~ '^([1-9]|1[0-9]|2[0-4])$' then
+       raise exception using errcode = '22023', message = 'Der Wechsel muss zwischen Minute 1 und 24 liegen.';
+     end if;
+     transition_minute := (person->>'transition_minute')::integer;
+     progression := jsonb_build_object('at_seconds', transition_minute * 60,
+       'from', case when profile = 'urgent-red' then 'yellow' else 'red' end,
+       'to', case when profile = 'urgent-red' then 'red' else 'black' end);
    end if;
    injury := coalesce(nullif(btrim(person->>'injury'), ''), case profile
      when 'affected' then 'Keine Verletzung in dieser Übungsrolle. Die Person ist aufgewühlt.'
      when 'minor' then 'Die Person ist orientiert und klagt über eine schmerzhafte Prellung.'
      when 'urgent' then 'Die Person klagt über starke Schmerzen an einer Extremität. Verdacht auf eine Fraktur.'
+     when 'urgent-red' then 'Die Person ist zunächst orientiert und klagt über Schmerzen nach einem Anprall.'
      else 'Die Person ist blass, antwortet verzögert und wirkt zunehmend benommen.'
    end);
 
-   if profile = 'critical' then
+   if progression is not null then
+     select jsonb_agg(jsonb_build_object('t', minute, 's', systolic, 'd', diastolic,
+       'h', pulse, 'r', breaths, 'o', saturation, 'g', gcs) order by minute)
+     into points from (values
+       ('urgent-red', 0, 128, 78, 88, 18, 99, 15),
+       ('urgent-red', 5, 100, 65, 120, 26, 97, 15),
+       ('urgent-red', 10, 89, 55, 128, 30, 95, 14),
+       ('urgent-red', 15, 81, 51, 136, 32, 94, 13),
+       ('urgent-red', 20, 75, 46, 141, 33, 93, 12),
+       ('urgent-red', 25, 68, 42, 146, 34, 92, 11),
+       ('red-ex', 0, 92, 59, 126, 28, 95, 13),
+       ('red-ex', 5, 55, 34, 142, 10, 84, 5),
+       ('red-ex', 10, 55, 34, 142, 10, 84, 5),
+       ('red-ex', 15, 55, 34, 142, 10, 84, 5),
+       ('red-ex', 20, 55, 34, 142, 10, 84, 5),
+       ('red-ex', 25, 55, 34, 142, 10, 84, 5)
+     ) as sample(template, minute, systolic, diastolic, pulse, breaths, saturation, gcs)
+     where template = profile;
+   elsif profile = 'critical' then
      select jsonb_agg(point || jsonb_build_object('g', least((point->>'g')::integer, 13)) order by ordinal)
      into points
      from traumasim_private.models m
@@ -633,7 +694,8 @@ begin
      'secret', format('Pkw %s · %s · %s. %s', car_label, seat_name, entrapment, injury),
      'car_number', car_no, 'car_patient_number', person_no,
      'affected', profile = 'affected', 'walkable', profile in ('affected','minor'),
-     'nibpFastCycle', profile = 'critical', 'points', points
+     'nibpFastCycle', profile in ('critical','urgent-red','red-ex'),
+     'progression', progression, 'points', points
    ));
  end loop;
  return traumasim_private.trainer('status', exercise.id);

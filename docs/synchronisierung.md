@@ -51,7 +51,11 @@ die internen Hinweise des ausgewählten Patienten.
 
 Unter **Übungselement Pkw mit Insassen** bis zu fünf Sitzplätze besetzen.
 Verletzungsprofil und Einklemmung werden je Person gewählt. Eine eigene
-Beschreibung und die Fahrzeuglage können ergänzt werden. Der Pkw kann als
+Beschreibung und die Fahrzeuglage können ergänzt werden. Die Profile
+**SK II → SK I** und **SK I → EX (schwarz)** wechseln zur gewählten Minute
+ab Patientenstart. Voreingestellt sind Minute 6 beziehungsweise 8.
+Die Simulationszeit hält bei einer Pause an. Bei EX endet der Verlauf
+und der simulierte Monitor wird ausgeblendet. Der Pkw kann als
 eigene Übung starten oder zu einer laufenden Übung hinzugefügt werden.
 
 Pkw werden innerhalb der Übung nummeriert, Personen innerhalb des Pkw in
