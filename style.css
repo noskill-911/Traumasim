@@ -8,3 +8,5 @@ button:disabled { opacity: .55; cursor: default; }
   max-width: 42rem;
   padding: .65rem;
 }
+.patient-entry { padding: 12px 0; border-top: 1px solid #ffffff22; }
+.patient-qr { display: block; margin: 10px 0; border-radius: 8px; }
