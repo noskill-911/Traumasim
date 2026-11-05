@@ -18,9 +18,13 @@
   el('patientTitle').textContent = patient.name;
   const storageKey = 'traumasim-access:' + caseId + ':' + patientId;
   const linkCode = new URLSearchParams(location.hash.slice(1)).get('code');
-  if (linkCode) history.replaceState(null, '', location.pathname + location.search);
-  const exerciseCode = linkCode ? null : api.exerciseCode(caseId);
-  let code = linkCode || exerciseCode;
+  if (linkCode) {
+    history.replaceState({ traumasimPatientCode: linkCode }, '', location.pathname + location.search);
+  }
+  // A direct link keeps its exercise on reload. A new station scan uses the joined exercise.
+  const directCode = history.state?.traumasimPatientCode;
+  const exerciseCode = directCode ? null : api.exerciseCode(caseId);
+  let code = directCode || exerciseCode;
   try { code ||= sessionStorage.getItem(storageKey); } catch {}
   let openPending = Boolean(code);
   const showJoinHint = () => { el('joinHint').hidden = false; };
@@ -82,6 +86,7 @@ function animateWaves(){if(!document.getElementById('ecgTrace'))return;const v=s
     } catch (error) {
       if (error.code === '42501') {
         if (exerciseCode) api.clearExerciseCode(caseId, exerciseCode);
+        if (directCode) history.replaceState(null, '');
         try { sessionStorage.removeItem(storageKey); } catch {}
         code = null;
         showJoinHint();
