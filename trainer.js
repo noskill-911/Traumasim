@@ -340,13 +340,15 @@
           <option value="">Leer</option><option value="affected">Unverletzt betroffen</option>
           <option value="minor">Leicht verletzt · SK III</option><option value="urgent">Schwer verletzt · SK II</option>
           <option value="critical">Vital bedroht · SK I</option>
+          <option value="green-yellow">Verlauf · SK III → SK II</option>
           <option value="urgent-red">Verlauf · SK II → SK I</option>
           <option value="red-ex">Verlauf · SK I → EX (schwarz)</option>
         </select>
       </label>
       <div class="seat-details" hidden>
-        <label class="seat-transition-label" hidden>Kategorienwechsel nach Minuten ab Patientenstart
-          <input class="seat-transition" type="number" min="1" max="44" step="1" disabled required>
+        <label class="seat-transition-label" hidden>Kategorienwechsel ab Patientenstart
+          <strong class="seat-transition-value" aria-hidden="true"></strong>
+          <input class="seat-transition" type="range" min="1" max="44" step="1" disabled>
         </label>
         <label>Einklemmung
           <select class="seat-entrapment">
@@ -363,11 +365,21 @@
     const details = group.querySelector('.seat-details');
     const transition = group.querySelector('.seat-transition');
     const transitionLabel = group.querySelector('.seat-transition-label');
+    const transitionValue = group.querySelector('.seat-transition-value');
+    function showTransitionMinute() {
+      const text = 'Minute ' + transition.value;
+      transitionValue.textContent = text;
+      transition.setAttribute('aria-valuetext', text);
+    }
+    transition.addEventListener('input', showTransitionMinute);
     profile.addEventListener('change', () => {
       details.hidden = !profile.value;
-      const defaultMinute = { 'urgent-red': 6, 'red-ex': 8 }[profile.value];
+      const defaultMinute = { 'green-yellow': 12, 'urgent-red': 6, 'red-ex': 8 }[profile.value];
       transition.disabled = transitionLabel.hidden = defaultMinute == null;
-      transition.value = defaultMinute ?? '';
+      if (defaultMinute != null) {
+        transition.value = defaultMinute;
+        showTransitionMinute();
+      }
     });
     el('carSeats').append(group);
     return { seat, profile, transition, entrapment: group.querySelector('.seat-entrapment'), injury: group.querySelector('.seat-injury') };

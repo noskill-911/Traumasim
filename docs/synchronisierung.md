@@ -56,10 +56,12 @@ die internen Hinweise des ausgewählten Patienten.
 Unter **Übungselement Pkw mit Insassen** bis zu fünf Sitzplätze besetzen.
 Verletzungsprofil und Einklemmung werden je Person gewählt. Eine eigene
 Beschreibung und die Fahrzeuglage können ergänzt werden. Die Profile
-**SK II → SK I** und **SK I → EX (schwarz)** wechseln zur gewählten Minute
-ab Patientenstart (Minute 1 bis 44). Voreingestellt sind Minute 6
-beziehungsweise 8. Nach dem Wechsel zu SK I entwickelt sich der Verlauf
-bis Minute 45 weiter.
+**SK III → SK II**, **SK II → SK I** und **SK I → EX (schwarz)** wechseln
+zur per Schieberegler gewählten Minute ab Patientenstart (Minute 1 bis 44). Voreingestellt
+sind 12, 6 beziehungsweise 8 Minuten. Bei **SK III → SK II** kann die
+Person anfangs gehen. Mit zunehmender Schwellung und Schmerzen am
+Unterschenkel kann sie später nicht mehr auftreten. Bei **SK III → SK II**
+und **SK II → SK I** entwickelt sich der Verlauf bis Minute 45 weiter.
 Die Simulationszeit hält bei einer Pause an. Bei EX endet der Verlauf
 und der simulierte Monitor wird ausgeblendet. Puls und Atemfrequenz schwanken
 leicht und für alle Geräte gleich über der Vitalwertkurve. Der Pkw kann als

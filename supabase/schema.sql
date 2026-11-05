@@ -304,6 +304,9 @@ begin
      'category', category, 'red', category = 'red',
      'condition', case
        when category = 'black' then 'Die Person reagiert im Übungsmodell nicht mehr.'
+       when progression->>'from' = 'green' then case category
+         when 'green' then 'Wach und orientiert. Schmerzen am Unterschenkel, kann noch selbst gehen.'
+         else 'Der Unterschenkel schwillt an. Die Schmerzen nehmen zu, Auftreten ist nicht mehr möglich.' end
        when progression->>'to' = 'red' and category = 'red' then 'Die Person wird blass und benommen. Der Kreislauf verschlechtert sich.'
        else model->'condition'->>condition_index end,
      'reason', case when category = 'black' then 'Im Übungsmodell verstorben'
@@ -639,25 +642,26 @@ begin
      when 'dashboard' then 'zwischen Sitz und Armaturenbrett eingeklemmt'
      when 'roof' then 'im Bereich von Dach und Sitz eingeklemmt'
    end;
-   if seat_name is null or profile is null or profile not in ('affected','minor','urgent','critical','urgent-red','red-ex')
+   if seat_name is null or profile is null or profile not in ('affected','minor','urgent','critical','green-yellow','urgent-red','red-ex')
       or entrapment is null or length(coalesce(person->>'injury', '')) > 400 then
      raise exception using errcode = '22023', message = 'Sitzplatz, Verletzungsprofil oder Einklemmung sind ungültig.';
    end if;
    progression := null;
-   if profile in ('urgent-red','red-ex') then
+   if profile in ('green-yellow','urgent-red','red-ex') then
      if coalesce(person->>'transition_minute', '') !~ '^([1-9]|[1-3][0-9]|4[0-4])$' then
        raise exception using errcode = '22023', message = 'Der Wechsel muss zwischen Minute 1 und 44 liegen.';
      end if;
      transition_minute := (person->>'transition_minute')::integer;
      progression := jsonb_build_object('at_seconds', transition_minute * 60,
-       'from', case when profile = 'urgent-red' then 'yellow' else 'red' end,
-       'to', case when profile = 'urgent-red' then 'red' else 'black' end);
+       'from', case profile when 'green-yellow' then 'green' when 'urgent-red' then 'yellow' else 'red' end,
+       'to', case profile when 'green-yellow' then 'yellow' when 'urgent-red' then 'red' else 'black' end);
    end if;
    injury := coalesce(nullif(btrim(person->>'injury'), ''), case profile
      when 'affected' then 'Keine Verletzung in dieser Übungsrolle. Die Person ist aufgewühlt.'
      when 'minor' then 'Die Person ist orientiert und klagt über eine schmerzhafte Prellung.'
      when 'urgent' then 'Die Person klagt über starke Schmerzen an einer Extremität. Verdacht auf eine Fraktur.'
      when 'urgent-red' then 'Die Person ist zunächst orientiert und klagt über Schmerzen nach einem Anprall.'
+     when 'green-yellow' then 'Beim Aufprall ist mein Unterschenkel gegen den Sitz vor mir gestoßen. Ein paar Schritte gingen noch, aber es tut weh.'
      else 'Die Person ist blass, antwortet verzögert und wirkt zunehmend benommen.'
    end);
 
@@ -665,6 +669,12 @@ begin
      select jsonb_agg(jsonb_build_object('t', minute, 's', systolic, 'd', diastolic,
        'h', pulse, 'r', breaths, 'o', saturation, 'g', gcs) order by minute)
      into points from (values
+       ('green-yellow', 0, 123, 78, 84, 17, 99, 15),
+       ('green-yellow', 5, 127, 80, 100, 21, 99, 15),
+       ('green-yellow', 10, 128, 80, 104, 22, 99, 15),
+       ('green-yellow', 15, 130, 82, 107, 23, 98, 15),
+       ('green-yellow', 20, 130, 82, 109, 23, 98, 15),
+       ('green-yellow', 25, 130, 82, 110, 24, 98, 15),
        ('urgent-red', 0, 128, 78, 88, 18, 99, 15),
        ('urgent-red', 5, 100, 65, 120, 26, 97, 15),
        ('urgent-red', 10, 89, 55, 128, 30, 95, 14),
