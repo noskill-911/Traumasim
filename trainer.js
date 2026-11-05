@@ -68,7 +68,16 @@
     const index = Math.min(4, Math.floor(curveMinute / 5));
     const [a, b] = patient.model.points.slice(index, index + 2);
     const v = {};
-    for (const key of ['s', 'd', 'h', 'r', 'o', 'g']) v[key] = Math.round(a[key] + (b[key] - a[key]) * (curveMinute - a.t) / 5);
+    // Match the patient monitor's time-based fluctuations.
+    const phase = patient.model.car_number == null ? null : previewTime
+      + patient.model.car_number * 13 + patient.model.car_patient_number * 7;
+    const pulseOffset = phase == null ? 0
+      : 3 * Math.sin(2 * Math.PI * phase / 17) + 2 * Math.sin(2 * Math.PI * phase / 43);
+    const breathsOffset = phase == null ? 0 : 1.15 * Math.sin(2 * Math.PI * phase / 33);
+    for (const key of ['s', 'd', 'h', 'r', 'o', 'g']) {
+      const offset = key === 'h' ? pulseOffset : key === 'r' ? breathsOffset : 0;
+      v[key] = Math.round(a[key] + (b[key] - a[key]) * (curveMinute - a.t) / 5 + offset);
+    }
     const red = (patient.id === 'fahrer' || patient.custom) && (v.s < 100 || v.g < 15 || v.h >= 120);
     category ||= red ? 'red' : patient.model.walkable ? 'green' : 'yellow';
     el('triage').className = 'triage ' + category;

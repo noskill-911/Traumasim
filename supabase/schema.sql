@@ -147,8 +147,16 @@ returns jsonb language sql immutable strict set search_path = '' as $$
  ), frame as (
    select seconds, least(4, floor(seconds / 300)::integer) as i from curve
  )
- select jsonb_object_agg(k, round(a + (b - a) * (seconds / 300 - i)))
+ select jsonb_object_agg(k, round(a + (b - a) * (seconds / 300 - i) + case
+   when phase is null then 0
+   when k = 'h' then (3 * sin(2 * pi() * phase / 17) + 2 * sin(2 * pi() * phase / 43))::numeric
+   when k = 'r' then (1.15 * sin(2 * pi() * phase / 33))::numeric
+   else 0 end))
  from frame
+ -- Use the shared exercise clock and a fixed offset per car occupant.
+ cross join lateral (select p_elapsed
+   + (p_model->>'car_number')::integer * 13
+   + (p_model->>'car_patient_number')::integer * 7 as phase) movement
  cross join unnest(array['s','d','h','r','o','g']) as fields(k)
  cross join lateral (
    select (p_model->'points'->i->>k)::numeric as a,

@@ -55,7 +55,8 @@ Beschreibung und die Fahrzeuglage können ergänzt werden. Die Profile
 **SK II → SK I** und **SK I → EX (schwarz)** wechseln zur gewählten Minute
 ab Patientenstart. Voreingestellt sind Minute 6 beziehungsweise 8.
 Die Simulationszeit hält bei einer Pause an. Bei EX endet der Verlauf
-und der simulierte Monitor wird ausgeblendet. Der Pkw kann als
+und der simulierte Monitor wird ausgeblendet. Puls und Atemfrequenz schwanken
+leicht und für alle Geräte gleich über der Vitalwertkurve. Der Pkw kann als
 eigene Übung starten oder zu einer laufenden Übung hinzugefügt werden.
 
 Pkw werden innerhalb der Übung nummeriert, Personen innerhalb des Pkw in

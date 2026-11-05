@@ -38,6 +38,9 @@
   let snapshot = null;
   let busy = false;
   let animation = null;
+  let waveFrameTime = null;
+  let cardiacPhase = 0;
+  let respPhase = 0;
   let monitor = null;
   let serverClockOffset = NaN;
   let snapshotReceivedAt = 0;
@@ -46,15 +49,19 @@
   });
 
 function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+=2){let p=(x/width*6-phase)%1;if(p<0)p+=1;let y=45;if(kind==='ecg'){if(p<.58)y=45;else if(p<.64)y=43-4*Math.sin((p-.58)/.06*Math.PI);else if(p<.69)y=45+10*(p-.64)/.05;else if(p<.72)y=55-47*(p-.69)/.03;else if(p<.75)y=8+58*(p-.72)/.03;else if(p<.79)y=66-21*(p-.75)/.04;else if(p<.95)y=45-7*Math.sin((p-.79)/.16*Math.PI)}else if(kind==='pleth'){y=62-34*Math.pow(Math.max(0,Math.sin(Math.PI*p)),5)-8*Math.sin(Math.PI*p)}else{y=45-19*Math.sin(2*Math.PI*p)}out+=(x===0?'M':'L')+x+' '+y.toFixed(1)+' '}return out}
-  function animateWaves() {
+  function animateWaves(now) {
     if (!monitor) {
-      animation = null;
+      animation = waveFrameTime = null;
+      cardiacPhase = respPhase = 0;
       return;
     }
-    const now = performance.now() / 1000;
-    if (monitor.ecg) el('ecgTrace').setAttribute('d', wavePath('ecg', now * monitor.h / 60 * .16));
-    if (monitor.o != null) el('plethTrace').setAttribute('d', wavePath('pleth', now * monitor.h / 60 * .16));
-    if (monitor.r != null) el('respTrace').setAttribute('d', wavePath('resp', now * monitor.r / 60 * .16));
+    const step = waveFrameTime == null ? 0 : Math.min((now - waveFrameTime) / 1000, .1);
+    waveFrameTime = now;
+    cardiacPhase = (cardiacPhase + step * (monitor.h ?? 0) / 60 * .16) % 1;
+    respPhase = (respPhase + step * (monitor.r ?? 0) / 60 * .16) % 1;
+    if (monitor.ecg) el('ecgTrace').setAttribute('d', wavePath('ecg', cardiacPhase));
+    if (monitor.o != null) el('plethTrace').setAttribute('d', wavePath('pleth', cardiacPhase));
+    if (monitor.r != null) el('respTrace').setAttribute('d', wavePath('resp', respPhase));
     animation = requestAnimationFrame(animateWaves);
   }
 
