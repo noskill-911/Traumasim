@@ -72,8 +72,20 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
       el('patientCondition').textContent = condition;
     }
     if (monitor) {
-      const { s, d, h, r, o, g, ecg } = monitor;
+      const { s, d, h, r, o, g, ecg, bp_at, bp_previous } = monitor;
       el('bp').textContent = s != null && d != null ? s + '/' + d : '—';
+      const bpTime = el('bpTime');
+      const bpPrevious = el('bpPrevious');
+      if (bpTime) {
+        bpTime.hidden = bp_at == null;
+        bpTime.textContent = bp_at == null ? '' : 'Messzeit ' + api.clock(bp_at);
+      }
+      if (bpPrevious) {
+        bpPrevious.hidden = !bp_previous;
+        bpPrevious.textContent = bp_previous
+          ? 'Vorher ' + bp_previous.s + '/' + bp_previous.d + ' · ' + api.clock(bp_previous.at)
+          : '';
+      }
       const rateLabel = el('rateLabel');
       if (rateLabel) rateLabel.textContent = ecg ? 'HF' : 'Puls';
       el('hr').textContent = h ?? '—';

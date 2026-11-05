@@ -15,7 +15,10 @@ Die simulierte Vorsichtung erscheint ab 10 Sekunden (SK III, grün),
 Die simulierten Vitalwerte erscheinen gestaffelt ab Patientenstart:
 Puls und SpO₂ nach 25 Sekunden, Atemfrequenz nach 40 Sekunden, GCS nach
 45 Sekunden, Blutdruck nach 70 Sekunden und die EKG-Monitorkurve nach
-90 Sekunden. Diese Zeiten bilden einen Übungsablauf ab.
+90 Sekunden. Der Blutdruck bleibt bis zur nächsten abgeschlossenen Messung
+stehen. Der Fahrer hat ein 3-Minuten-Intervall, der Beifahrer ein 5-Minuten-Intervall.
+Ab der zweiten Messung zeigt der Monitor den vorherigen Wert mit Messzeit.
+Diese Zeiten bilden einen Übungsablauf ab.
 
 Die Ausbilderansicht erlaubt Pausieren, Fortsetzen und das Zurücksetzen eines
 Patienten oder der ganzen Übung. Die Übersicht zeigt alle Patienten der

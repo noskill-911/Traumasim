@@ -51,7 +51,7 @@ alter table traumasim_private.trainers enable row level security;
 alter table traumasim_private.models enable row level security;
 revoke all on all tables in schema traumasim_private from public, anon, authenticated;
 
-insert into traumasim_private.models values ('vu-baum', 'fahrer', $model${"secret":"Verdacht auf Becken- und Oberschenkelverletzung mit innerer Blutung.","points":[{"t":0,"s":125,"d":80,"h":95,"r":20,"o":98,"g":15},{"t":5,"s":120,"d":75,"h":105,"r":23,"o":97,"g":15},{"t":10,"s":105,"d":65,"h":118,"r":26,"o":97,"g":15},{"t":15,"s":90,"d":55,"h":130,"r":29,"o":96,"g":14},{"t":20,"s":75,"d":45,"h":145,"r":32,"o":95,"g":12},{"t":25,"s":65,"d":40,"h":152,"r":34,"o":93,"g":9}],"condition":["Wach, orientiert, starke Schmerzen im Bein.","Blass, unruhig, Schwindel und Durst.","Kaltschweißig, schwacher Radialispuls, zunehmend verwirrt.","Bewusstseinsgetrübt, kaum adäquate Antworten."]}$model$)
+insert into traumasim_private.models values ('vu-baum', 'fahrer', $model${"nibpFastCycle":true,"secret":"Verdacht auf Becken- und Oberschenkelverletzung mit innerer Blutung.","points":[{"t":0,"s":125,"d":80,"h":95,"r":20,"o":98,"g":15},{"t":5,"s":120,"d":75,"h":105,"r":23,"o":97,"g":15},{"t":10,"s":105,"d":65,"h":118,"r":26,"o":97,"g":15},{"t":15,"s":90,"d":55,"h":130,"r":29,"o":96,"g":14},{"t":20,"s":75,"d":45,"h":145,"r":32,"o":95,"g":12},{"t":25,"s":65,"d":40,"h":152,"r":34,"o":93,"g":9}],"condition":["Wach, orientiert, starke Schmerzen im Bein.","Blass, unruhig, Schwindel und Durst.","Kaltschweißig, schwacher Radialispuls, zunehmend verwirrt.","Bewusstseinsgetrübt, kaum adäquate Antworten."]}$model$)
 on conflict (case_key, patient_key) do update set model = excluded.model;
 insert into traumasim_private.models values ('vu-baum', 'beifahrer', $model${"secret":"Übungsannahme: Thoraxprellung ohne initiale vitale Bedrohung; weiterer Verlauf zunächst stabil.","points":[{"t":0,"s":130,"d":80,"h":90,"r":22,"o":97,"g":15},{"t":5,"s":130,"d":80,"h":92,"r":22,"o":97,"g":15},{"t":10,"s":128,"d":78,"h":94,"r":23,"o":97,"g":15},{"t":15,"s":128,"d":78,"h":96,"r":23,"o":97,"g":15},{"t":20,"s":125,"d":75,"h":98,"r":24,"o":96,"g":15},{"t":25,"s":125,"d":75,"h":98,"r":24,"o":96,"g":15}],"condition":["Wach, orientiert, Schmerzen beim tiefen Einatmen.","Weiterhin ansprechbar, atmet etwas schneller.","Weiterhin ansprechbar, Schmerzen im Brustkorb.","Weiterhin wach und orientiert."]}$model$)
 on conflict (case_key, patient_key) do update set model = excluded.model;
@@ -139,6 +139,10 @@ declare
  snapshot_time timestamptz;
  seconds numeric;
  vitals jsonb;
+ bp_interval integer;
+ bp_time integer;
+ bp_values jsonb;
+ previous_bp_values jsonb;
  red boolean;
  category text;
  triage_delay integer;
@@ -191,6 +195,15 @@ begin
  snapshot_time := clock_timestamp();
  seconds := traumasim_private.elapsed(patient.started_at, patient.paused_at, patient.accumulated_pause_seconds, snapshot_time);
  vitals := traumasim_private.vitals(model, seconds);
+ if seconds >= 70 then
+   bp_interval := case when model->'nibpFastCycle' = 'true'::jsonb then 180 else 300 end;
+   -- Hold the result from the last completed cuff cycle until the next one completes.
+   bp_time := 70 + floor((seconds - 70) / bp_interval)::integer * bp_interval;
+   bp_values := traumasim_private.vitals(model, bp_time);
+   if bp_time > 70 then
+     previous_bp_values := traumasim_private.vitals(model, bp_time - bp_interval);
+   end if;
+ end if;
  red := (p_patient = 'fahrer' or patient.scenario_model is not null) and ((vitals->>'s')::integer < 100 or (vitals->>'g')::integer < 15 or (vitals->>'h')::integer >= 120);
  category := case
    when red then 'red'
@@ -222,12 +235,16 @@ begin
      'o', vitals->'o',
      'r', case when seconds >= 40 then vitals->'r' end,
      'g', case when seconds >= 45 then vitals->'g' end,
-     's', case when seconds >= 70 then vitals->'s' end,
-     'd', case when seconds >= 70 then vitals->'d' end,
+     's', bp_values->'s',
+     'd', bp_values->'d',
+     'bp_at', bp_time,
+     'bp_previous', case when previous_bp_values is not null then jsonb_build_object(
+       's', previous_bp_values->'s', 'd', previous_bp_values->'d', 'at', bp_time - bp_interval
+     ) end,
      'ecg', case when seconds >= 90 then true end
    )) end,
    -- Preserve the complete snapshot for previously loaded student pages.
-   'vitals', case when seconds >= 120 then vitals end
+   'vitals', case when seconds >= 120 then vitals || jsonb_build_object('s', bp_values->'s', 'd', bp_values->'d') end
  ) || case when patient.scenario_model is not null then jsonb_build_object('brief', jsonb_build_object(
    'title', exercise.title, 'name', model->>'name', 'intro', model->>'intro',
    'story', model->>'story', 'questions', model->>'questions'
