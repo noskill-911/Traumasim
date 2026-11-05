@@ -93,7 +93,7 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
       const { red, reason, condition } = snapshot.triage;
       const category = snapshot.triage.category ?? (red ? 'red' : 'yellow');
       el('triageBox').className = 'triage ' + category;
-      el('triage').textContent = { red: 'SK I · ROT', yellow: 'SK II · GELB', green: 'SK III · GRÜN' }[category];
+      el('triage').textContent = { red: 'SK I · ROT', yellow: 'SK II · GELB', green: 'SK III · GRÜN', affected: 'UNVERLETZT BETROFFEN' }[category];
       el('triageReason').textContent = reason;
       el('patientCondition').textContent = condition;
     }

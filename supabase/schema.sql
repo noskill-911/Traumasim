@@ -160,6 +160,7 @@ declare
  bp_pause_seconds numeric;
  previous_bp_pause_seconds numeric;
  red boolean;
+ affected boolean;
  category text;
  triage_delay integer;
  condition_index integer;
@@ -242,13 +243,15 @@ begin
      next_bp_wall_time := null;
    end if;
  end if;
- red := (p_patient = 'fahrer' or patient.scenario_model is not null) and ((vitals->>'s')::integer < 100 or (vitals->>'g')::integer < 15 or (vitals->>'h')::integer >= 120);
+ affected := coalesce(model->'affected' = 'true'::jsonb, false);
+ red := not affected and (p_patient = 'fahrer' or patient.scenario_model is not null) and ((vitals->>'s')::integer < 100 or (vitals->>'g')::integer < 15 or (vitals->>'h')::integer >= 120);
  category := case
+   when affected then 'affected'
    when red then 'red'
    when model->'walkable' = 'true'::jsonb then 'green'
    else 'yellow' end;
  -- Training timings follow the category available at the current patient time.
- triage_delay := case category when 'green' then 10 when 'yellow' then 20 else 35 end;
+ triage_delay := case category when 'affected' then 10 when 'green' then 10 when 'yellow' then 20 else 35 end;
  condition_index := case
    when p_patient = 'beifahrer' then least(3, floor(seconds / 420)::integer)
    when (vitals->>'g')::integer <= 12 then 3
@@ -263,13 +266,14 @@ begin
    'server_time', snapshot_time,
    'triage', case when seconds >= triage_delay then jsonb_build_object(
      'category', category, 'red', red, 'condition', model->'condition'->>condition_index,
-     'reason', case when red then coalesce(model->>'triageReason', 'Didaktische Einstufung: Zeichen eines kritischen Schocks')
+     'reason', case when affected then 'Unverletzt, aufgewühlt und betreuungsbedürftig'
+       when red then coalesce(model->>'triageReason', 'Didaktische Einstufung: Zeichen eines kritischen Schocks')
        when category = 'green' then 'Gehfähig; Nachsichtung vorgesehen'
        when patient.scenario_model is not null then 'Schwer verletzt, ohne erkennbare vitale Bedrohung (Übungsmodell)'
        when p_patient = 'beifahrer' then 'Schwer verletzt, zunächst ohne erkennbare vitale Bedrohung'
        else 'Schwere Verletzung, Kreislauf zunächst kompensiert' end
    ) end,
-   'monitor', case when seconds >= 25 then jsonb_strip_nulls(jsonb_build_object(
+   'monitor', case when not affected and seconds >= 25 then jsonb_strip_nulls(jsonb_build_object(
      'h', vitals->'h',
      'o', vitals->'o',
      'r', case when seconds >= 40 then vitals->'r' end,
@@ -286,7 +290,7 @@ begin
      'ecg', case when seconds >= 90 then true end
    )) end,
    -- Preserve the complete snapshot for previously loaded student pages.
-   'vitals', case when seconds >= 120 then vitals || jsonb_build_object('s', bp_values->'s', 'd', bp_values->'d') end
+   'vitals', case when not affected and seconds >= 120 then vitals || jsonb_build_object('s', bp_values->'s', 'd', bp_values->'d') end
  ) || case when patient.scenario_model is not null then jsonb_build_object('brief', jsonb_build_object(
    'title', exercise.title, 'name', model->>'name', 'intro', model->>'intro',
    'story', model->>'story', 'questions', model->>'questions'
@@ -474,6 +478,7 @@ begin
      'story', coalesce(model->>'story', ''), 'questions', coalesce(model->>'questions', ''),
      'secret', coalesce(model->>'secret', ''), 'walkable', model->'walkable' = 'true'::jsonb,
      'points', points, 'condition', model->'condition', 'triageReason', model->>'triageReason',
+     'affected', coalesce(model->'affected' = 'true'::jsonb, false),
      'nibpFastCycle', coalesce(model->'nibpFastCycle' = 'true'::jsonb, false)
    ));
  end loop;

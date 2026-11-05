@@ -39,6 +39,15 @@
     const patient = selectedPatient();
     if (!patient) return;
     const minute = previewTime / 60;
+    if (patient.model.affected === true) {
+      el('secret').textContent = patient.model.secret;
+      el('clock').textContent = api.clock(previewTime);
+      el('seek').value = Math.floor(minute);
+      el('triage').className = 'triage affected';
+      el('triage').textContent = 'UNVERLETZT BETROFFEN · BETREUUNG';
+      el('vitals').replaceChildren();
+      return;
+    }
     const index = Math.min(4, Math.floor(minute / 5));
     const [a, b] = patient.model.points.slice(index, index + 2);
     const v = {};

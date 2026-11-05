@@ -21,3 +21,4 @@ button:disabled { opacity: .55; cursor: default; }
 .curve-table { overflow-x: auto; }
 .curve-table th, .curve-table td { padding: .25rem; text-align: right; }
 .curve-table input { width: 4.25rem; padding: .35rem; }
+.triage.affected { background: #25303a; border-color: #aab7c2; color: #f4f7f9; }

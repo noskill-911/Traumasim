@@ -39,7 +39,9 @@ aus eigenen Szenarien sind nur in der Ausbilderansicht verfügbar.
 In der Ausbilderansicht unter **Übungselement Busunfall** die Variante mit
 5 oder 10 Personen einschließlich Fahrer auswählen. Den Bus als eigene
 Übung starten oder zur aktiven Übung als zusätzliche Lage hinzufügen.
-Die bestehenden Stationslinks einer laufenden Übung bleiben gültig.
+Jede Busvariante enthält eine unverletzte, betreuungsbedürftige Person.
+Die Rolle erscheint als **Unverletzt betroffen** und hat keine simulierte
+Monitoranzeige. Die bestehenden Stationslinks einer laufenden Übung bleiben gültig.
 Die Fallmodelle sind private Supabase-Vorlagen und werden bei der Buchung
 in die Übung kopiert. Bei einer Neuinstallation werden die Vorlagen aus
 dem Szenarioexport eingespielt. Die Ausbildervorschau zeigt die Lage und
