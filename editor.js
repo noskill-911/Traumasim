@@ -20,8 +20,16 @@
       && draft.patients.every((patient) => patient && typeof patient.name === 'string');
   }
 
+  function fillMissingPoints(draft) {
+    for (const patient of draft.patients) {
+      if (!Array.isArray(patient.points)) patient.points = initialPoints();
+    }
+    return draft;
+  }
+
   try { data = JSON.parse(localStorage.getItem(key)); } catch {}
   if (!validDraft(data)) data = JSON.parse(JSON.stringify(window.TRAUMA_CASES[0]));
+  fillMissingPoints(data);
 
   function message(text) {
     el('message').textContent = text;
@@ -123,7 +131,7 @@
       if (file.size > 200000) throw new Error('Die Datei ist zu groß.');
       const incoming = JSON.parse(await file.text());
       if (!validDraft(incoming)) throw new Error('Ungültiger Szenarioentwurf.');
-      data = incoming;
+      data = fillMissingPoints(incoming);
       current = 0;
       render();
       message('Entwurf importiert. Prüfe die Werte und speichere den Entwurf.');
