@@ -26,3 +26,7 @@ Für echte getrennte Berechtigungen und Live-Synchronisierung ist später ein Ba
 ## Lizenz
 
 Apache-2.0. Beiträge und Weiterentwicklungen sind willkommen.
+
+## Sitzungslogik (lokaler Prototyp)
+
+Beim ersten Öffnen eines Patienten speichert der Browser dessen Startzeitpunkt in `localStorage`. Beim erneuten Öffnen wird die vergangene Zeit anhand der Uhrzeit berechnet. Die Ausbildervorschau kann Startzeitpunkte **nur im selben Browser** zurücksetzen. Andere Geräte und private Browserfenster sind nicht synchronisiert. Dies ist noch keine zentrale Übungssitzung; dafür wird ein Backend benötigt.
