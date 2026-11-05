@@ -95,21 +95,28 @@
     el('exerciseJoin').hidden = !code;
     if (!code) {
       el('joinQr').replaceChildren();
+      delete el('joinQr').dataset.url;
       el('joinLink').value = '';
       return;
     }
     const url = new URL('join.html', location.href);
     url.hash = new URLSearchParams({ access: code });
-    if (el('joinLink').value === url.href) return;
-    drawQr(el('joinQr'), url.href, 'QR-Code zum Übungsbeitritt');
     el('joinLink').value = url.href;
+    drawQr(el('joinQr'), url.href, 'QR-Code zum Übungsbeitritt');
   }
 
   function drawQr(container, url, title) {
+    if (container.dataset.url === url) return;
+    if (typeof window.qrcode !== 'function') {
+      container.textContent = 'QR-Code gerade nicht verfügbar. Lade die Seite neu oder kopiere den Link.';
+      delete container.dataset.url;
+      return;
+    }
     const qr = window.qrcode(0, 'M');
     qr.addData(url);
     qr.make();
     container.innerHTML = qr.createSvgTag({ cellSize: 5, scalable: true, title });
+    container.dataset.url = url;
   }
 
   function renderStation(url) {
@@ -118,9 +125,8 @@
     if (!url) {
       target.replaceChildren();
       delete target.dataset.url;
-    } else if (target.dataset.url !== url) {
+    } else {
       drawQr(target, url, 'Stations-QR für diesen Patienten');
-      target.dataset.url = url;
     }
   }
 
