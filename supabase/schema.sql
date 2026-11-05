@@ -74,6 +74,35 @@ begin
 end
 $install$;
 
+-- Keep exercise credentials distinct from individual patient credentials.
+create or replace function traumasim_private.exercise_code(p_session uuid, p_case text, p_signing_key uuid)
+returns text language sql immutable strict set search_path = '' as $$
+ select p_session::text || '.j' || split_part(
+   traumasim_private.patient_code(p_session, 'exercise:' || p_case, p_signing_key), '.', 2
+ );
+$$;
+
+create or replace function traumasim_private.join_exercise(p_code text)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+ exercise public.traumasim_sessions%rowtype;
+begin
+ if p_code is null or p_code !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.j[0-9a-f]{64}$' then
+   raise exception using errcode = '42501', message = 'Übungszugang ungültig oder abgelaufen';
+ end if;
+
+ select s.* into exercise from public.traumasim_sessions s
+ where s.id = split_part(p_code, '.', 1)::uuid and s.trainer_id is not null
+   and s.expires_at > clock_timestamp();
+ if not found or sha256(convert_to(traumasim_private.exercise_code(exercise.id, exercise.case_key, exercise.signing_key), 'UTF8'))
+       <> sha256(convert_to(p_code, 'UTF8')) then
+   raise exception using errcode = '42501', message = 'Übungszugang ungültig oder abgelaufen';
+ end if;
+
+ return jsonb_build_object('case', exercise.case_key, 'title', exercise.title, 'expires_at', exercise.expires_at);
+end;
+$$;
+
 create or replace function traumasim_private.elapsed(
  p_started timestamptz, p_paused timestamptz, p_pause_seconds numeric, p_now timestamptz
 ) returns numeric language sql immutable set search_path = '' as $$
@@ -108,7 +137,7 @@ declare
  red boolean;
  condition_index integer;
 begin
- if p_code is null or p_code !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[0-9a-f]{64}$' then
+ if p_code is null or p_code !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.j?[0-9a-f]{64}$' then
    raise exception using errcode = '42501', message = 'Patientenzugang ungültig oder abgelaufen';
  end if;
 
@@ -118,8 +147,10 @@ begin
    and s.trainer_id is not null
    and s.expires_at > clock_timestamp();
  if not found or p_patient is null
-   or sha256(convert_to(traumasim_private.patient_code(exercise.id, p_patient, exercise.signing_key), 'UTF8'))
-       <> sha256(convert_to(p_code, 'UTF8')) then
+   or sha256(convert_to(case when strpos(p_code, '.j') = 37
+        then traumasim_private.exercise_code(exercise.id, exercise.case_key, exercise.signing_key)
+        else traumasim_private.patient_code(exercise.id, p_patient, exercise.signing_key) end, 'UTF8'))
+        <> sha256(convert_to(p_code, 'UTF8')) then
    raise exception using errcode = '42501', message = 'Patientenzugang ungültig oder abgelaufen';
  end if;
 
@@ -257,11 +288,17 @@ begin
  cross join lateral (select traumasim_private.elapsed(p.started_at, p.paused_at, p.accumulated_pause_seconds, snapshot_time) as seconds) t
  where p.session_id = exercise.id;
  return jsonb_build_object('id', exercise.id, 'title', exercise.title, 'case', exercise.case_key,
-   'expires_at', exercise.expires_at, 'patients', result);
+   'expires_at', exercise.expires_at, 'patients', result,
+   'join_code', traumasim_private.exercise_code(exercise.id, exercise.case_key, exercise.signing_key));
 end;
 $$;
 
 -- Keep the privileged implementations out of PostgREST's exposed schema.
+create or replace function public.traumasim_join(p_code text)
+returns jsonb language sql security invoker set search_path = '' as $$
+ select traumasim_private.join_exercise(p_code);
+$$;
+
 create or replace function public.traumasim_student(
  p_case text, p_patient text, p_code text, p_start_revision integer default null
 ) returns jsonb language sql security invoker set search_path = '' as $$
@@ -275,9 +312,12 @@ create or replace function public.traumasim_trainer(
 $$;
 
 revoke all on all functions in schema traumasim_private from public, anon, authenticated;
+revoke all on function public.traumasim_join(text) from public, anon, authenticated;
 revoke all on function public.traumasim_student(text, text, text, integer) from public, anon, authenticated;
 revoke all on function public.traumasim_trainer(text, uuid, text, text) from public, anon, authenticated;
 grant usage on schema traumasim_private to anon, authenticated;
+grant execute on function traumasim_private.join_exercise(text) to anon, authenticated;
+grant execute on function public.traumasim_join(text) to anon, authenticated;
 grant execute on function traumasim_private.student(text, text, text, integer) to anon, authenticated;
 grant execute on function traumasim_private.trainer(text, uuid, text, text) to authenticated;
 grant execute on function public.traumasim_student(text, text, text, integer) to anon, authenticated;

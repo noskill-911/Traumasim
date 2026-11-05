@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
-<title>TraumaSim · Ausbilderansicht</title>
+  <title>TraumaSim · Ausbilderansicht</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body><main>
@@ -32,6 +32,13 @@
         <button>Übung anlegen</button>
       </form>
     </section>
+    <section id="exerciseJoin" class="panel" hidden>
+      <h2>Übungs-QR zum Einstieg</h2>
+      <p>Zeige diesen QR-Code beim Briefing. Danach öffnen die Teilnehmenden die vorhandenen Patienten-QR-Codes im selben Browser.</p>
+      <div id="joinQr" class="exercise-qr"></div>
+      <label>Übungslink <input id="joinLink" readonly></label>
+      <button id="copyJoin">Übungslink kopieren</button>
+    </section>
     <section id="live" class="panel" hidden>
       <h2>Geräteübergreifender Verlauf</h2>
       <p id="expiry" class="muted small"></p>
@@ -44,8 +51,6 @@
       <p class="muted small">Nach dem Zurücksetzen wartet der Patient auf einen neuen Aufruf oder auf „Patient starten“.</p>
       <p><label>Patientenlink <input id="patientLink" readonly></label>
       <button id="copyLink">Patientenlink kopieren</button></p>
-      <p><label>Zugangscode für vorhandenen QR-Code <input id="patientCode" readonly></label>
-      <button id="copyCode">Zugangscode kopieren</button></p>
     </section>
     <section id="preview" class="panel" hidden>
       <h2>Ausbildervorschau</h2>
@@ -66,6 +71,7 @@
 <script src="patients.js"></script>
 <script src="supabase-config.js"></script>
 <script src="sync.js"></script>
+<script src="vendor/qrcode-generator-2.0.4.js"></script>
 <script src="trainer.js"></script>
 </body>
 </html>

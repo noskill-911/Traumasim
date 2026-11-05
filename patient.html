@@ -1,10 +1,7 @@
 <!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
 <title>TraumaSim · Patientenansicht</title><link rel="stylesheet" href="style.css"></head><body><main id="content">
 <div class="panel"><div class="muted">TRAUMASIM · PATIENTENSIMULATION</div><h1 id="caseTitle">Übungslage</h1><h2 id="patientTitle"></h2><p id="intro"></p><p id="syncStatus" role="status">Verbindung zur Übung wird geprüft …</p>
-<form id="accessForm" hidden>
-  <label>Patientenzugangscode <input id="accessCode" autocomplete="off" spellcheck="false" maxlength="101" required></label>
-  <button>Patient öffnen</button>
-</form>
+<p id="joinHint" hidden>Scanne zuerst den Übungs-QR der Ausbilderansicht. Öffne danach diesen Patienten-QR im selben Browser.</p>
 <button id="startPatient" type="button" hidden>Patient starten</button></div>
 <div class="panel" id="triagePanel" hidden><div class="muted">Sichtungskategorie · Übungsmodell</div><div id="triageBox" class="triage yellow"><strong id="triage"></strong><span id="triageReason"></span><div id="patientCondition" class="condition"></div></div></div>
 <div class="panel" id="vitalsPanel" hidden><div class="monitor" role="group" aria-label="Simulierter Patientenmonitor"><div class="monitor-head"><span>TraumaSim · Monitoransicht</span><span>SIMULATION · KEIN MEDIZINGERÄT</span></div>

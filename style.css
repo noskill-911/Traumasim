@@ -3,10 +3,12 @@
 
 [hidden] { display: none !important; }
 button:disabled { opacity: .55; cursor: default; }
-#accessCode, #patientLink, #patientCode, #email, #password, #exerciseTitle {
+#joinLink, #patientLink, #email, #password, #exerciseTitle {
   width: 100%;
   max-width: 42rem;
   padding: .65rem;
 }
 .patient-entry { padding: 12px 0; border-top: 1px solid #ffffff22; }
 .patient-qr { display: block; margin: 10px 0; border-radius: 8px; }
+.exercise-qr { width: min(100%, 21rem); margin: 16px 0; }
+.exercise-qr svg { display: block; width: 100%; height: auto; background: white; }

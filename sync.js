@@ -28,6 +28,17 @@
   }
 
   window.TraumaSync = Object.freeze({
+    join: (code) => request('/rest/v1/rpc/traumasim_join', { p_code: code }),
+    exerciseCode: (caseId) => {
+      try { return localStorage.getItem('traumasim:exercise:' + caseId); } catch { return null; }
+    },
+    saveExerciseCode: (caseId, code) => localStorage.setItem('traumasim:exercise:' + caseId, code),
+    clearExerciseCode: (caseId, code) => {
+      try {
+        const key = 'traumasim:exercise:' + caseId;
+        if (localStorage.getItem(key) === code) localStorage.removeItem(key);
+      } catch {}
+    },
     student: (params) => request('/rest/v1/rpc/traumasim_student', params),
     trainer: (params, token) => request('/rest/v1/rpc/traumasim_trainer', params, token),
     signIn: (email, password) => request('/auth/v1/token?grant_type=password', { email, password }),

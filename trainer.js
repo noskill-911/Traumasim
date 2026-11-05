@@ -66,11 +66,11 @@
     exercise = next;
     el('live').hidden = !next;
     el('preview').hidden = !next;
+    renderJoin(next?.join_code);
     if (!next) {
       el('choose').replaceChildren();
       for (const id of ['secret', 'vitals', 'triage', 'patientStatus', 'expiry']) el(id).textContent = '';
       el('patientLink').value = '';
-      el('patientCode').value = '';
       resetPreview();
       return;
     }
@@ -83,6 +83,23 @@
     renderPatient();
   }
 
+  function renderJoin(code) {
+    el('exerciseJoin').hidden = !code;
+    if (!code) {
+      el('joinQr').replaceChildren();
+      el('joinLink').value = '';
+      return;
+    }
+    const url = new URL('join.html', location.href);
+    url.hash = new URLSearchParams({ access: code });
+    if (el('joinLink').value === url.href) return;
+    const qr = window.qrcode(0, 'M');
+    qr.addData(url.href);
+    qr.make();
+    el('joinQr').innerHTML = qr.createSvgTag({ cellSize: 5, scalable: true, title: 'QR-Code zum Übungsbeitritt' });
+    el('joinLink').value = url.href;
+  }
+
   function renderPatient() {
     const patient = selectedPatient();
     if (!patient) return;
@@ -90,7 +107,6 @@
     url.search = new URLSearchParams({ case: exercise.case, patient: patient.id });
     url.hash = new URLSearchParams({ code: patient.code });
     el('patientLink').value = url.href;
-    el('patientCode').value = patient.code;
     el('patientStatus').textContent = api.labels[patient.status] + ' · ' + api.clock(patient.elapsed);
     for (const button of actions) {
       const action = button.dataset.action;
@@ -214,7 +230,7 @@
     });
   }
 
-  for (const [button, field] of [['copyLink', 'patientLink'], ['copyCode', 'patientCode']]) {
+  for (const [button, field] of [['copyLink', 'patientLink'], ['copyJoin', 'joinLink']]) {
     el(button).addEventListener('click', async () => {
       const input = el(field);
       try {

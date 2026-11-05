@@ -19,10 +19,11 @@
   const storageKey = 'traumasim-access:' + caseId + ':' + patientId;
   const linkCode = new URLSearchParams(location.hash.slice(1)).get('code');
   if (linkCode) history.replaceState(null, '', location.pathname + location.search);
-  let code = linkCode;
-  try {
-    code ||= sessionStorage.getItem(storageKey);
-  } catch {}
+  const exerciseCode = linkCode ? null : api.exerciseCode(caseId);
+  let code = linkCode || exerciseCode;
+  try { code ||= sessionStorage.getItem(storageKey); } catch {}
+  let openPending = Boolean(code);
+  const showJoinHint = () => { el('joinHint').hidden = false; };
   let snapshot = null;
   let busy = false;
   let animation = null;
@@ -61,7 +62,7 @@ function animateWaves(){if(!document.getElementById('ecgTrace'))return;const v=s
     }
   }
 
-  async function synchronize({ open = false, revision } = {}) {
+  async function synchronize({ revision } = {}) {
     if (!code || busy) return;
     busy = true;
     el('startPatient').disabled = true;
@@ -69,18 +70,21 @@ function animateWaves(){if(!document.getElementById('ecgTrace'))return;const v=s
     try {
       if (revision !== undefined) query.p_start_revision = revision;
       snapshot = await api.student(query);
-      if (open && snapshot.status === 'ready') {
+      const firstVisit = openPending;
+      openPending = false;
+      if (firstVisit && snapshot.status === 'ready') {
         snapshot = await api.student({ ...query, p_start_revision: snapshot.revision });
       }
-      try { sessionStorage.setItem(storageKey, code); } catch {}
-      el('accessCode').value = '';
-      el('accessForm').hidden = true;
+      if (!exerciseCode) {
+        try { sessionStorage.setItem(storageKey, code); } catch {}
+      }
       render();
     } catch (error) {
       if (error.code === '42501') {
-        code = null;
+        if (exerciseCode) api.clearExerciseCode(caseId, exerciseCode);
         try { sessionStorage.removeItem(storageKey); } catch {}
-        el('accessForm').hidden = false;
+        code = null;
+        showJoinHint();
       }
       snapshot = null;
       render();
@@ -91,20 +95,14 @@ function animateWaves(){if(!document.getElementById('ecgTrace'))return;const v=s
     }
   }
 
-  el('accessForm').addEventListener('submit', (event) => {
-    event.preventDefault();
-    if (busy) return;
-    code = el('accessCode').value.trim();
-    if (code) void synchronize({ open: true });
-  });
   el('startPatient').addEventListener('click', () => {
     if (snapshot?.status === 'ready') void synchronize({ revision: snapshot.revision });
   });
   if (code) {
-    void synchronize({ open: true });
+    void synchronize();
   } else {
-    el('accessForm').hidden = false;
-    el('syncStatus').textContent = 'Gib den Zugangscode für diesen Patienten ein.';
+    showJoinHint();
+    el('syncStatus').textContent = 'Übungszugang erforderlich.';
   }
   setInterval(() => { if (!document.hidden) void synchronize(); }, 2000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void synchronize(); });

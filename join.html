@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
+  <title>TraumaSim · Übung beitreten</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <section class="panel">
+      <div class="muted">TRAUMASIM · ÜBUNG</div>
+      <h1 id="joinTitle">Übung beitreten</h1>
+      <p id="joinStatus" role="status">Übungszugang wird geprüft …</p>
+      <button id="joinRetry" hidden>Erneut versuchen</button>
+      <a id="joinPatients" class="action" href="index.html" hidden>Patientenübersicht öffnen</a>
+    </section>
+  </main>
+  <script src="supabase-config.js"></script>
+  <script src="sync.js"></script>
+  <script src="join.js"></script>
+</body>
+</html>
