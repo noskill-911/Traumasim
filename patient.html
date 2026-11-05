@@ -1,5 +1,5 @@
 <!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TraumaSim · Patientenansicht</title><link rel="stylesheet" href="style.css"></head><body><main id="content">
-<div class="panel"><div class="muted">TRAUMASIM · PATIENTENSIMULATION</div><h1 id="caseTitle">Übungslage</h1><h2 id="patientTitle"></h2><p id="intro"></p><div class="muted small">Die Übung startet automatisch beim Öffnen dieser Seite.</div></div>
+<div class="panel"><div class="muted">TRAUMASIM · PATIENTENSIMULATION</div><h1 id="caseTitle">Übungslage</h1><h2 id="patientTitle"></h2><p id="intro"></p><div class="muted small">Beim ersten Öffnen auf diesem Gerät startet die Übung. Beim erneuten Öffnen läuft sie weiter.</div></div>
 <div class="panel" id="triagePanel"><div class="muted">Sichtungskategorie · Übungsmodell</div><div id="triageBox" class="triage yellow"><strong id="triage"></strong><span id="triageReason"></span><div id="patientCondition" class="condition"></div></div></div>
 <div class="panel" id="vitalsPanel"><div class="monitor" role="group" aria-label="Simulierter Patientenmonitor"><div class="monitor-head"><span>TraumaSim · Monitoransicht</span><span>SIMULATION · KEIN MEDIZINGERÄT</span></div>
 <div class="monitor-layout"><div class="monitor-traces">
@@ -14,5 +14,5 @@
 <div class="monitor-footer"><div class="monitor-bp"><span>NIBP · mmHg</span><strong id="bp"></strong></div><div class="monitor-gcs"><span>GCS</span><strong id="gcs"></strong><small>/15</small></div></div></div><p class="muted small">Die Kurven sind schematisch animiert und nicht aus echten EKG- oder Sensordaten abgeleitet.</p></div>
 <div class="panel"><details open><summary>🗣 Patientenstory – Was ist passiert?</summary><blockquote id="story"></blockquote><p><strong>Auf Nachfrage:</strong> <span id="questions"></span></p></details></div>
 <div class="panel"><div class="muted small">Übungszeit seit Öffnen dieser Seite: <span id="elapsed">00:00</span></div></div>
-<p class="muted small">Nur für Ausbildung. Simulierte Werte und Kategorien sind keine klinische Prognose und keine validierte Umsetzung des Hamburger mSTaRT-Verfahrens. Jeder Aufruf startet eine eigene Simulation; keine Synchronisierung zwischen Geräten.</p>
+<p class="muted small">Nur für Ausbildung. Simulierte Werte und Kategorien sind keine klinische Prognose und keine validierte Umsetzung des Hamburger mSTaRT-Verfahrens. Startzeit wird lokal pro Browser und Patient gespeichert. Kein gemeinsamer Start zwischen verschiedenen Geräten; keine Synchronisierung.</p>
 </main><script src="patients.js"></script><script src="student.js"></script></body></html>
