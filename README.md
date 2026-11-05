@@ -20,7 +20,9 @@ stehen. Der Fahrer hat ein 3-Minuten-Intervall, der Beifahrer ein 5-Minuten-Inte
 Der Monitor zeigt die Uhrzeit der letzten und der vorherigen Messung sowie
 die geplante Uhrzeit des nächsten Messwerts in der Zeitzone Europe/Berlin.
 Bei einer Pause ruht die Messplanung. Die Uhr am EKG zeigt die laufende
-Berliner Ortszeit. Die Freigabezeiten bilden einen Übungsablauf ab.
+Berliner Ortszeit. Die zweite Uhr am Monitor zählt die gemeinsame
+Patientenzeit ab dem ersten gültigen Patientenaufruf. Die Freigabezeiten
+bilden einen Übungsablauf ab.
 
 Die Ausbilderansicht erlaubt Pausieren, Fortsetzen und das Zurücksetzen eines
 Patienten oder der ganzen Übung. Die Übersicht zeigt alle Patienten der

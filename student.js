@@ -34,6 +34,7 @@
   let animation = null;
   let monitor = null;
   let serverClockOffset = NaN;
+  let snapshotReceivedAt = 0;
   const berlinClock = new Intl.DateTimeFormat('de-DE', {
     timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
   });
@@ -51,13 +52,22 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     animation = requestAnimationFrame(animateWaves);
   }
 
-  function drawEcgClock() {
+  function drawClocks() {
+    const now = performance.now();
+    if (snapshot) {
+      // Advance one tick between server reads. The server owns pauses and resets.
+      const tick = snapshot.status === 'running' && now - snapshotReceivedAt >= 1000 ? 1 : 0;
+      const elapsed = api.clock(snapshot.elapsed + tick);
+      el('elapsed').textContent = elapsed;
+      const monitorElapsed = el('monitorElapsed');
+      if (monitorElapsed) monitorElapsed.textContent = elapsed;
+    }
     const clock = el('ecgClock');
     if (!clock) return;
     clock.hidden = !monitor?.ecg;
     if (clock.hidden) return;
-    const now = Number.isFinite(serverClockOffset) ? serverClockOffset + performance.now() : Date.now();
-    clock.textContent = berlinClock.format(now);
+    const wallTime = Number.isFinite(serverClockOffset) ? serverClockOffset + now : Date.now();
+    clock.textContent = berlinClock.format(wallTime);
   }
 
   function render() {
@@ -68,17 +78,17 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     el('story').textContent = brief?.story ?? '';
     el('questions').textContent = brief?.questions ?? '';
     el('storyPanel').hidden = !snapshot;
-    el('clockPanel').hidden = !snapshot;
     el('startPatient').hidden = snapshot?.status !== 'ready';
     el('triagePanel').hidden = !snapshot?.triage;
     monitor = snapshot?.monitor ?? (snapshot?.vitals && { ...snapshot.vitals, ecg: true });
     el('vitalsPanel').hidden = !monitor;
-    serverClockOffset = Date.parse(snapshot?.server_time) - performance.now();
-    drawEcgClock();
+    el('clockPanel').hidden = !snapshot || Boolean(monitor && el('monitorElapsed'));
+    snapshotReceivedAt = performance.now();
+    serverClockOffset = Date.parse(snapshot?.server_time) - snapshotReceivedAt;
+    drawClocks();
     if (!snapshot) return;
 
     el('syncStatus').textContent = api.labels[snapshot.status];
-    el('elapsed').textContent = api.clock(snapshot.elapsed);
     if (snapshot.triage) {
       const { red, reason, condition } = snapshot.triage;
       const category = snapshot.triage.category ?? (red ? 'red' : 'yellow');
@@ -165,7 +175,7 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     showJoinHint();
     el('syncStatus').textContent = 'Übungszugang erforderlich.';
   }
-  setInterval(drawEcgClock, 1000);
+  setInterval(drawClocks, 1000);
   setInterval(() => { if (!document.hidden) void synchronize(); }, 2000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void synchronize(); });
 })();
