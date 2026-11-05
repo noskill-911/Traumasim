@@ -80,6 +80,7 @@
     renderJoin(next?.join_code);
     renderOverview();
     el('attachBus').hidden = !next;
+    el('attachCar').hidden = !next;
     const briefing = next?.patients.find((patient) => patient.model?.bus_briefing)?.model.bus_briefing;
     el('busBriefing').hidden = !briefing;
     el('busBriefing').textContent = briefing ?? '';
@@ -157,8 +158,11 @@
     if (!patient) return;
     const url = new URL('patient.html', location.href);
     url.search = new URLSearchParams({ case: exercise.case, patient: patient.id });
-    renderStation(patient.custom ? url.href : null);
+    const station = url.href;
     url.hash = new URLSearchParams({ code: patient.code });
+    const carPatient = patient.model?.car_number != null;
+    el('stationTitle').textContent = carPatient ? patientName(patient.id) : 'Stations-QR für diesen Patienten';
+    renderStation(patient.custom ? (carPatient ? url.href : station) : null);
     el('patientLink').value = url.href;
     el('patientStatus').textContent = api.labels[patient.status] + ' · ' + api.clock(patient.elapsed);
     for (const button of actions) {
@@ -300,6 +304,64 @@
       });
     });
   }
+  const seatControls = [
+    ['driver', 'Fahrerplatz'], ['front', 'Beifahrerplatz'], ['rear-left', 'Hinten links'],
+    ['rear-center', 'Hinten Mitte'], ['rear-right', 'Hinten rechts']
+  ].map(([seat, label]) => {
+    const group = document.createElement('fieldset');
+    group.className = 'car-seat';
+    group.innerHTML = `<legend>${label}</legend>
+      <label>Besetzung und Verletzungsprofil
+        <select class="seat-profile">
+          <option value="">Leer</option><option value="affected">Unverletzt betroffen</option>
+          <option value="minor">Leicht verletzt · SK III</option><option value="urgent">Schwer verletzt · SK II</option>
+          <option value="critical">Vital bedroht · SK I</option>
+        </select>
+      </label>
+      <div class="seat-details" hidden>
+        <label>Einklemmung
+          <select class="seat-entrapment">
+            <option value="none">Keine</option><option value="door">Tür / B-Säule</option>
+            <option value="footwell">Fußraum / Bein</option><option value="dashboard">Sitz / Armaturenbrett</option>
+            <option value="roof">Dach / Sitz</option>
+          </select>
+        </label>
+        <label>Eigene Verletzungsbeschreibung (optional)
+          <input class="seat-injury" maxlength="400">
+        </label>
+      </div>`;
+    const profile = group.querySelector('.seat-profile');
+    const details = group.querySelector('.seat-details');
+    profile.addEventListener('change', () => { details.hidden = !profile.value; });
+    el('carSeats').append(group);
+    return { seat, profile, entrapment: group.querySelector('.seat-entrapment'), injury: group.querySelector('.seat-injury') };
+  });
+
+  el('carForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const attach = event.submitter?.id === 'attachCar';
+    void run(async () => {
+      const occupants = seatControls.filter((row) => row.profile.value).map((row) => ({
+        seat: row.seat, profile: row.profile.value, entrapment: row.entrapment.value, injury: row.injury.value
+      }));
+      if (!occupants.length) throw new Error('Wähle mindestens einen besetzten Sitzplatz.');
+      const next = await rpc({ p_config: { vehicle: el('carSituation').value, occupants },
+        p_session: attach ? exercise.id : null }, api.bookCar);
+      if (attach) {
+        renderExercise(next);
+        const number = Math.max(...next.patients.map((patient) => patient.model.car_number ?? 0));
+        const first = next.patients.find((patient) => patient.model.car_number === number);
+        el('choose').value = first.id;
+        renderPatient();
+        resetPreview();
+        message('Pkw ' + String(number).padStart(2, '0') + ' hinzugefügt.');
+      } else {
+        openCreatedExercise(next);
+      }
+      el('carForm').reset();
+      for (const row of seatControls) row.profile.dispatchEvent(new Event('change'));
+    });
+  });
   el('choose').addEventListener('change', () => { renderPatient(); resetPreview(); });
   for (const button of actions) {
     button.addEventListener('click', () => {

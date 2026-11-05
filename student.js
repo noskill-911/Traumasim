@@ -10,7 +10,8 @@
   const api = window.TraumaSync;
 
   const busStation = scenario && /^bus-(5|10)-[0-9]{2}$/.test(patientId);
-  if (!preset && !busStation && !/^custom-[0-9a-f-]{36}$/.test(caseId)) {
+  const carStation = /^car-[0-9]{2}-[0-9]{2}$/.test(patientId);
+  if (!preset && !busStation && !carStation && !/^custom-[0-9a-f-]{36}$/.test(caseId)) {
     el('content').innerHTML = '<div class="panel"><h1>Patient nicht gefunden</h1><a href="index.html">Zur Übersicht</a></div>';
     return;
   }
@@ -24,11 +25,16 @@
   }
   // A direct link keeps its exercise on reload. A new station scan uses the joined exercise.
   const directCode = history.state?.traumasimPatientCode;
-  const exerciseCode = directCode ? null : api.exerciseCode(caseId);
+  const exerciseCode = directCode || carStation ? null : api.exerciseCode(caseId);
   let code = directCode || exerciseCode;
-  try { code ||= sessionStorage.getItem(storageKey); } catch {}
+  if (!carStation) {
+    try { code ||= sessionStorage.getItem(storageKey); } catch {}
+  }
   let openPending = Boolean(code);
-  const showJoinHint = () => { el('joinHint').hidden = false; };
+  const showJoinHint = () => {
+    if (carStation) el('joinHint').textContent = 'Scanne den einzelnen QR-Code dieser Person am Pkw.';
+    el('joinHint').hidden = false;
+  };
   let snapshot = null;
   let busy = false;
   let animation = null;
@@ -145,7 +151,7 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
       if (firstVisit && snapshot.status === 'ready') {
         snapshot = await api.student({ ...query, p_start_revision: snapshot.revision });
       }
-      if (!exerciseCode) {
+      if (!exerciseCode && !carStation) {
         try { sessionStorage.setItem(storageKey, code); } catch {}
       }
       render();

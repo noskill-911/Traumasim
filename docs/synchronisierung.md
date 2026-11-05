@@ -47,6 +47,19 @@ in die Übung kopiert. Bei einer Neuinstallation werden die Vorlagen aus
 dem Szenarioexport eingespielt. Die Ausbildervorschau zeigt die Lage und
 die internen Hinweise des ausgewählten Patienten.
 
+## Pkw mit Insassen
+
+Unter **Übungselement Pkw mit Insassen** bis zu fünf Sitzplätze besetzen.
+Verletzungsprofil und Einklemmung werden je Person gewählt. Eine eigene
+Beschreibung und die Fahrzeuglage können ergänzt werden. Der Pkw kann als
+eigene Übung starten oder zu einer laufenden Übung hinzugefügt werden.
+
+Pkw werden innerhalb der Übung nummeriert, Personen innerhalb des Pkw in
+Sitzplatzreihenfolge. Beispiel **Pkw 02 · Patient 03 · hinten rechts**.
+Den einzelnen QR-Code in der Ausbilderansicht am jeweiligen Platz auslegen.
+Die Pkw-Personen erscheinen nicht in der Teilnehmerliste und lassen sich
+nur mit ihrem eigenen Patienten-QR öffnen.
+
 ## Einrichtung und Rechte
 
 - `supabase/schema.sql` als Datenbankadministrator anwenden. Es aktualisiert

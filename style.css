@@ -22,3 +22,7 @@ button:disabled { opacity: .55; cursor: default; }
 .curve-table th, .curve-table td { padding: .25rem; text-align: right; }
 .curve-table input { width: 4.25rem; padding: .35rem; }
 .triage.affected { background: #25303a; border-color: #aab7c2; color: #f4f7f9; }
+
+.car-seat { border: 1px solid #ffffff40; border-radius: .4rem; margin: .75rem 0; padding: .6rem; }
+.car-seat label { margin: .4rem 0; }
+#carSituation, .seat-injury { width: 100%; padding: .55rem; }

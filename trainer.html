@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=affected">
+  <link rel="stylesheet" href="style.css?v=car">
 </head>
 <body><main>
   <section class="panel">
@@ -50,6 +50,20 @@
       <button id="attachBus" type="button" hidden>Zur aktiven Übung hinzufügen</button>
       <p class="muted small">Die Buslage kann eine eigene Übung sein oder als zusätzliche Station in einer laufenden Übung gebucht werden.</p>
     </section>
+    <section class="panel" id="carBooking">
+      <details>
+        <summary>Übungselement Pkw mit Insassen</summary>
+        <p>Jeder besetzte Platz erhält einen eigenen Patienten-QR. Die Einklemmung ist unabhängig vom Verletzungsprofil wählbar.</p>
+        <form id="carForm">
+          <label>Fahrzeuglage (optional)
+            <input id="carSituation" maxlength="200" placeholder="z. B. Pkw in Seitenlage, Fahrertür deformiert">
+          </label>
+          <div id="carSeats"></div>
+          <button id="startCar" type="submit">Pkw als eigene Übung starten</button>
+          <button id="attachCar" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
+        </form>
+      </details>
+    </section>
     <section id="exerciseJoin" class="panel" hidden>
       <h2>Übungs-QR zum Einstieg</h2>
       <p>Zeige diesen QR-Code beim Briefing. Danach öffnen die Teilnehmenden die vorhandenen Patienten-QR-Codes im selben Browser.</p>
@@ -72,7 +86,7 @@
       <p class="muted small">Nach dem Zurücksetzen wartet der Patient auf einen neuen Aufruf oder auf „Patient starten“.</p>
       <p><label>Patientenlink <input id="patientLink" readonly></label>
       <button id="copyLink">Patientenlink kopieren</button></p>
-      <div id="station" hidden><h3>Stations-QR für diesen Patienten</h3><div id="stationQr" class="exercise-qr"></div></div>
+      <div id="station" hidden><h3 id="stationTitle">Stations-QR für diesen Patienten</h3><div id="stationQr" class="exercise-qr"></div></div>
     </section>
     <section id="preview" class="panel" hidden>
       <h2>Ausbildervorschau</h2>
@@ -92,8 +106,8 @@
 </main>
 <script src="patients.js"></script>
 <script src="supabase-config.js"></script>
-<script src="sync.js?v=bus"></script>
+<script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
-<script src="trainer.js?v=affected"></script>
+<script src="trainer.js?v=car"></script>
 </body>
 </html>

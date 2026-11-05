@@ -47,7 +47,12 @@
         return item;
       });
       el('customPatients').replaceChildren(...items);
-      el('customPatients').hidden = false;
+      el('customPatients').hidden = items.length === 0;
+      if (exercise.hidden_stations) {
+        el('joinStatus').textContent = items.length
+          ? 'Du bist der Übung beigetreten. Wähle eine angezeigte Person oder scanne einen einzelnen Patienten-QR vor Ort.'
+          : 'Du bist der Übung beigetreten. Scanne die einzelnen Patienten-QRs vor Ort.';
+      }
     } else {
       el('joinPatients').hidden = false;
     }

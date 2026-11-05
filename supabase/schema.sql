@@ -110,10 +110,14 @@ begin
  return jsonb_build_object('case', exercise.case_key, 'title', exercise.title, 'expires_at', exercise.expires_at)
    || case when exists (
       select 1 from public.traumasim_patients p where p.session_id = exercise.id and p.scenario_model is not null
-   ) then jsonb_build_object('patients', (
+   ) then jsonb_build_object('patients', coalesce((
       select jsonb_agg(jsonb_build_object('id', p.patient_key, 'name', p.scenario_model->>'name') order by p.patient_key)
-      from public.traumasim_patients p where p.session_id = exercise.id
-   )) else '{}'::jsonb end;
+      from public.traumasim_patients p
+      where p.session_id = exercise.id and p.patient_key not like 'car-%'
+   ), '[]'::jsonb)) else '{}'::jsonb end
+   || case when exists (
+      select 1 from public.traumasim_patients p where p.session_id = exercise.id and p.patient_key like 'car-%'
+   ) then '{"hidden_stations":true}'::jsonb else '{}'::jsonb end;
 end;
 $$;
 
@@ -175,6 +179,7 @@ begin
    and s.trainer_id is not null
    and s.expires_at > clock_timestamp();
  if not found or p_patient is null
+   or (p_patient like 'car-%' and strpos(p_code, '.j') = 37)
    or sha256(convert_to(case when strpos(p_code, '.j') = 37
         then traumasim_private.exercise_code(exercise.id, exercise.case_key, exercise.signing_key)
         else traumasim_private.patient_code(exercise.id, p_patient, exercise.signing_key) end, 'UTF8'))
@@ -528,6 +533,113 @@ begin
 end;
 $$;
 
+create or replace function traumasim_private.book_car(p_config jsonb, p_session uuid default null)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+ trainer uuid := traumasim_private.require_trainer();
+ exercise public.traumasim_sessions%rowtype;
+ seats text[] := array['driver','front','rear-left','rear-center','rear-right'];
+ seat_names text[] := array['Fahrerplatz','Beifahrerplatz','hinten links','hinten Mitte','hinten rechts'];
+ occupants jsonb := p_config->'occupants';
+ vehicle text := coalesce(nullif(btrim(p_config->>'vehicle'), ''), 'Fahrzeuglage vor Ort erkunden.');
+ person jsonb;
+ car_no integer;
+ person_no integer := 0;
+ car_label text;
+ person_label text;
+ seat_name text;
+ profile text;
+ entrapment text;
+ injury text;
+ points jsonb;
+begin
+ if jsonb_typeof(p_config) is distinct from 'object'
+    or octet_length(p_config::text) > 12000
+    or length(vehicle) > 200
+    or jsonb_typeof(occupants) is distinct from 'array' then
+   raise exception using errcode = '22023', message = 'Die Pkw-Konfiguration ist ungültig.';
+ end if;
+ if jsonb_array_length(occupants) not between 1 and 5 then
+   raise exception using errcode = '22023', message = 'Wähle mindestens einen und höchstens fünf besetzte Sitzplätze.';
+ end if;
+ if (select count(distinct item->>'seat') from jsonb_array_elements(occupants) item) <> jsonb_array_length(occupants) then
+   raise exception using errcode = '22023', message = 'Jeder Sitzplatz darf nur einmal besetzt sein.';
+ end if;
+
+ if p_session is null then
+   exercise.id := gen_random_uuid();
+   insert into public.traumasim_sessions (id, title, case_key, trainer_id)
+   values (exercise.id, 'Pkw-Lage', 'custom-' || exercise.id::text, trainer);
+ else
+   select s.* into exercise from public.traumasim_sessions s
+   where s.id = p_session and s.trainer_id = trainer and s.expires_at > clock_timestamp() for update;
+   if not found then
+     raise exception using errcode = '42501', message = 'Übung nicht verfügbar oder abgelaufen';
+   end if;
+   if (select count(*) from public.traumasim_patients p where p.session_id = exercise.id)
+      + jsonb_array_length(occupants) > 30 then
+     raise exception using errcode = '22023', message = 'Eine Übung unterstützt insgesamt bis zu 30 Patienten.';
+   end if;
+ end if;
+
+ select coalesce(max((p.scenario_model->>'car_number')::integer), 0) + 1 into car_no
+ from public.traumasim_patients p where p.session_id = exercise.id and p.patient_key like 'car-%';
+ car_label := lpad(car_no::text, 2, '0');
+
+ for person in select value from jsonb_array_elements(occupants)
+   order by array_position(seats, value->>'seat') loop
+   seat_name := seat_names[array_position(seats, person->>'seat')];
+   profile := person->>'profile';
+   entrapment := case person->>'entrapment'
+     when 'none' then 'frei zugänglich, keine Einklemmung'
+     when 'door' then 'im Bereich von Tür und B-Säule eingeklemmt'
+     when 'footwell' then 'mit einem Bein im deformierten Fußraum eingeklemmt'
+     when 'dashboard' then 'zwischen Sitz und Armaturenbrett eingeklemmt'
+     when 'roof' then 'im Bereich von Dach und Sitz eingeklemmt'
+   end;
+   if seat_name is null or profile is null or profile not in ('affected','minor','urgent','critical')
+      or entrapment is null or length(coalesce(person->>'injury', '')) > 400 then
+     raise exception using errcode = '22023', message = 'Sitzplatz, Verletzungsprofil oder Einklemmung sind ungültig.';
+   end if;
+   injury := coalesce(nullif(btrim(person->>'injury'), ''), case profile
+     when 'affected' then 'Keine Verletzung in dieser Übungsrolle. Die Person ist aufgewühlt.'
+     when 'minor' then 'Die Person ist orientiert und klagt über eine schmerzhafte Prellung.'
+     when 'urgent' then 'Die Person klagt über starke Schmerzen an einer Extremität. Verdacht auf eine Fraktur.'
+     else 'Die Person ist blass, antwortet verzögert und wirkt zunehmend benommen.'
+   end);
+
+   if profile = 'critical' then
+     select jsonb_agg(point || jsonb_build_object('g', least((point->>'g')::integer, 13)) order by ordinal)
+     into points
+     from traumasim_private.models m
+     cross join lateral jsonb_array_elements(m.model->'points') with ordinality as sample(point, ordinal)
+     where m.case_key = 'vu-baum' and m.patient_key = 'fahrer';
+   else
+     select jsonb_agg(jsonb_build_object('t', minute, 's', 125, 'd', 80,
+       'h', case when profile = 'urgent' then 103 else 86 end,
+       'r', case when profile = 'urgent' then 22 else 17 end,
+       'o', 98, 'g', 15) order by minute)
+     into points from generate_series(0, 25, 5) minute;
+   end if;
+
+   person_no := person_no + 1;
+   person_label := lpad(person_no::text, 2, '0');
+   insert into public.traumasim_patients (session_id, patient_key, scenario_model)
+   values (exercise.id, 'car-' || car_label || '-' || person_label, jsonb_build_object(
+     'name', format('Pkw %s · Patient %s · %s', car_label, person_label, seat_name),
+     'intro', format('%s. Sitzplatz %s, %s.', rtrim(vehicle, '.'), seat_name, entrapment),
+     'story', injury,
+     'questions', '',
+     'secret', format('Pkw %s · %s · %s. %s', car_label, seat_name, entrapment, injury),
+     'car_number', car_no, 'car_patient_number', person_no,
+     'affected', profile = 'affected', 'walkable', profile in ('affected','minor'),
+     'nibpFastCycle', profile = 'critical', 'points', points
+   ));
+ end loop;
+ return traumasim_private.trainer('status', exercise.id);
+end;
+$$;
+
 -- Keep the privileged implementations out of PostgREST's exposed schema.
 create or replace function public.traumasim_join(p_code text)
 returns jsonb language sql security invoker set search_path = '' as $$
@@ -556,7 +668,13 @@ returns jsonb language sql security invoker set search_path = '' as $$
  select traumasim_private.book_bus(p_capacity, p_session);
 $$;
 
+create or replace function public.traumasim_book_car(p_config jsonb, p_session uuid default null)
+returns jsonb language sql security invoker set search_path = '' as $$
+ select traumasim_private.book_car(p_config, p_session);
+$$;
+
 revoke all on all functions in schema traumasim_private from public, anon, authenticated;
+revoke all on function public.traumasim_book_car(jsonb, uuid) from public, anon, authenticated;
 revoke all on function public.traumasim_book_bus(integer, uuid) from public, anon, authenticated;
 revoke all on function public.traumasim_create_custom(jsonb) from public, anon, authenticated;
 revoke all on function public.traumasim_join(text) from public, anon, authenticated;
@@ -570,6 +688,7 @@ grant execute on function traumasim_private.trainer(text, uuid, text, text) to a
 grant execute on function public.traumasim_student(text, text, text, integer) to anon, authenticated;
 grant execute on function traumasim_private.create_custom(jsonb) to authenticated;
 grant execute on function traumasim_private.book_bus(integer, uuid), public.traumasim_book_bus(integer, uuid) to authenticated;
+grant execute on function traumasim_private.book_car(jsonb, uuid), public.traumasim_book_car(jsonb, uuid) to authenticated;
 grant execute on function public.traumasim_create_custom(jsonb) to authenticated;
 grant execute on function public.traumasim_trainer(text, uuid, text, text) to authenticated;
 
