@@ -1,7 +1,17 @@
 <!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TraumaSim · Patientenansicht</title><link rel="stylesheet" href="style.css"></head><body><main id="content">
 <div class="panel"><div class="muted">TRAUMASIM · PATIENTENSIMULATION</div><h1 id="caseTitle">Übungslage</h1><h2 id="patientTitle"></h2><p id="intro"></p><div class="muted small">Die Übung startet automatisch beim Öffnen dieser Seite.</div></div>
 <div class="panel" id="triagePanel"><div class="muted">Sichtungskategorie · Übungsmodell</div><div id="triageBox" class="triage yellow"><strong id="triage"></strong><span id="triageReason"></span><div id="patientCondition" class="condition"></div></div></div>
-<div class="panel" id="vitalsPanel"><h2>Vitalwerte</h2><div class="grid"><div class="metric"><span class="muted">Blutdruck</span><strong id="bp"></strong>mmHg</div><div class="metric"><span class="muted">Puls</span><strong id="hr"></strong>/min</div><div class="metric"><span class="muted">Atemfrequenz</span><strong id="rr"></strong>/min</div><div class="metric"><span class="muted">SpO₂</span><strong id="spo"></strong>%</div><div class="metric"><span class="muted">GCS</span><strong id="gcs"></strong>/15</div></div></div>
+<div class="panel" id="vitalsPanel"><div class="monitor" role="group" aria-label="Simulierter Patientenmonitor"><div class="monitor-head"><span>TraumaSim · Monitoransicht</span><span>SIMULATION · KEIN MEDIZINGERÄT</span></div>
+<div class="monitor-layout"><div class="monitor-traces">
+<div class="trace"><span class="trace-label ecg">II · EKG</span><svg class="trace-svg" viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true"><path class="gridline" d="M0 45H600 M0 15H600 M0 75H600"/><path id="ecgTrace" class="wave ecg-stroke" d="M0 45H600"/></svg></div>
+<div class="trace"><span class="trace-label spo">SpO₂ · Pleth</span><svg class="trace-svg" viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true"><path class="gridline" d="M0 45H600"/><path id="plethTrace" class="wave spo-stroke" d="M0 60H600"/></svg></div>
+<div class="trace"><span class="trace-label resp">RESP</span><svg class="trace-svg" viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true"><path class="gridline" d="M0 45H600"/><path id="respTrace" class="wave resp-stroke" d="M0 45H600"/></svg></div>
+</div><div class="monitor-numbers">
+<div class="monitor-value ecg"><span>HF <small>/min</small></span><strong id="hr"></strong></div>
+<div class="monitor-value spo"><span>SpO₂ <small>%</small></span><strong id="spo"></strong></div>
+<div class="monitor-value resp"><span>AF <small>/min</small></span><strong id="rr"></strong></div>
+</div></div>
+<div class="monitor-footer"><div class="monitor-bp"><span>NIBP · mmHg</span><strong id="bp"></strong></div><div class="monitor-gcs"><span>GCS</span><strong id="gcs"></strong><small>/15</small></div></div></div><p class="muted small">Die Kurven sind schematisch animiert und nicht aus echten EKG- oder Sensordaten abgeleitet.</p></div>
 <div class="panel"><details open><summary>🗣 Patientenstory – Was ist passiert?</summary><blockquote id="story"></blockquote><p><strong>Auf Nachfrage:</strong> <span id="questions"></span></p></details></div>
 <div class="panel"><div class="muted small">Übungszeit seit Öffnen dieser Seite: <span id="elapsed">00:00</span></div></div>
 <p class="muted small">Nur für Ausbildung. Simulierte Werte und Kategorien sind keine klinische Prognose und keine validierte Umsetzung des Hamburger mSTaRT-Verfahrens. Jeder Aufruf startet eine eigene Simulation; keine Synchronisierung zwischen Geräten.</p>
