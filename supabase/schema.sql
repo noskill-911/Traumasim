@@ -47,6 +47,13 @@ create table if not exists traumasim_private.models (
  model jsonb not null,
  primary key (case_key, patient_key)
 );
+create table if not exists traumasim_private.bus_templates (
+ capacity integer primary key check (capacity in (5, 10)),
+ title text not null,
+ briefing text not null,
+ patients jsonb not null
+);
+alter table traumasim_private.bus_templates enable row level security;
 alter table traumasim_private.trainers enable row level security;
 alter table traumasim_private.models enable row level security;
 revoke all on all tables in schema traumasim_private from public, anon, authenticated;
@@ -101,7 +108,9 @@ begin
  end if;
 
  return jsonb_build_object('case', exercise.case_key, 'title', exercise.title, 'expires_at', exercise.expires_at)
-   || case when exercise.case_key like 'custom-%' then jsonb_build_object('patients', (
+   || case when exists (
+      select 1 from public.traumasim_patients p where p.session_id = exercise.id and p.scenario_model is not null
+   ) then jsonb_build_object('patients', (
       select jsonb_agg(jsonb_build_object('id', p.patient_key, 'name', p.scenario_model->>'name') order by p.patient_key)
       from public.traumasim_patients p where p.session_id = exercise.id
    )) else '{}'::jsonb end;
@@ -254,7 +263,7 @@ begin
    'server_time', snapshot_time,
    'triage', case when seconds >= triage_delay then jsonb_build_object(
      'category', category, 'red', red, 'condition', model->'condition'->>condition_index,
-     'reason', case when red then 'Didaktische Einstufung: Zeichen eines kritischen Schocks'
+     'reason', case when red then coalesce(model->>'triageReason', 'Didaktische Einstufung: Zeichen eines kritischen Schocks')
        when category = 'green' then 'Gehfähig; Nachsichtung vorgesehen'
        when patient.scenario_model is not null then 'Schwer verletzt, ohne erkennbare vitale Bedrohung (Übungsmodell)'
        when p_patient = 'beifahrer' then 'Schwer verletzt, zunächst ohne erkennbare vitale Bedrohung'
@@ -428,11 +437,22 @@ begin
    if jsonb_array_length(points) <> 6 then
      raise exception using errcode = '22023', message = 'Die Vitalwerte benötigen sechs Zeitpunkte von Minute 0 bis 25.';
    end if;
-   foreach field in array array['intro', 'story', 'questions', 'secret'] loop
+   foreach field in array array['intro', 'story', 'questions', 'secret', 'triageReason'] loop
      if model ? field and (jsonb_typeof(model->field) <> 'string' or length(model->>field) > 2000) then
        raise exception using errcode = '22023', message = 'Patiententexte dürfen bis zu 2000 Zeichen enthalten.';
      end if;
    end loop;
+   if model ? 'condition' then
+     if jsonb_typeof(model->'condition') <> 'array' then
+       raise exception using errcode = '22023', message = 'Der Zustand benötigt vier kurze Verlaufstexte.';
+     end if;
+     if jsonb_array_length(model->'condition') <> 4 or exists (
+       select 1 from jsonb_array_elements(model->'condition') as stage(value)
+       where jsonb_typeof(stage.value) <> 'string' or length(stage.value #>> '{}') > 2000
+     ) then
+       raise exception using errcode = '22023', message = 'Der Zustand benötigt vier kurze Verlaufstexte.';
+     end if;
+   end if;
    for point_index in 0..5 loop
      point := points->point_index;
      if point->'t' is distinct from to_jsonb(point_index * 5) then
@@ -453,10 +473,53 @@ begin
      'name', btrim(model->>'name'), 'intro', coalesce(model->>'intro', ''),
      'story', coalesce(model->>'story', ''), 'questions', coalesce(model->>'questions', ''),
      'secret', coalesce(model->>'secret', ''), 'walkable', model->'walkable' = 'true'::jsonb,
-     'points', points
+     'points', points, 'condition', model->'condition', 'triageReason', model->>'triageReason',
+     'nibpFastCycle', coalesce(model->'nibpFastCycle' = 'true'::jsonb, false)
    ));
  end loop;
  return traumasim_private.trainer('status', exercise_id);
+end;
+$$;
+
+create or replace function traumasim_private.book_bus(p_capacity integer, p_session uuid default null)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+ trainer uuid := traumasim_private.require_trainer();
+ template traumasim_private.bus_templates%rowtype;
+ exercise public.traumasim_sessions%rowtype;
+ patient_prefix text := 'bus-' || p_capacity::text || '-';
+begin
+ select * into template from traumasim_private.bus_templates where capacity = p_capacity;
+ if not found then
+   raise exception using errcode = '22023', message = 'Wähle einen Bus mit 5 oder 10 Personen.';
+ end if;
+
+ if p_session is null then
+   exercise.id := gen_random_uuid();
+   insert into public.traumasim_sessions (id, title, case_key, trainer_id)
+   values (exercise.id, template.title, 'custom-' || exercise.id::text, trainer);
+ else
+   select s.* into exercise from public.traumasim_sessions s
+   where s.id = p_session and s.trainer_id = trainer and s.expires_at > clock_timestamp() for update;
+   if not found then
+     raise exception using errcode = '42501', message = 'Übung nicht verfügbar oder abgelaufen';
+   end if;
+   if exists (select 1 from public.traumasim_patients p
+     where p.session_id = exercise.id and p.patient_key like patient_prefix || '%') then
+     raise exception using errcode = '22023', message = 'Diese Busvariante ist bereits gebucht.';
+   end if;
+   if (select count(*) from public.traumasim_patients p where p.session_id = exercise.id) + p_capacity > 30 then
+     raise exception using errcode = '22023', message = 'Eine Übung unterstützt insgesamt bis zu 30 Patienten.';
+   end if;
+ end if;
+
+ insert into public.traumasim_patients (session_id, patient_key, scenario_model)
+ select exercise.id, patient_prefix || lpad(passenger.position::text, 2, '0'),
+   passenger.model || jsonb_build_object(
+     'name', 'Bus ' || p_capacity::text || ' · ' || (passenger.model->>'name'),
+     'bus_briefing', template.briefing)
+ from jsonb_array_elements(template.patients) with ordinality as passenger(model, position);
+ return traumasim_private.trainer('status', exercise.id);
 end;
 $$;
 
@@ -483,7 +546,13 @@ returns jsonb language sql security invoker set search_path = '' as $$
  select traumasim_private.create_custom(p_scenario);
 $$;
 
+create or replace function public.traumasim_book_bus(p_capacity integer, p_session uuid default null)
+returns jsonb language sql security invoker set search_path = '' as $$
+ select traumasim_private.book_bus(p_capacity, p_session);
+$$;
+
 revoke all on all functions in schema traumasim_private from public, anon, authenticated;
+revoke all on function public.traumasim_book_bus(integer, uuid) from public, anon, authenticated;
 revoke all on function public.traumasim_create_custom(jsonb) from public, anon, authenticated;
 revoke all on function public.traumasim_join(text) from public, anon, authenticated;
 revoke all on function public.traumasim_student(text, text, text, integer) from public, anon, authenticated;
@@ -495,6 +564,7 @@ grant execute on function traumasim_private.student(text, text, text, integer) t
 grant execute on function traumasim_private.trainer(text, uuid, text, text) to authenticated;
 grant execute on function public.traumasim_student(text, text, text, integer) to anon, authenticated;
 grant execute on function traumasim_private.create_custom(jsonb) to authenticated;
+grant execute on function traumasim_private.book_bus(integer, uuid), public.traumasim_book_bus(integer, uuid) to authenticated;
 grant execute on function public.traumasim_create_custom(jsonb) to authenticated;
 grant execute on function public.traumasim_trainer(text, uuid, text, text) to authenticated;
 

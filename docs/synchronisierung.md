@@ -34,6 +34,17 @@ eines eigenen Falls gehört zu diesem Live-Durchlauf. Bei der Beispielübung
 gelten weiterhin die vorhandenen Fahrer- und Beifahrer-QRs. Ausbildertexte
 aus eigenen Szenarien sind nur in der Ausbilderansicht verfügbar.
 
+## Busunfall buchen
+
+In der Ausbilderansicht unter **Übungselement Busunfall** die Variante mit
+5 oder 10 Personen einschließlich Fahrer auswählen. Den Bus als eigene
+Übung starten oder zur aktiven Übung als zusätzliche Lage hinzufügen.
+Die bestehenden Stationslinks einer laufenden Übung bleiben gültig.
+Die Fallmodelle sind private Supabase-Vorlagen und werden bei der Buchung
+in die Übung kopiert. Bei einer Neuinstallation werden die Vorlagen aus
+dem Szenarioexport eingespielt. Die Ausbildervorschau zeigt die Lage und
+die internen Hinweise des ausgewählten Patienten.
+
 ## Einrichtung und Rechte
 
 - `supabase/schema.sql` als Datenbankadministrator anwenden. Es aktualisiert

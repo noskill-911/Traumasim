@@ -36,12 +36,13 @@
     el('joinStatus').textContent = 'Du bist der Übung beigetreten. Scanne jetzt einen Patienten-QR im selben Browser oder öffne die Patientenübersicht.';
     if (exercise.patients) {
       el('joinStatus').textContent = 'Du bist der Übung beigetreten. Wähle einen Patienten oder scanne seinen Stations-QR im selben Browser.';
+      const preset = window.TRAUMA_CASES.find((item) => item.id === exercise.case);
       const items = exercise.patients.map((patient) => {
         const item = document.createElement('li');
         const link = document.createElement('a');
         link.className = 'action';
         link.href = 'patient.html?' + new URLSearchParams({ case: exercise.case, patient: patient.id });
-        link.textContent = patient.name;
+        link.textContent = patient.name ?? preset?.patients.find((item) => item.id === patient.id)?.name ?? patient.id;
         item.append(link);
         return item;
       });

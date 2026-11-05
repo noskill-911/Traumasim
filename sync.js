@@ -40,6 +40,7 @@
       } catch {}
     },
     student: (params) => request('/rest/v1/rpc/traumasim_student', params),
+    bookBus: (params, token) => request('/rest/v1/rpc/traumasim_book_bus', params, token),
     createCustom: (scenario, token) => request('/rest/v1/rpc/traumasim_create_custom', { p_scenario: scenario }, token),
     trainer: (params, token) => request('/rest/v1/rpc/traumasim_trainer', params, token),
     signIn: (email, password) => request('/auth/v1/token?grant_type=password', { email, password }),

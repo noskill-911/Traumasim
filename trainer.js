@@ -70,6 +70,10 @@
     el('preview').hidden = !next;
     renderJoin(next?.join_code);
     renderOverview();
+    el('attachBus').hidden = !next;
+    const briefing = next?.patients.find((patient) => patient.model?.bus_briefing)?.model.bus_briefing;
+    el('busBriefing').hidden = !briefing;
+    el('busBriefing').textContent = briefing ?? '';
     if (!next) {
       el('choose').replaceChildren();
       for (const id of ['secret', 'vitals', 'triage', 'patientStatus', 'expiry']) el(id).textContent = '';
@@ -78,10 +82,10 @@
       resetPreview();
       return;
     }
-    if (changed) {
+    if (changed || el('choose').options.length !== next.patients.length) {
       el('choose').replaceChildren(...next.patients.map((patient) => new Option(patientName(patient.id), patient.id)));
       el('choose').value = next.patients.some((patient) => patient.id === previous) ? previous : next.patients[0].id;
-      resetPreview();
+      if (changed) resetPreview();
     }
     el('expiry').textContent = 'Zugang gültig bis ' + new Date(next.expires_at).toLocaleString('de-DE');
     renderPatient();
@@ -183,7 +187,7 @@
     if (busy) return;
     busy = true;
     actionVersion++;
-    for (const control of document.querySelectorAll('form button, #logout, #exercise, #createCustom')) control.disabled = true;
+    for (const control of document.querySelectorAll('form button, #logout, #exercise, #createCustom, #startBus, #attachBus')) control.disabled = true;
     renderPatient();
     try {
       await work();
@@ -192,7 +196,7 @@
       message(error.message);
     } finally {
       busy = false;
-      for (const control of document.querySelectorAll('form button, #logout, #exercise, #createCustom')) control.disabled = false;
+      for (const control of document.querySelectorAll('form button, #logout, #exercise, #createCustom, #startBus, #attachBus')) control.disabled = false;
       renderPatient();
     }
   }
@@ -266,6 +270,21 @@
       input.value = '';
     });
   });
+  for (const [button, attach] of [['startBus', false], ['attachBus', true]]) {
+    el(button).addEventListener('click', () => {
+      void run(async () => {
+        const capacity = Number(el('busCapacity').value);
+        const params = { p_capacity: capacity, p_session: attach ? exercise.id : null };
+        const next = await rpc(params, api.bookBus);
+        if (attach) {
+          renderExercise(next);
+          message('Bus mit ' + capacity + ' Personen hinzugefügt.');
+        } else {
+          openCreatedExercise(next);
+        }
+      });
+    });
+  }
   el('choose').addEventListener('change', () => { renderPatient(); resetPreview(); });
   for (const button of actions) {
     button.addEventListener('click', () => {

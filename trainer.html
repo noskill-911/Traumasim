@@ -38,6 +38,18 @@
         <button id="createCustom" type="button">Eigenes Szenario starten</button>
       </details>
     </section>
+    <section class="panel" id="busBooking">
+      <h2>Übungselement Busunfall</h2>
+      <label>Busbesetzung einschließlich Fahrer
+        <select id="busCapacity">
+          <option value="5">Bus mit 5 Personen</option>
+          <option value="10">Bus mit 10 Personen</option>
+        </select>
+      </label>
+      <button id="startBus" type="button">Bus als eigene Übung starten</button>
+      <button id="attachBus" type="button" hidden>Zur aktiven Übung hinzufügen</button>
+      <p class="muted small">Die Buslage kann eine eigene Übung sein oder als zusätzliche Station in einer laufenden Übung gebucht werden.</p>
+    </section>
     <section id="exerciseJoin" class="panel" hidden>
       <h2>Übungs-QR zum Einstieg</h2>
       <p>Zeige diesen QR-Code beim Briefing. Danach öffnen die Teilnehmenden die vorhandenen Patienten-QR-Codes im selben Browser.</p>
@@ -48,6 +60,7 @@
     <section id="live" class="panel" hidden>
       <h2>Geräteübergreifender Verlauf</h2>
       <p id="expiry" class="muted small"></p>
+      <p id="busBriefing" hidden></p>
       <ul id="patientOverview" class="patient-overview" aria-label="Status aller Patienten"></ul>
       <label>Patient auswählen <select id="choose"></select></label>
       <p id="patientStatus" aria-live="off"></p>
@@ -79,8 +92,8 @@
 </main>
 <script src="patients.js"></script>
 <script src="supabase-config.js"></script>
-<script src="sync.js"></script>
+<script src="sync.js?v=bus"></script>
 <script src="vendor/qrcode-generator-2.0.4.js"></script>
-<script src="trainer.js"></script>
+<script src="trainer.js?v=bus"></script>
 </body>
 </html>

@@ -9,7 +9,8 @@
   const el = (id) => document.getElementById(id);
   const api = window.TraumaSync;
 
-  if (!preset && !/^custom-[0-9a-f-]{36}$/.test(caseId)) {
+  const busStation = scenario && /^bus-(5|10)-[0-9]{2}$/.test(patientId);
+  if (!preset && !busStation && !/^custom-[0-9a-f-]{36}$/.test(caseId)) {
     el('content').innerHTML = '<div class="panel"><h1>Patient nicht gefunden</h1><a href="index.html">Zur Übersicht</a></div>';
     return;
   }
