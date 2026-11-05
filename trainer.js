@@ -1,0 +1,242 @@
+(function () {
+  'use strict';
+
+  const el = (id) => document.getElementById(id);
+  const api = window.TraumaSync;
+  const actions = Array.from(document.querySelectorAll('[data-action]'));
+  let auth = null;
+  let exercise = null;
+  let busy = false;
+  let previewTime = 0;
+  let previewTick = null;
+
+  if (new URLSearchParams(location.hash.slice(1)).has('access_token')) {
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+
+  function message(text) {
+    el('message').textContent = text;
+  }
+
+  function selectedPatient() {
+    return exercise?.patients.find((patient) => patient.id === el('choose').value);
+  }
+
+  function patientName(id) {
+    return window.TRAUMA_CASES.find((item) => item.id === exercise.case)
+      ?.patients.find((patient) => patient.id === id)?.name || id;
+  }
+
+  function options(select, items, label) {
+    select.replaceChildren(new Option(label, ''), ...items.map((item) => new Option(item.title, item.id)));
+  }
+
+  function drawPreview() {
+    const patient = selectedPatient();
+    if (!patient) return;
+    const minute = previewTime / 60;
+    const index = Math.min(4, Math.floor(minute / 5));
+    const [a, b] = patient.model.points.slice(index, index + 2);
+    const v = {};
+    for (const key of ['s', 'd', 'h', 'r', 'o', 'g']) v[key] = Math.round(a[key] + (b[key] - a[key]) * (minute - a.t) / 5);
+    const red = patient.id === 'fahrer' && (v.s < 100 || v.g < 15 || v.h >= 120);
+    el('secret').textContent = patient.model.secret;
+    el('clock').textContent = api.clock(previewTime);
+    el('seek').value = Math.floor(minute);
+    el('triage').className = 'triage ' + (red ? 'red' : 'yellow');
+    el('triage').textContent = red ? 'SK I · ROT (Übungsmodell)' : 'SK II · GELB (Übungsmodell)';
+    el('vitals').innerHTML = [
+      ['Blutdruck', v.s + '/' + v.d + ' mmHg'], ['Puls', v.h + '/min'], ['Atemfrequenz', v.r + '/min'],
+      ['SpO₂', v.o + ' %'], ['GCS', v.g + '/15']
+    ].map(([name, value]) => '<div class="metric"><span class="muted">' + name + '</span><strong>' + value + '</strong></div>').join('');
+  }
+
+  function resetPreview() {
+    previewTick = null;
+    previewTime = 0;
+    drawPreview();
+  }
+
+  function renderExercise(next) {
+    const previous = selectedPatient()?.id;
+    const changed = exercise?.id !== next?.id;
+    exercise = next;
+    el('live').hidden = !next;
+    el('preview').hidden = !next;
+    if (!next) {
+      el('choose').replaceChildren();
+      for (const id of ['secret', 'vitals', 'triage', 'patientStatus', 'expiry']) el(id).textContent = '';
+      el('patientLink').value = '';
+      el('patientCode').value = '';
+      resetPreview();
+      return;
+    }
+    if (changed) {
+      el('choose').replaceChildren(...next.patients.map((patient) => new Option(patientName(patient.id), patient.id)));
+      el('choose').value = next.patients.some((patient) => patient.id === previous) ? previous : next.patients[0].id;
+      resetPreview();
+    }
+    el('expiry').textContent = 'Zugang gültig bis ' + new Date(next.expires_at).toLocaleString('de-DE');
+    renderPatient();
+  }
+
+  function renderPatient() {
+    const patient = selectedPatient();
+    if (!patient) return;
+    const url = new URL('patient.html', location.href);
+    url.search = new URLSearchParams({ case: exercise.case, patient: patient.id });
+    url.hash = new URLSearchParams({ code: patient.code });
+    el('patientLink').value = url.href;
+    el('patientCode').value = patient.code;
+    el('patientStatus').textContent = api.labels[patient.status] + ' · ' + api.clock(patient.elapsed);
+    for (const button of actions) {
+      const action = button.dataset.action;
+      button.disabled = busy || (action === 'pause' && patient.status !== 'running')
+        || (action === 'resume' && patient.status !== 'paused');
+    }
+  }
+
+  function session(data) {
+    if (!data?.access_token || !data.refresh_token) throw new Error('Die Anmeldung lieferte keine gültige Sitzung.');
+    auth = { ...data, deadline: Date.now() + data.expires_in * 1000 };
+  }
+
+  async function rpc(params) {
+    if (Date.now() + 30000 >= auth.deadline) session(await api.refresh(auth.refresh_token));
+    return api.trainer(params, auth.access_token);
+  }
+
+  function signedOut() {
+    const token = auth?.access_token;
+    auth = null;
+    renderExercise(null);
+    el('exercise').replaceChildren();
+    el('workspace').hidden = true;
+    el('logout').hidden = true;
+    el('login').hidden = false;
+    if (token) void api.signOut(token).catch(() => {});
+  }
+
+  async function run(work, { quiet = false } = {}) {
+    if (busy) return;
+    busy = true;
+    if (!quiet) {
+      for (const control of document.querySelectorAll('form button, #logout, #exercise')) control.disabled = true;
+      renderPatient();
+    }
+    try {
+      await work();
+    } catch (error) {
+      if (error.status === 401 || error.code === '42501' || el('workspace').hidden) signedOut();
+      message(error.message);
+    } finally {
+      busy = false;
+      for (const control of document.querySelectorAll('form button, #logout, #exercise')) control.disabled = false;
+      renderPatient();
+    }
+  }
+
+  el('login').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const email = el('email').value.trim();
+    const password = el('password').value;
+    if (event.submitter?.id === 'register') {
+      if (password.length < 8) {
+        message('Wähle ein Passwort mit mindestens acht Zeichen.');
+        return;
+      }
+      void run(async () => {
+        await api.signUp(email, password, new URL('trainer.html', location.href).href);
+        el('password').value = '';
+        message('Bestätige deine E-Mail-Adresse über den Link in der Nachricht. Öffne anschließend wieder diese Ausbilderansicht und melde dich an.');
+      });
+      return;
+    }
+    void run(async () => {
+      session(await api.signIn(email, password));
+      el('password').value = '';
+      const list = await rpc({ p_action: 'list' });
+      options(el('exercise'), list, 'Übung auswählen');
+      el('login').hidden = true;
+      el('logout').hidden = false;
+      el('workspace').hidden = false;
+      message('Als Ausbilder angemeldet.');
+      if (list.length) {
+        el('exercise').value = list[0].id;
+        renderExercise(await rpc({ p_action: 'status', p_session: list[0].id }));
+      }
+    });
+  });
+
+  el('logout').addEventListener('click', () => {
+    if (busy) return;
+    signedOut();
+    message('Abgemeldet.');
+  });
+  el('exercise').addEventListener('change', () => {
+    const id = el('exercise').value;
+    void run(async () => renderExercise(id ? await rpc({ p_action: 'status', p_session: id }) : null));
+  });
+  el('create').addEventListener('submit', (event) => {
+    event.preventDefault();
+    void run(async () => {
+      const created = await rpc({ p_action: 'create', p_title: el('exerciseTitle').value });
+      el('exercise').add(new Option(created.title, created.id), 1);
+      el('exercise').value = created.id;
+      el('exerciseTitle').value = '';
+      renderExercise(created);
+      message('Übung angelegt.');
+    });
+  });
+  el('choose').addEventListener('change', () => { renderPatient(); resetPreview(); });
+  for (const button of actions) {
+    button.addEventListener('click', () => {
+      const action = button.dataset.action;
+      const patient = selectedPatient();
+      if (!exercise || !patient || busy) return;
+      if (action.startsWith('reset') && !confirm(action === 'reset_all'
+        ? 'Alle Patienten dieser Übung zurücksetzen?' : patientName(patient.id) + ' zurücksetzen?')) return;
+      void run(async () => {
+        renderExercise(await rpc({ p_action: action, p_session: exercise.id, p_patient: patient.id }));
+        if (action.startsWith('reset')) message('Zurückgesetzt.');
+      });
+    });
+  }
+
+  for (const [button, field] of [['copyLink', 'patientLink'], ['copyCode', 'patientCode']]) {
+    el(button).addEventListener('click', async () => {
+      const input = el(field);
+      try {
+        await navigator.clipboard.writeText(input.value);
+        message('Kopiert.');
+      } catch {
+        input.select();
+        message('Der Text ist markiert und kann kopiert werden.');
+      }
+    });
+  }
+
+  el('play').addEventListener('click', () => {
+    if (previewTime >= 1500) previewTime = 0;
+    previewTick = performance.now();
+  });
+  el('pause').addEventListener('click', () => { previewTick = null; });
+  el('reset').addEventListener('click', resetPreview);
+  el('seek').addEventListener('input', () => {
+    previewTime = Number(el('seek').value) * 60;
+    if (previewTick !== null) previewTick = performance.now();
+    drawPreview();
+  });
+  setInterval(() => {
+    if (previewTick === null) return;
+    const now = performance.now();
+    previewTime = Math.min(1500, previewTime + (now - previewTick) / 1000 * Number(el('speed').value));
+    previewTick = previewTime < 1500 ? now : null;
+    drawPreview();
+  }, 200);
+  setInterval(() => {
+    if (auth && exercise && !document.hidden) {
+      void run(async () => renderExercise(await rpc({ p_action: 'status', p_session: exercise.id })), { quiet: true });
+    }
+  }, 3000);
+})();

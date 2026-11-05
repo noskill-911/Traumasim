@@ -1,20 +1,111 @@
-(function(){'use strict';
-const qs=new URLSearchParams(location.search),caseId=qs.get('case')||'vu-baum',patientId=qs.get('patient')||'fahrer';
-const scenario=window.TRAUMA_CASES.find(x=>x.id===caseId),patient=scenario&&scenario.patients.find(x=>x.id===patientId);
-const el=id=>document.getElementById(id);
-if(!patient){el('content').innerHTML='<div class="panel"><h1>Patient nicht gefunden</h1><a href="index.html">Zur Übersicht</a></div>';return}
-el('caseTitle').textContent=scenario.title;el('patientTitle').textContent=patient.name;el('intro').textContent=patient.intro;el('story').textContent=patient.story;el('questions').textContent=patient.questions;
-const sessionKey='traumasim-start-v2:'+caseId+':'+patientId;
-let startedAt;
-try{startedAt=Number(localStorage.getItem(sessionKey))}catch(e){}
-if(!Number.isFinite(startedAt)||startedAt<=0||startedAt>Date.now()){startedAt=Date.now();try{localStorage.setItem(sessionKey,String(startedAt))}catch(e){}}
-let elapsed=Math.max(0,Math.min(1500,(Date.now()-startedAt)/1000));
-function interpolate(sec){let m=Math.max(0,Math.min(sec/60,25)),i=Math.min(4,Math.floor(m/5)),a=patient.points[i],b=patient.points[i+1],f=(m-a.t)/5,v={};for(let k of ['s','d','h','r','o','g'])v[k]=Math.round(a[k]+(b[k]-a[k])*f);return v}
-function classification(v){if(patient.id==='beifahrer')return {name:'SK II · GELB',css:'yellow',why:'Schwer verletzt, zunächst ohne erkennbare vitale Bedrohung'};if(v.s<100||v.g<15||v.h>=120)return{name:'SK I · ROT',css:'red',why:'Didaktische Einstufung: Zeichen eines kritischen Schocks'};return{name:'SK II · GELB',css:'yellow',why:'Schwere Verletzung, Kreislauf zunächst kompensiert'}}
-function condition(v){if(patient.id==='beifahrer')return patient.condition[Math.min(3,Math.floor(elapsed/420))];if(v.g<=12)return patient.condition[3];if(v.s<100)return patient.condition[2];if(v.h>=110)return patient.condition[1];return patient.condition[0]}
+(function () {
+  'use strict';
+
+  const params = new URLSearchParams(location.search);
+  const caseId = params.get('case') || 'vu-baum';
+  const patientId = params.get('patient') || 'fahrer';
+  const scenario = window.TRAUMA_CASES.find((item) => item.id === caseId);
+  const patient = scenario?.patients.find((item) => item.id === patientId);
+  const el = (id) => document.getElementById(id);
+  const api = window.TraumaSync;
+
+  if (!patient) {
+    el('content').innerHTML = '<div class="panel"><h1>Patient nicht gefunden</h1><a href="index.html">Zur Übersicht</a></div>';
+    return;
+  }
+
+  el('caseTitle').textContent = scenario.title;
+  el('patientTitle').textContent = patient.name;
+  const storageKey = 'traumasim-access:' + caseId + ':' + patientId;
+  const linkCode = new URLSearchParams(location.hash.slice(1)).get('code');
+  if (linkCode) history.replaceState(null, '', location.pathname + location.search);
+  let code = linkCode;
+  try {
+    code ||= sessionStorage.getItem(storageKey);
+  } catch {}
+  let snapshot = null;
+  let busy = false;
+  let animation = null;
+
 function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+=2){let p=(x/width*6-phase)%1;if(p<0)p+=1;let y=45;if(kind==='ecg'){if(p<.58)y=45;else if(p<.64)y=43-4*Math.sin((p-.58)/.06*Math.PI);else if(p<.69)y=45+10*(p-.64)/.05;else if(p<.72)y=55-47*(p-.69)/.03;else if(p<.75)y=8+58*(p-.72)/.03;else if(p<.79)y=66-21*(p-.75)/.04;else if(p<.95)y=45-7*Math.sin((p-.79)/.16*Math.PI)}else if(kind==='pleth'){y=62-34*Math.pow(Math.max(0,Math.sin(Math.PI*p)),5)-8*Math.sin(Math.PI*p)}else{y=45-19*Math.sin(2*Math.PI*p)}out+=(x===0?'M':'L')+x+' '+y.toFixed(1)+' '}return out}
-function animateWaves(){if(!document.getElementById('ecgTrace'))return;const v=interpolate(elapsed);const now=performance.now()/1000;document.getElementById('ecgTrace').setAttribute('d',wavePath('ecg',now*v.h/60*.16));document.getElementById('plethTrace').setAttribute('d',wavePath('pleth',now*v.h/60*.16));document.getElementById('respTrace').setAttribute('d',wavePath('resp',now*v.r/60*.16));requestAnimationFrame(animateWaves)}
-function render(){let v=interpolate(elapsed),tr=classification(v);el('triagePanel').classList.toggle('hidden',elapsed<60);el('vitalsPanel').classList.toggle('hidden',elapsed<120);el('triageBox').className='triage '+tr.css;el('triage').textContent=tr.name;el('triageReason').textContent=tr.why;el('patientCondition').textContent=condition(v);el('bp').textContent=v.s+'/'+v.d;el('hr').textContent=v.h;el('rr').textContent=v.r;el('spo').textContent=v.o;el('gcs').textContent=v.g;el('elapsed').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(Math.floor(elapsed%60)).padStart(2,'0')}
-function tick(){elapsed=Math.max(0,Math.min(1500,(Date.now()-startedAt)/1000));render();requestAnimationFrame(tick)}
-render();requestAnimationFrame(tick);requestAnimationFrame(animateWaves);
+function animateWaves(){if(!document.getElementById('ecgTrace'))return;const v=snapshot?.vitals;if(!v||el('vitalsPanel').hidden){animation=null;return}const now=performance.now()/1000;document.getElementById('ecgTrace').setAttribute('d',wavePath('ecg',now*v.h/60*.16));document.getElementById('plethTrace').setAttribute('d',wavePath('pleth',now*v.h/60*.16));document.getElementById('respTrace').setAttribute('d',wavePath('resp',now*v.r/60*.16));animation=requestAnimationFrame(animateWaves)}
+
+  function render() {
+    el('intro').textContent = snapshot ? patient.intro : '';
+    el('story').textContent = snapshot ? patient.story : '';
+    el('questions').textContent = snapshot ? patient.questions : '';
+    el('storyPanel').hidden = !snapshot;
+    el('clockPanel').hidden = !snapshot;
+    el('startPatient').hidden = snapshot?.status !== 'ready';
+    el('triagePanel').hidden = !snapshot?.triage;
+    el('vitalsPanel').hidden = !snapshot?.vitals;
+    if (!snapshot) return;
+
+    el('syncStatus').textContent = api.labels[snapshot.status];
+    el('elapsed').textContent = api.clock(snapshot.elapsed);
+    if (snapshot.triage) {
+      const { red, reason, condition } = snapshot.triage;
+      el('triageBox').className = 'triage ' + (red ? 'red' : 'yellow');
+      el('triage').textContent = red ? 'SK I · ROT' : 'SK II · GELB';
+      el('triageReason').textContent = reason;
+      el('patientCondition').textContent = condition;
+    }
+    if (snapshot.vitals) {
+      const { s, d, h, r, o, g } = snapshot.vitals;
+      el('bp').textContent = s + '/' + d;
+      el('hr').textContent = h;
+      el('rr').textContent = r;
+      el('spo').textContent = o;
+      el('gcs').textContent = g;
+      if (animation === null) animation = requestAnimationFrame(animateWaves);
+    }
+  }
+
+  async function synchronize({ open = false, revision } = {}) {
+    if (!code || busy) return;
+    busy = true;
+    el('startPatient').disabled = true;
+    const query = { p_case: caseId, p_patient: patientId, p_code: code };
+    try {
+      if (revision !== undefined) query.p_start_revision = revision;
+      snapshot = await api.student(query);
+      if (open && snapshot.status === 'ready') {
+        snapshot = await api.student({ ...query, p_start_revision: snapshot.revision });
+      }
+      try { sessionStorage.setItem(storageKey, code); } catch {}
+      el('accessCode').value = '';
+      el('accessForm').hidden = true;
+      render();
+    } catch (error) {
+      if (error.code === '42501') {
+        code = null;
+        try { sessionStorage.removeItem(storageKey); } catch {}
+        el('accessForm').hidden = false;
+      }
+      snapshot = null;
+      render();
+      el('syncStatus').textContent = error.message;
+    } finally {
+      el('startPatient').disabled = false;
+      busy = false;
+    }
+  }
+
+  el('accessForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (busy) return;
+    code = el('accessCode').value.trim();
+    if (code) void synchronize({ open: true });
+  });
+  el('startPatient').addEventListener('click', () => {
+    if (snapshot?.status === 'ready') void synchronize({ revision: snapshot.revision });
+  });
+  if (code) {
+    void synchronize({ open: true });
+  } else {
+    el('accessForm').hidden = false;
+    el('syncStatus').textContent = 'Gib den Zugangscode für diesen Patienten ein.';
+  }
+  setInterval(() => { if (!document.hidden) void synchronize(); }, 2000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) void synchronize(); });
 })();
