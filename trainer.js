@@ -158,6 +158,8 @@
       el('liveTitle').textContent = '';
       for (const id of ['secret', 'vitals', 'triage', 'patientStatus', 'expiry']) el(id).textContent = '';
       el('patientLink').value = '';
+      el('patientLink').hidden = true;
+      el('openPatientLink').removeAttribute('href');
       renderStation(null);
       resetPreview();
       return;
@@ -262,7 +264,12 @@
     const carPatient = patient.model?.car_number != null;
     el('stationTitle').textContent = carPatient ? patientName(patient.id) : 'Stations-QR für diesen Patienten';
     renderStation(patient.custom ? (carPatient ? url.href : station) : null);
-    el('patientLink').value = url.href;
+    const linkField = el('patientLink');
+    if (linkField.value !== url.href) {
+      linkField.value = url.href;
+      linkField.hidden = true;
+      el('openPatientLink').href = url.href;
+    }
     el('patientStatus').textContent = [categoryLabels[patient.category], api.labels[patient.status],
       api.clock(patient.elapsed)].filter(Boolean).join(' · ');
     for (const button of actions) {
@@ -546,6 +553,8 @@
         await navigator.clipboard.writeText(input.value);
         message('Kopiert.');
       } catch {
+        input.hidden = false;
+        input.focus();
         input.select();
         message('Der Text ist markiert und kann kopiert werden.');
       }
