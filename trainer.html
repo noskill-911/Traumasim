@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=progression">
+  <link rel="stylesheet" href="style.css?v=trainer-layout">
 </head>
 <body><main>
   <section class="panel">
@@ -25,89 +25,114 @@
 
   <div id="workspace" hidden>
     <section class="panel">
-      <h2>Übungen</h2>
       <label>Aktive Übung <select id="exercise"></select></label>
-      <form id="create">
-        <label>Titel für neue Übung <input id="exerciseTitle" maxlength="120" required></label>
-        <button>Beispielübung anlegen</button>
-      </form>
-      <details>
-        <summary>Eigenes Szenario als Übung starten</summary>
-        <p>Verwende deinen zuletzt gespeicherten Entwurf aus dem <a href="editor.html">Szenarioeditor</a> oder lade dessen JSON-Datei hoch.</p>
-        <label>JSON-Datei (optional) <input id="scenarioFile" type="file" accept="application/json,.json"></label>
-        <button id="createCustom" type="button">Eigenes Szenario starten</button>
-      </details>
+      <nav class="trainer-views" aria-label="Ausbilderbereiche">
+        <button id="showConfiguration" type="button" aria-controls="configurationView" aria-pressed="true">Konfiguration</button>
+        <button id="showExercise" type="button" aria-controls="exerciseView" aria-pressed="false">Übung</button>
+      </nav>
     </section>
-    <section class="panel" id="busBooking">
-      <h2>Übungselement Busunfall</h2>
-      <label>Busbesetzung einschließlich Fahrer
-        <select id="busCapacity">
-          <option value="5">Bus mit 5 Personen</option>
-          <option value="10">Bus mit 10 Personen</option>
-        </select>
-      </label>
-      <button id="startBus" type="button">Bus als eigene Übung starten</button>
-      <button id="attachBus" type="button" hidden>Zur aktiven Übung hinzufügen</button>
-      <p class="muted small">Die Buslage kann eine eigene Übung sein oder als zusätzliche Station in einer laufenden Übung gebucht werden.</p>
-    </section>
-    <section class="panel" id="carBooking">
-      <details>
-        <summary>Übungselement Pkw mit Insassen</summary>
-        <p>Jeder besetzte Platz erhält einen eigenen Patienten-QR. Die Einklemmung ist unabhängig vom Verletzungsprofil wählbar.</p>
-        <form id="carForm">
-          <label>Fahrzeuglage (optional)
-            <input id="carSituation" maxlength="200" placeholder="z. B. Pkw in Seitenlage, Fahrertür deformiert">
-          </label>
-          <div id="carSeats"></div>
-          <button id="startCar" type="submit">Pkw als eigene Übung starten</button>
-          <button id="attachCar" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
+    <div id="configurationView">
+      <section class="panel">
+        <h2>Übung vorbereiten</h2>
+        <form id="create">
+          <label>Titel für neue Übung <input id="exerciseTitle" maxlength="120" required></label>
+          <button>Beispielübung anlegen</button>
         </form>
+        <details>
+          <summary>Eigenes Szenario als Übung starten</summary>
+          <p>Verwende deinen zuletzt gespeicherten Entwurf aus dem <a href="editor.html">Szenarioeditor</a> oder lade dessen JSON-Datei hoch.</p>
+          <label>JSON-Datei (optional) <input id="scenarioFile" type="file" accept="application/json,.json"></label>
+          <button id="createCustom" type="button">Eigenes Szenario starten</button>
+        </details>
+      </section>
+      <section class="panel" id="busBooking">
+        <h2>Übungselement Busunfall</h2>
+        <label>Busbesetzung einschließlich Fahrer
+          <select id="busCapacity">
+            <option value="5">Bus mit 5 Personen</option>
+            <option value="10">Bus mit 10 Personen</option>
+          </select>
+        </label>
+        <button id="startBus" type="button">Bus als eigene Übung starten</button>
+        <button id="attachBus" type="button" hidden>Zur aktiven Übung hinzufügen</button>
+        <p class="muted small">Die Buslage kann eine eigene Übung sein oder als zusätzliche Station in einer laufenden Übung gebucht werden.</p>
+      </section>
+      <section class="panel" id="carBooking">
+        <details>
+          <summary>Übungselement Pkw mit Insassen</summary>
+          <p>Jeder besetzte Platz erhält einen eigenen Patienten-QR. Die Befreiungslage ist unabhängig vom Verletzungsprofil wählbar.</p>
+          <p class="muted small">Bei <strong>Eingeschlossen</strong> ist der Ausstieg versperrt, etwa durch blockierte Türen. Bei <strong>Eingeklemmt</strong> steckt ein Körperteil fest, etwa im Fußraum.</p>
+          <form id="carForm">
+            <label>Fahrzeuglage (optional)
+              <input id="carSituation" maxlength="200" placeholder="z. B. Pkw in Seitenlage, Fahrertür deformiert">
+            </label>
+            <div id="carSeats"></div>
+            <button id="startCar" type="submit">Pkw als eigene Übung starten</button>
+            <button id="attachCar" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
+          </form>
+        </details>
+      </section>
+    </div>
+    <div id="exerciseView" hidden>
+      <section id="noExercise" class="panel">
+        <h2>Patientenübersicht</h2>
+        <p>Wähle oben eine Übung aus oder lege eine in der Konfiguration an.</p>
+      </section>
+      <section id="live" class="panel" hidden>
+        <h2>Patientenübersicht</h2>
+        <p id="liveTitle"></p>
+        <ul id="patientOverview" class="patient-overview" aria-label="Live-Zustand aller Patienten"></ul>
+      </section>
+      <section id="patientControls" class="panel" hidden>
+        <h2>Patient im Detail</h2>
+        <label>Patient auswählen <select id="choose"></select></label>
+        <p id="patientStatus" aria-live="off"></p>
+        <button id="pausePatient" data-action="pause">Patient pausieren</button>
+        <button id="resumePatient" data-action="resume">Patient fortsetzen</button>
+        <button id="resetPatient" data-action="reset">Patient zurücksetzen</button>
+        <p class="muted small">Nach dem Zurücksetzen wartet der Patient auf einen neuen Aufruf oder auf „Patient starten“.</p>
+        <details>
+          <summary>Patientenlink und Stations-QR</summary>
+          <p><label>Patientenlink <input id="patientLink" readonly></label>
+          <button id="copyLink">Patientenlink kopieren</button></p>
+          <div id="station" hidden><h3 id="stationTitle">Stations-QR für diesen Patienten</h3><div id="stationQr" class="exercise-qr"></div></div>
+        </details>
+      </section>
+      <details id="exerciseJoin" class="panel" hidden>
+        <summary>Übungs-QR und Briefing</summary>
+        <p id="busBriefing" hidden></p>
+        <p>Zeige diesen QR-Code beim Briefing. Danach öffnen die Teilnehmenden die vorhandenen Patienten-QR-Codes im selben Browser.</p>
+        <div id="joinQr" class="exercise-qr"></div>
+        <label>Übungslink <input id="joinLink" readonly></label>
+        <button id="copyJoin">Übungslink kopieren</button>
+        <p id="expiry" class="muted small"></p>
       </details>
-    </section>
-    <section id="exerciseJoin" class="panel" hidden>
-      <h2>Übungs-QR zum Einstieg</h2>
-      <p>Zeige diesen QR-Code beim Briefing. Danach öffnen die Teilnehmenden die vorhandenen Patienten-QR-Codes im selben Browser.</p>
-      <div id="joinQr" class="exercise-qr"></div>
-      <label>Übungslink <input id="joinLink" readonly></label>
-      <button id="copyJoin">Übungslink kopieren</button>
-    </section>
-    <section id="live" class="panel" hidden>
-      <h2>Geräteübergreifender Verlauf</h2>
-      <p id="expiry" class="muted small"></p>
-      <p id="busBriefing" hidden></p>
-      <ul id="patientOverview" class="patient-overview" aria-label="Status aller Patienten"></ul>
-      <label>Patient auswählen <select id="choose"></select></label>
-      <p id="patientStatus" aria-live="off"></p>
-      <button id="pausePatient" data-action="pause">Patient pausieren</button>
-      <button id="resumePatient" data-action="resume">Patient fortsetzen</button>
-      <button id="resetPatient" data-action="reset">Patient zurücksetzen</button>
-      <button id="closeExercise" data-action="close">Übung beenden</button>
-      <button id="resetAll" data-action="reset_all">Ganze Übung zurücksetzen</button>
-      <p class="muted small">Nach dem Zurücksetzen wartet der Patient auf einen neuen Aufruf oder auf „Patient starten“.</p>
-      <p><label>Patientenlink <input id="patientLink" readonly></label>
-      <button id="copyLink">Patientenlink kopieren</button></p>
-      <div id="station" hidden><h3 id="stationTitle">Stations-QR für diesen Patienten</h3><div id="stationQr" class="exercise-qr"></div></div>
-    </section>
-    <section id="preview" class="panel" hidden>
-      <h2>Ausbildervorschau</h2>
-      <p id="secret"></p>
-      <label>Übungsverlauf bis 45 Minuten prüfen <input id="seek" type="range" min="0" max="45" value="0" step="1"></label>
-      <div class="clock" id="clock">00:00</div>
-      <button id="play">▶ Vorschau starten</button>
-      <button id="pause">⏸ Vorschau pausieren</button>
-      <button id="reset">↺ Vorschau zurücksetzen</button>
-      <label>Vorschaugeschwindigkeit <select id="speed">
-        <option value="1">1×</option><option value="5">5×</option><option value="30">30×</option><option value="60">60×</option>
-      </select></label>
-      <div id="triage" class="triage yellow"></div>
-      <div class="grid" id="vitals"></div>
-    </section>
+      <details id="preview" class="panel" hidden>
+        <summary>Verlaufsvorschau für den ausgewählten Patienten</summary>
+        <p id="secret"></p>
+        <label>Übungsverlauf bis 45 Minuten prüfen <input id="seek" type="range" min="0" max="45" value="0" step="1"></label>
+        <div class="clock" id="clock">00:00</div>
+        <button id="play">▶ Vorschau starten</button>
+        <button id="pause">⏸ Vorschau pausieren</button>
+        <button id="reset">↺ Vorschau zurücksetzen</button>
+        <label>Vorschaugeschwindigkeit <select id="speed">
+          <option value="1">1×</option><option value="5">5×</option><option value="30">30×</option><option value="60">60×</option>
+        </select></label>
+        <div id="triage" class="triage yellow"></div>
+        <div class="grid" id="vitals"></div>
+      </details>
+      <details id="exerciseActions" class="panel" hidden>
+        <summary>Ganze Übung steuern</summary>
+        <button id="resetAll" data-action="reset_all">Ganze Übung zurücksetzen</button>
+        <button id="closeExercise" data-action="close">Übung beenden</button>
+      </details>
+    </div>
   </div>
 </main>
 <script src="patients.js"></script>
 <script src="supabase-config.js"></script>
 <script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
-<script src="trainer.js?v=green-yellow"></script>
+<script src="trainer.js?v=trainer-layout"></script>
 </body>
 </html>

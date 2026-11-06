@@ -6,7 +6,9 @@
    anmelden. Für die Ersteinrichtung dort E-Mail und Passwort eingeben und
    „Ausbilderkonto einrichten“ wählen. Danach den Bestätigungslink in der E-Mail
    öffnen, zur Ausbilderansicht zurückkehren und anmelden.
-2. Eine Übung anlegen oder auswählen und den Übungs-QR zeigen. Teilnehmende
+2. In **Konfiguration** eine Übung anlegen und Stationen zusammenstellen
+   oder oben eine vorhandene Übung auswählen. Unter **Übung** den
+   Übungs-QR zeigen. Teilnehmende
    scannen ihn einmal. Danach funktionieren im selben Browser die vorhandenen
    Patienten-QR-Codes. Der Beitritt startet noch keinen Patienten.
    Ein separat kopierter Patientenlink gilt weiterhin nur für den jeweiligen
@@ -16,8 +18,11 @@
 4. Beim Zurücksetzen bleibt der Zugangscode gültig. Bereits geöffnete Geräte
    zeigen „Wartet auf Start“. Ein erneuter Aufruf oder „Patient starten“ startet
    die neue Runde. Einzelreset und Übungsreset ändern den zentralen Zustand.
-5. **Übung beenden** schließt die Übung samt QR-Zugängen. Die Patientenübersicht
-   zeigt den Status und die Übungszeit aller Patienten.
+5. Die Patientenübersicht zeigt den Status, die Zeit seit Patientenstart
+   und bei gestarteten Patienten die aktuelle Sichtungskategorie im
+   Übungsmodell. Ein Klick auf den Patienten öffnet seine Auswahl für
+   Steuerung, QR-Code und Vorschau. **Übung beenden** schließt die Übung
+   samt QR-Zugängen.
 6. Die Übung ist auf 45 Minuten ausgelegt. Die Zeit zählt ab dem jeweiligen
    Patientenstart. Bei älteren 25-Minuten-Profilen gelten danach die letzten
    Basiswerte weiter. Die letzten Werte und die Fallinformationen bleiben
@@ -54,7 +59,9 @@ die internen Hinweise des ausgewählten Patienten.
 ## Pkw mit Insassen
 
 Unter **Übungselement Pkw mit Insassen** bis zu fünf Sitzplätze besetzen.
-Verletzungsprofil und Einklemmung werden je Person gewählt. Eine eigene
+Verletzungsprofil und Befreiungslage werden je Person gewählt. Zur Auswahl
+stehen **Frei zugänglich**, **Eingeschlossen** und **Eingeklemmt**.
+Für eingeklemmte Personen wird zusätzlich die Klemmstelle gewählt. Eine eigene
 Beschreibung und die Fahrzeuglage können ergänzt werden. Die Profile
 **SK III → SK II**, **SK II → SK I** und **SK I → EX (schwarz)** wechseln
 zur per Schieberegler gewählten Minute ab Patientenstart (Minute 1 bis 44). Voreingestellt

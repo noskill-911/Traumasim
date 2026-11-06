@@ -16,7 +16,28 @@ button:disabled { opacity: .55; cursor: default; }
 .exercise-qr svg { display: block; width: 100%; height: auto; background: white; }
 
 .patient-overview { list-style: none; padding: 0; }
-.patient-overview li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .4rem 1rem; border-bottom: 1px solid #ffffff22; padding: .5rem 0; }
+.trainer-views { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+.trainer-views button { margin: 0; }
+.trainer-views button,
+.patient-overview button { border: 1px solid transparent; }
+#exercise, #choose, .car-seat select { max-width: 100%; }
+.trainer-views button[aria-pressed="true"],
+.patient-overview button[aria-pressed="true"] { background: #29465e; border-color: #a4cced; }
+.patient-overview button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 11rem minmax(9rem, auto);
+  align-items: center;
+  gap: .4rem .8rem;
+  width: 100%;
+  margin: 0 0 .4rem;
+  text-align: left;
+}
+.patient-overview .patient-category { margin: 0; padding: .15rem .5rem; border-radius: .35rem; font-size: .85rem; justify-self: start; }
+.patient-runtime { font-variant-numeric: tabular-nums; }
+@media (max-width: 620px) {
+  .patient-overview button { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .patient-overview strong { grid-column: 1 / -1; }
+}
 #caseTitle, #name, textarea { width: 100%; padding: .55rem; }
 .curve-table { overflow-x: auto; }
 .curve-table th, .curve-table td { padding: .25rem; text-align: right; }

@@ -165,6 +165,21 @@ returns jsonb language sql immutable strict set search_path = '' as $$
  ) as points;
 $$;
 
+create or replace function traumasim_private.patient_category(
+ p_model jsonb, p_patient text, p_custom boolean, p_elapsed numeric, p_vitals jsonb
+) returns text language sql immutable set search_path = '' as $$
+ select case
+   when p_model->'affected' = 'true'::jsonb then 'affected'
+   when p_model->'progression'->>'from' is not null then case
+     when p_elapsed >= (p_model->'progression'->>'at_seconds')::integer then p_model->'progression'->>'to'
+     else p_model->'progression'->>'from' end
+   when (p_patient = 'fahrer' or p_custom)
+     and ((p_vitals->>'s')::integer < 100 or (p_vitals->>'g')::integer < 15 or (p_vitals->>'h')::integer >= 120)
+     then 'red'
+   when p_model->'walkable' = 'true'::jsonb then 'green'
+   else 'yellow' end;
+$$;
+
 create or replace function traumasim_private.student(
  p_case text, p_patient text, p_code text, p_start_revision integer default null
 ) returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -188,7 +203,6 @@ declare
  tracked_pause_seconds numeric;
  bp_pause_seconds numeric;
  previous_bp_pause_seconds numeric;
- red boolean;
  affected boolean;
  category text;
  triage_delay integer;
@@ -276,16 +290,8 @@ begin
      next_bp_wall_time := null;
    end if;
  end if;
- affected := coalesce(model->'affected' = 'true'::jsonb, false);
- red := not affected and (p_patient = 'fahrer' or patient.scenario_model is not null) and ((vitals->>'s')::integer < 100 or (vitals->>'g')::integer < 15 or (vitals->>'h')::integer >= 120);
- category := case
-   when affected then 'affected'
-   when progression->>'from' is not null then case
-     when seconds >= (progression->>'at_seconds')::integer then progression->>'to'
-     else progression->>'from' end
-   when red then 'red'
-   when model->'walkable' = 'true'::jsonb then 'green'
-   else 'yellow' end;
+ category := traumasim_private.patient_category(model, p_patient, patient.scenario_model is not null, seconds, vitals);
+ affected := category = 'affected';
  -- Training timings follow the category available at the current patient time.
  triage_delay := case category when 'affected' then 10 when 'green' then 10 when 'yellow' then 20 else 35 end;
  condition_index := case
@@ -436,14 +442,18 @@ begin
  select jsonb_agg(jsonb_build_object(
    'id', p.patient_key,
    'code', traumasim_private.patient_code(exercise.id, p.patient_key, exercise.signing_key),
-   'model', coalesce(p.scenario_model, m.model),
+   'model', patient_model.model,
    'custom', p.scenario_model is not null,
    'elapsed', floor(t.seconds),
+   'category', case when p.started_at is not null then traumasim_private.patient_category(
+     patient_model.model, p.patient_key, p.scenario_model is not null, t.seconds,
+     traumasim_private.vitals(patient_model.model, t.seconds)) end,
    'status', case when p.started_at is null then 'ready'
      when t.seconds >= limit_time.duration then 'finished' when p.paused_at is not null then 'paused' else 'running' end
  ) order by p.patient_key) into result
  from public.traumasim_patients p
  left join traumasim_private.models m on m.case_key = exercise.case_key and m.patient_key = p.patient_key
+ cross join lateral (select coalesce(p.scenario_model, m.model) as model) patient_model
  cross join lateral (select traumasim_private.patient_duration(p.scenario_model) as duration) limit_time
  cross join lateral (select least(limit_time.duration,
    traumasim_private.elapsed(p.started_at, p.paused_at, p.accumulated_pause_seconds, snapshot_time)) as seconds) t
@@ -637,6 +647,7 @@ begin
    profile := person->>'profile';
    entrapment := case person->>'entrapment'
      when 'none' then 'frei zugänglich, keine Einklemmung'
+     when 'enclosed' then 'eingeschlossen, Ausstieg versperrt'
      when 'door' then 'im Bereich von Tür und B-Säule eingeklemmt'
      when 'footwell' then 'mit einem Bein im deformierten Fußraum eingeklemmt'
      when 'dashboard' then 'zwischen Sitz und Armaturenbrett eingeklemmt'
@@ -644,7 +655,7 @@ begin
    end;
    if seat_name is null or profile is null or profile not in ('affected','minor','urgent','critical','green-yellow','urgent-red','red-ex')
       or entrapment is null or length(coalesce(person->>'injury', '')) > 400 then
-     raise exception using errcode = '22023', message = 'Sitzplatz, Verletzungsprofil oder Einklemmung sind ungültig.';
+     raise exception using errcode = '22023', message = 'Sitzplatz, Verletzungsprofil oder Befreiungslage sind ungültig.';
    end if;
    progression := null;
    if profile in ('green-yellow','urgent-red','red-ex') then

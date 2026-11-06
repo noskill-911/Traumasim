@@ -5,6 +5,10 @@
   const api = window.TraumaSync;
   const previewDuration = Number(el('seek').max) * 60;
   const actions = Array.from(document.querySelectorAll('[data-action]'));
+  const categoryLabels = {
+    red: 'SK I · Rot', yellow: 'SK II · Gelb', green: 'SK III · Grün',
+    black: 'EX · Schwarz', affected: 'Unverletzt betroffen'
+  };
   let auth = null;
   let exercise = null;
   let busy = false;
@@ -21,6 +25,16 @@
   function message(text) {
     el('message').textContent = text;
   }
+
+  function showView(live) {
+    el('configurationView').hidden = live;
+    el('exerciseView').hidden = !live;
+    el('showConfiguration').setAttribute('aria-pressed', String(!live));
+    el('showExercise').setAttribute('aria-pressed', String(live));
+  }
+
+  el('showConfiguration').addEventListener('click', () => showView(false));
+  el('showExercise').addEventListener('click', () => showView(true));
 
   function selectedPatient() {
     return exercise?.patients.find((patient) => patient.id === el('choose').value);
@@ -99,10 +113,12 @@
     const previous = selectedPatient()?.id;
     const changed = exercise?.id !== next?.id;
     exercise = next;
+    el('noExercise').hidden = Boolean(next);
     el('live').hidden = !next;
+    el('patientControls').hidden = !next;
+    el('exerciseActions').hidden = !next;
     el('preview').hidden = !next;
     renderJoin(next?.join_code);
-    renderOverview();
     el('attachBus').hidden = !next;
     el('attachCar').hidden = !next;
     const briefing = next?.patients.find((patient) => patient.model?.bus_briefing)?.model.bus_briefing;
@@ -110,18 +126,23 @@
     el('busBriefing').textContent = briefing ?? '';
     if (!next) {
       el('choose').replaceChildren();
+      el('patientOverview').replaceChildren();
+      el('liveTitle').textContent = '';
       for (const id of ['secret', 'vitals', 'triage', 'patientStatus', 'expiry']) el(id).textContent = '';
       el('patientLink').value = '';
       renderStation(null);
       resetPreview();
       return;
     }
-    if (changed || el('choose').options.length !== next.patients.length) {
+    const rebuild = changed || el('choose').options.length !== next.patients.length;
+    if (rebuild) {
       el('choose').replaceChildren(...next.patients.map((patient) => new Option(patientName(patient.id), patient.id)));
       el('choose').value = next.patients.some((patient) => patient.id === previous) ? previous : next.patients[0].id;
       if (changed) resetPreview();
     }
+    el('liveTitle').textContent = next.title;
     el('expiry').textContent = 'Zugang gültig bis ' + new Date(next.expires_at).toLocaleString('de-DE');
+    renderOverview(rebuild);
     renderPatient();
   }
 
@@ -164,17 +185,39 @@
     }
   }
 
-  function renderOverview() {
-    const rows = (exercise?.patients ?? []).map((patient) => {
-      const row = document.createElement('li');
-      const name = document.createElement('strong');
-      name.textContent = patientName(patient.id);
-      const status = document.createElement('span');
+  function renderOverview(rebuild = false) {
+    const overview = el('patientOverview');
+    if (rebuild) {
+      const rows = exercise.patients.map((patient) => {
+        const row = document.createElement('li');
+        const button = document.createElement('button');
+        button.type = 'button';
+        const name = document.createElement('strong');
+        name.textContent = patientName(patient.id);
+        const category = document.createElement('span');
+        const status = document.createElement('span');
+        status.className = 'patient-runtime';
+        button.append(name, category, status);
+        button.addEventListener('click', () => {
+          el('choose').value = patient.id;
+          el('choose').dispatchEvent(new Event('change'));
+          el('choose').focus();
+        });
+        row.append(button);
+        return row;
+      });
+      overview.replaceChildren(...rows);
+    }
+    const selected = el('choose').value;
+    exercise.patients.forEach((patient, index) => {
+      const button = overview.children[index].firstElementChild;
+      const [, category, status] = button.children;
+      const label = categoryLabels[patient.category];
+      button.setAttribute('aria-pressed', String(patient.id === selected));
+      category.className = label ? 'triage patient-category ' + patient.category : 'patient-category muted';
+      category.textContent = label ?? '–';
       status.textContent = api.labels[patient.status] + ' · ' + api.clock(patient.elapsed);
-      row.append(name, status);
-      return row;
     });
-    el('patientOverview').replaceChildren(...rows);
   }
 
   function renderPatient() {
@@ -188,7 +231,8 @@
     el('stationTitle').textContent = carPatient ? patientName(patient.id) : 'Stations-QR für diesen Patienten';
     renderStation(patient.custom ? (carPatient ? url.href : station) : null);
     el('patientLink').value = url.href;
-    el('patientStatus').textContent = api.labels[patient.status] + ' · ' + api.clock(patient.elapsed);
+    el('patientStatus').textContent = [categoryLabels[patient.category], api.labels[patient.status],
+      api.clock(patient.elapsed)].filter(Boolean).join(' · ');
     for (const button of actions) {
       const action = button.dataset.action;
       button.disabled = busy || (action === 'pause' && patient.status !== 'running')
@@ -221,6 +265,7 @@
     renderExercise(null);
     el('exercise').replaceChildren();
     el('workspace').hidden = true;
+    showView(false);
     el('logout').hidden = true;
     el('login').hidden = false;
     if (token) void api.signOut(token).catch(() => {});
@@ -272,6 +317,7 @@
       if (list.length) {
         el('exercise').value = list[0].id;
         renderExercise(await rpc({ p_action: 'status', p_session: list[0].id }));
+        showView(true);
       }
     });
   });
@@ -283,7 +329,10 @@
   });
   el('exercise').addEventListener('change', () => {
     const id = el('exercise').value;
-    void run(async () => renderExercise(id ? await rpc({ p_action: 'status', p_session: id }) : null));
+    void run(async () => {
+      renderExercise(id ? await rpc({ p_action: 'status', p_session: id }) : null);
+      showView(Boolean(id));
+    });
   });
   el('create').addEventListener('submit', (event) => {
     event.preventDefault();
@@ -297,7 +346,7 @@
     el('exercise').add(new Option(created.title, created.id), 1);
     el('exercise').value = created.id;
     renderExercise(created);
-    message('Übung angelegt.');
+    message('Übung angelegt. Ergänze weitere Stationen oder öffne die Übungsansicht.');
   }
 
   el('createCustom').addEventListener('click', () => {
@@ -350,9 +399,17 @@
           <strong class="seat-transition-value" aria-hidden="true"></strong>
           <input class="seat-transition" type="range" min="1" max="44" step="1" disabled>
         </label>
-        <label>Einklemmung
-          <select class="seat-entrapment">
-            <option value="none">Keine</option><option value="door">Tür / B-Säule</option>
+        <label>Befreiungslage
+          <select class="seat-access">
+            <option value="none">Frei zugänglich</option>
+            <option value="enclosed">Eingeschlossen</option>
+            <option value="trapped">Eingeklemmt</option>
+          </select>
+        </label>
+        <label class="seat-entrapment-label" hidden>Klemmstelle
+          <select class="seat-entrapment" required disabled>
+            <option value="">Klemmstelle auswählen</option>
+            <option value="door">Tür / B-Säule</option>
             <option value="footwell">Fußraum / Bein</option><option value="dashboard">Sitz / Armaturenbrett</option>
             <option value="roof">Dach / Sitz</option>
           </select>
@@ -366,6 +423,13 @@
     const transition = group.querySelector('.seat-transition');
     const transitionLabel = group.querySelector('.seat-transition-label');
     const transitionValue = group.querySelector('.seat-transition-value');
+    const access = group.querySelector('.seat-access');
+    const entrapment = group.querySelector('.seat-entrapment');
+    const entrapmentLabel = group.querySelector('.seat-entrapment-label');
+    function showEntrapment() {
+      entrapment.disabled = entrapmentLabel.hidden = !profile.value || access.value !== 'trapped';
+    }
+    access.addEventListener('change', showEntrapment);
     function showTransitionMinute() {
       const text = 'Minute ' + transition.value;
       transitionValue.textContent = text;
@@ -374,6 +438,7 @@
     transition.addEventListener('input', showTransitionMinute);
     profile.addEventListener('change', () => {
       details.hidden = !profile.value;
+      showEntrapment();
       const defaultMinute = { 'green-yellow': 12, 'urgent-red': 6, 'red-ex': 8 }[profile.value];
       transition.disabled = transitionLabel.hidden = defaultMinute == null;
       if (defaultMinute != null) {
@@ -382,7 +447,7 @@
       }
     });
     el('carSeats').append(group);
-    return { seat, profile, transition, entrapment: group.querySelector('.seat-entrapment'), injury: group.querySelector('.seat-injury') };
+    return { seat, profile, transition, access, entrapment, injury: group.querySelector('.seat-injury') };
   });
 
   el('carForm').addEventListener('submit', (event) => {
@@ -390,7 +455,8 @@
     const attach = event.submitter?.id === 'attachCar';
     void run(async () => {
       const occupants = seatControls.filter((row) => row.profile.value).map((row) => ({
-        seat: row.seat, profile: row.profile.value, entrapment: row.entrapment.value, injury: row.injury.value,
+        seat: row.seat, profile: row.profile.value, injury: row.injury.value,
+        entrapment: row.access.value === 'trapped' ? row.entrapment.value : row.access.value,
         transition_minute: row.transition.disabled ? null : row.transition.valueAsNumber
       }));
       if (!occupants.length) throw new Error('Wähle mindestens einen besetzten Sitzplatz.');
@@ -401,6 +467,7 @@
         const number = Math.max(...next.patients.map((patient) => patient.model.car_number ?? 0));
         const first = next.patients.find((patient) => patient.model.car_number === number);
         el('choose').value = first.id;
+        renderOverview();
         renderPatient();
         resetPreview();
         message('Pkw ' + String(number).padStart(2, '0') + ' hinzugefügt.');
@@ -411,7 +478,11 @@
       for (const row of seatControls) row.profile.dispatchEvent(new Event('change'));
     });
   });
-  el('choose').addEventListener('change', () => { renderPatient(); resetPreview(); });
+  el('choose').addEventListener('change', () => {
+    renderOverview();
+    renderPatient();
+    resetPreview();
+  });
   for (const button of actions) {
     button.addEventListener('click', () => {
       const action = button.dataset.action;
