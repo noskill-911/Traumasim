@@ -34,6 +34,7 @@ button:disabled { opacity: .55; cursor: default; }
 }
 .patient-overview .patient-category { margin: 0; padding: .15rem .5rem; border-radius: .35rem; font-size: .85rem; justify-self: start; }
 .patient-runtime { font-variant-numeric: tabular-nums; }
+.patient-forecast { grid-column: 1 / -1; font-size: .85rem; }
 @media (max-width: 620px) {
   .patient-overview button { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .patient-overview strong { grid-column: 1 / -1; }

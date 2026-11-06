@@ -50,6 +50,35 @@
     select.replaceChildren(new Option(label, ''), ...items.map((item) => new Option(item.title, item.id)));
   }
 
+  function categoryForVitals(patient, vitals) {
+    if (patient.model.affected === true) return 'affected';
+    const red = (patient.id === 'fahrer' || patient.custom) && (vitals.s < 100 || vitals.g < 15 || vitals.h >= 120);
+    return red ? 'red' : patient.model.walkable ? 'green' : 'yellow';
+  }
+
+  function forecastLabel(patient) {
+    const shortCategory = (category) => categoryLabels[category].split(' · ')[0];
+    const progression = patient.model.progression;
+    if (progression) {
+      return 'Verlauf · ' + shortCategory(progression.from) + ' → ' + shortCategory(progression.to)
+        + ' bei Minute ' + progression.at_seconds / 60;
+    }
+    if (patient.model.affected === true) {
+      return patient.status === 'ready' ? 'Start · Unverletzt betroffen' : '';
+    }
+    const points = patient.model.points;
+    const start = patient.category ?? categoryForVitals(patient, points[0]);
+    const categories = [start];
+    for (const point of points) {
+      if (point.t * 60 <= patient.elapsed) continue;
+      const next = categoryForVitals(patient, point);
+      if (categories.at(-1) !== next) categories.push(next);
+    }
+    if (patient.status !== 'ready' && categories.length === 1) return '';
+    const heading = patient.status === 'ready' ? 'Start' : 'Vorschau';
+    return heading + ' · ' + categories.map(shortCategory).join(' → ');
+  }
+
   function drawPreview() {
     const patient = selectedPatient();
     if (!patient) return;
@@ -93,8 +122,7 @@
       const offset = key === 'h' ? pulseOffset : key === 'r' ? breathsOffset : 0;
       v[key] = Math.round(a[key] + (b[key] - a[key]) * (curveMinute - a.t) / 5 + offset);
     }
-    const red = (patient.id === 'fahrer' || patient.custom) && (v.s < 100 || v.g < 15 || v.h >= 120);
-    category ||= red ? 'red' : patient.model.walkable ? 'green' : 'yellow';
+    category ||= categoryForVitals(patient, v);
     el('triage').className = 'triage ' + category;
     el('triage').textContent = { red: 'SK I · ROT', yellow: 'SK II · GELB', green: 'SK III · GRÜN' }[category] + ' (Übungsmodell)';
     el('vitals').innerHTML = [
@@ -197,7 +225,9 @@
         const category = document.createElement('span');
         const status = document.createElement('span');
         status.className = 'patient-runtime';
-        button.append(name, category, status);
+        const forecast = document.createElement('span');
+        forecast.className = 'patient-forecast muted';
+        button.append(name, category, status, forecast);
         button.addEventListener('click', () => {
           el('choose').value = patient.id;
           el('choose').dispatchEvent(new Event('change'));
@@ -211,12 +241,14 @@
     const selected = el('choose').value;
     exercise.patients.forEach((patient, index) => {
       const button = overview.children[index].firstElementChild;
-      const [, category, status] = button.children;
+      const [, category, status, forecast] = button.children;
       const label = categoryLabels[patient.category];
       button.setAttribute('aria-pressed', String(patient.id === selected));
       category.className = label ? 'triage patient-category ' + patient.category : 'patient-category muted';
       category.textContent = label ?? '–';
       status.textContent = api.labels[patient.status] + ' · ' + api.clock(patient.elapsed);
+      forecast.textContent = forecastLabel(patient);
+      forecast.hidden = !forecast.textContent;
     });
   }
 
