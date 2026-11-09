@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=qr-print">
+  <link rel="stylesheet" href="style.css?v=trainer-config">
 </head>
 <body><main>
   <section class="panel">
@@ -29,10 +29,56 @@
         <button id="showConfiguration" type="button" aria-controls="configurationView" aria-pressed="true">Konfiguration</button>
         <button id="showExercise" type="button" aria-controls="exerciseView" aria-pressed="false">Übung</button>
       </nav>
+      <div id="exerciseComposition" class="exercise-composition" hidden>
+        <h2>Übungsbesetzung</h2>
+        <dl class="composition-counts">
+          <div><dt>Pkw</dt><dd id="compositionCars">0</dd></div>
+          <div><dt>Busse</dt><dd id="compositionBuses">0</dd></div>
+          <div><dt>Personen</dt><dd id="compositionPatients">0</dd></div>
+        </dl>
+        <ul id="compositionDetails" class="composition-details muted small"></ul>
+      </div>
     </section>
     <div id="configurationView">
       <section class="panel">
-        <h2>Übung vorbereiten</h2>
+        <h2>Fahrzeuge zusammenstellen</h2>
+        <p class="muted small">Starte mit einem Fahrzeug eine neue Übung oder ergänze die oben ausgewählte Übung.</p>
+        <details class="booking-card" id="carBooking">
+          <summary><span>Pkw mit Insassen</span><span class="muted small">Bis zu 5 Sitzplätze</span></summary>
+          <div class="booking-fields">
+            <p>Lege je besetztem Sitzplatz das Verletzungsprofil und die Befreiungslage fest. Jeder Patient erhält einen eigenen QR-Code.</p>
+            <p class="muted small">Bei <strong>Eingeschlossen</strong> ist der Ausstieg versperrt. Bei <strong>Eingeklemmt</strong> steckt ein Körperteil fest, etwa im Fußraum.</p>
+            <form id="carForm">
+              <label>Fahrzeuglage (optional)
+                <input id="carSituation" maxlength="200" placeholder="z. B. Pkw in Seitenlage, Fahrertür deformiert">
+              </label>
+              <div id="carSeats"></div>
+              <div class="booking-actions">
+                <button id="startCar" type="submit">Als neue Übung starten</button>
+                <button id="attachCar" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
+              </div>
+            </form>
+          </div>
+        </details>
+        <details class="booking-card" id="busBooking">
+          <summary><span>Busunfall</span><span class="muted small">5 oder 10 Personen</span></summary>
+          <div class="booking-fields">
+            <p>Wähle eine vorbereitete Busbesetzung mit eigenen Patientenrollen und Auffindeorten.</p>
+            <label>Busbesetzung einschließlich Fahrer
+              <select id="busCapacity">
+                <option value="5">Bus mit 5 Personen</option>
+                <option value="10">Bus mit 10 Personen</option>
+              </select>
+            </label>
+            <div class="booking-actions">
+              <button id="startBus" type="button">Als neue Übung starten</button>
+              <button id="attachBus" type="button" hidden>Zur aktiven Übung hinzufügen</button>
+            </div>
+          </div>
+        </details>
+      </section>
+      <section class="panel">
+        <h2>Weitere Übungsstarts</h2>
         <form id="create">
           <label>Titel für neue Übung <input id="exerciseTitle" maxlength="120" required></label>
           <button>Beispielübung anlegen</button>
@@ -42,33 +88,6 @@
           <p>Verwende deinen zuletzt gespeicherten Entwurf aus dem <a href="editor.html">Szenarioeditor</a> oder lade dessen JSON-Datei hoch.</p>
           <label>JSON-Datei (optional) <input id="scenarioFile" type="file" accept="application/json,.json"></label>
           <button id="createCustom" type="button">Eigenes Szenario starten</button>
-        </details>
-      </section>
-      <section class="panel" id="busBooking">
-        <h2>Übungselement Busunfall</h2>
-        <label>Busbesetzung einschließlich Fahrer
-          <select id="busCapacity">
-            <option value="5">Bus mit 5 Personen</option>
-            <option value="10">Bus mit 10 Personen</option>
-          </select>
-        </label>
-        <button id="startBus" type="button">Bus als eigene Übung starten</button>
-        <button id="attachBus" type="button" hidden>Zur aktiven Übung hinzufügen</button>
-        <p class="muted small">Die Buslage kann eine eigene Übung sein oder als zusätzliche Station in einer laufenden Übung gebucht werden.</p>
-      </section>
-      <section class="panel" id="carBooking">
-        <details>
-          <summary>Übungselement Pkw mit Insassen</summary>
-          <p>Jeder besetzte Platz erhält einen eigenen Patienten-QR. Die Befreiungslage ist unabhängig vom Verletzungsprofil wählbar.</p>
-          <p class="muted small">Bei <strong>Eingeschlossen</strong> ist der Ausstieg versperrt, etwa durch blockierte Türen. Bei <strong>Eingeklemmt</strong> steckt ein Körperteil fest, etwa im Fußraum.</p>
-          <form id="carForm">
-            <label>Fahrzeuglage (optional)
-              <input id="carSituation" maxlength="200" placeholder="z. B. Pkw in Seitenlage, Fahrertür deformiert">
-            </label>
-            <div id="carSeats"></div>
-            <button id="startCar" type="submit">Pkw als eigene Übung starten</button>
-            <button id="attachCar" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
-          </form>
         </details>
       </section>
     </div>
@@ -149,6 +168,6 @@
 <script src="supabase-config.js"></script>
 <script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
-<script src="trainer.js?v=qr-print"></script>
+<script src="trainer.js?v=trainer-config"></script>
 </body>
 </html>

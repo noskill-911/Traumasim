@@ -50,6 +50,28 @@ button:disabled { opacity: .55; cursor: default; }
 #carSituation, .seat-injury { width: 100%; padding: .55rem; }
 .triage.black { background: #101114; border-color: #c2c5cc; color: #f5f5f5; }
 
+.exercise-composition { margin-top: 1rem; padding-top: .9rem; border-top: 1px solid #ffffff26; }
+.exercise-composition h2 { font-size: 1rem; }
+.composition-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45rem; margin: 0; }
+.composition-counts div { padding: .45rem .65rem; border-radius: .45rem; background: #101d29; }
+.composition-counts dt { color: #b3c4d0; font-size: .85rem; }
+.composition-counts dd { margin: 0; font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.composition-details { display: flex; flex-wrap: wrap; gap: .35rem .5rem; margin: .6rem 0 0; padding: 0; list-style: none; }
+.composition-details li { padding: .2rem .5rem; border: 1px solid #ffffff26; border-radius: .4rem; }
+.booking-card { margin-top: .7rem; border: 1px solid #ffffff36; border-radius: .65rem; background: #172532; }
+.booking-card summary { padding: .8rem .9rem; }
+.booking-card summary .small { margin-left: .65rem; font-weight: 400; }
+.booking-card[open] summary { border-bottom: 1px solid #ffffff26; }
+.booking-fields { padding: 0 .9rem .7rem; }
+.booking-fields select { max-width: 100%; }
+.booking-actions { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .8rem; }
+.booking-actions button { margin: 0; }
+#carSeats { display: grid; gap: .65rem; }
+#carSeats .car-seat { min-width: 0; margin: 0; }
+@media (min-width: 640px) {
+  #carSeats { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+}
+
 .station-print { display: none; }
 @media print {
   @page { size: A4 portrait; margin: 12mm; }

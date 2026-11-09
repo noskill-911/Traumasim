@@ -11,6 +11,7 @@
     red: 'SK I · Rot', yellow: 'SK II · Gelb', green: 'SK III · Grün',
     black: 'EX · Schwarz', affected: 'Unverletzt betroffen'
   };
+  const busStationPattern = /^bus-(5|10)-(\d{2})$/;
   const busLocations = [
     'Neben der Fahrertür', 'Vorn am Querplatz, am Boden', 'Im Mittelgang',
     'Seitlich in der hinteren Sitzreihe', 'Neben der mittleren Tür',
@@ -147,6 +148,42 @@
     drawPreview();
   }
 
+  function renderComposition() {
+    const panel = el('exerciseComposition');
+    panel.hidden = !exercise;
+    if (!exercise) return;
+
+    const cars = new Map();
+    const buses = new Map();
+    let other = 0;
+    for (const patient of exercise.patients) {
+      const carNumber = patient.model?.car_number;
+      const bus = busStationPattern.exec(patient.id);
+      const exampleCar = exercise.case === 'vu-baum' && ['fahrer', 'beifahrer'].includes(patient.id);
+      if (carNumber != null || exampleCar) {
+        const label = exampleCar ? 'Beispiel-Pkw' : 'Pkw ' + String(carNumber).padStart(2, '0');
+        cars.set(label, (cars.get(label) ?? 0) + 1);
+      } else if (bus) {
+        const label = 'Bus (' + bus[1] + ' Plätze)';
+        buses.set(label, (buses.get(label) ?? 0) + 1);
+      } else {
+        other++;
+      }
+    }
+    el('compositionCars').textContent = cars.size;
+    el('compositionBuses').textContent = buses.size;
+    el('compositionPatients').textContent = exercise.patients.length;
+    const vehicles = (counts) => [...counts].sort(([a], [b]) => a.localeCompare(b, 'de', { numeric: true }));
+    const details = [...vehicles(cars), ...vehicles(buses)]
+      .map(([label, count]) => label + ' · ' + count + (count === 1 ? ' Person' : ' Personen'));
+    if (other) details.push(other === 1 ? '1 weitere Person' : other + ' weitere Personen');
+    el('compositionDetails').replaceChildren(...details.map((label) => {
+      const item = document.createElement('li');
+      item.textContent = label;
+      return item;
+    }));
+  }
+
   function renderExercise(next) {
     const previous = selectedPatient()?.id;
     const changed = exercise?.id !== next?.id;
@@ -163,6 +200,7 @@
     el('busBriefing').hidden = !briefing;
     el('busBriefing').textContent = briefing ?? '';
     if (!next) {
+      renderComposition();
       el('choose').replaceChildren();
       el('patientOverview').replaceChildren();
       el('liveTitle').textContent = '';
@@ -176,6 +214,7 @@
     }
     const rebuild = changed || el('choose').options.length !== next.patients.length;
     if (rebuild) {
+      renderComposition();
       el('choose').replaceChildren(...next.patients.map((patient) => new Option(patientName(patient.id), patient.id)));
       el('choose').value = next.patients.some((patient) => patient.id === previous) ? previous : next.patients[0].id;
       if (changed) resetPreview();
@@ -249,7 +288,7 @@
       const seat = name.split(' · ').at(-1).replace(/^Fahrerplatz$/, 'Fahrer').replace(/^Beifahrerplatz$/, 'Beifahrer');
       return { group: 'PKW ' + number(model.car_number), label: number(model.car_patient_number) + ' ' + seat };
     }
-    const bus = /^bus-(5|10)-(\d{2})$/.exec(patient.id);
+    const bus = busStationPattern.exec(patient.id);
     if (bus) {
       const [, capacity, position] = bus;
       return {
