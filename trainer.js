@@ -5,11 +5,14 @@
   const api = window.TraumaSync;
   const previewDuration = Number(el('seek').max) * 60;
   const actions = Array.from(document.querySelectorAll('[data-action]'));
+  const sessionKey = 'traumasim:trainer-session';
+  const sessionLifetime = 24 * 60 * 60 * 1000;
   const categoryLabels = {
     red: 'SK I · Rot', yellow: 'SK II · Gelb', green: 'SK III · Grün',
     black: 'EX · Schwarz', affected: 'Unverletzt betroffen'
   };
   let auth = null;
+  let persistentSession = false;
   let exercise = null;
   let busy = false;
   let polling = false;
@@ -279,35 +282,121 @@
     }
   }
 
-  function session(data) {
-    if (!data?.access_token || !data.refresh_token) throw new Error('Die Anmeldung lieferte keine gültige Sitzung.');
-    auth = { ...data, deadline: Date.now() + data.expires_in * 1000 };
+  function readSession() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(sessionKey));
+      return saved && typeof saved.id === 'string' && typeof saved.access_token === 'string'
+        && typeof saved.refresh_token === 'string' && Number.isFinite(saved.deadline)
+        && Number.isFinite(saved.until) ? saved : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveSession(data, id, until) {
+    if (!data?.access_token || !data.refresh_token || !(data.expires_in > 0)) {
+      throw new Error('Die Anmeldung lieferte keine gültige Sitzung.');
+    }
+    auth = { id, until, access_token: data.access_token, refresh_token: data.refresh_token,
+      deadline: Date.now() + data.expires_in * 1000 };
+    try {
+      localStorage.setItem(sessionKey, JSON.stringify(auth));
+      persistentSession = true;
+    } catch {
+      persistentSession = false;
+    }
+  }
+
+  function currentSession() {
+    if (persistentSession) {
+      const saved = readSession();
+      auth = saved?.id === auth?.id ? saved : null;
+    }
+    return auth;
+  }
+
+  function needsLogin() {
+    return Object.assign(new Error('Die Ausbildersitzung ist abgelaufen. Bitte erneut anmelden.'), { status: 401 });
+  }
+
+  async function refreshSession() {
+    const refresh = async () => {
+      const current = currentSession();
+      if (!current || Date.now() >= current.until) throw needsLogin();
+      if (Date.now() + 30000 < current.deadline) return;
+      let data;
+      try {
+        data = await api.refresh(current.refresh_token);
+      } catch (error) {
+        if ([400, 401, 403].includes(error.status)) throw needsLogin();
+        throw error;
+      }
+      const latest = currentSession();
+      if (!latest || latest.id !== current.id || Date.now() >= latest.until) throw needsLogin();
+      if (latest.refresh_token === current.refresh_token) saveSession(data, current.id, current.until);
+    };
+    // Read the stored token inside the lock because another tab may have rotated it.
+    if (navigator.locks) await navigator.locks.request(sessionKey, refresh);
+    else await refresh();
   }
 
   async function rpc(params, call = api.trainer) {
-    if (Date.now() + 30000 >= auth.deadline) {
+    const current = currentSession();
+    if (!current || Date.now() >= current.until) throw needsLogin();
+    if (Date.now() + 30000 >= current.deadline) {
       if (!refreshing) {
-        const current = auth;
-        refreshing = api.refresh(current.refresh_token).then((data) => {
-          if (auth === current) session(data);
-        }).finally(() => { refreshing = null; });
+        refreshing = refreshSession().finally(() => { refreshing = null; });
       }
       await refreshing;
     }
-    if (!auth) throw new Error('Bitte erneut anmelden.');
-    return call(params, auth.access_token);
+    const ready = currentSession();
+    if (!ready || ready.id !== current.id || Date.now() >= ready.until) throw needsLogin();
+    const result = await call(params, ready.access_token);
+    if (currentSession()?.id !== ready.id) throw needsLogin();
+    return result;
   }
 
-  function signedOut() {
-    const token = auth?.access_token;
+  function signedOut(revoke = false) {
+    const saved = readSession();
+    const current = saved && saved.id === auth?.id ? saved : auth;
+    if (current && saved?.id === current.id) {
+      try { localStorage.removeItem(sessionKey); } catch {}
+    }
     auth = null;
+    persistentSession = false;
+    actionVersion++;
     renderExercise(null);
     el('exercise').replaceChildren();
     el('workspace').hidden = true;
     showView(false);
     el('logout').hidden = true;
     el('login').hidden = false;
-    if (token) void api.signOut(token).catch(() => {});
+    if (revoke && current) void api.signOut(current.access_token).catch(() => {});
+  }
+
+  function handleError(error) {
+    if (error.status === 401 || (error.code === '42501'
+      && error.message === 'Konto nicht für die Ausbilderansicht freigegeben')) {
+      signedOut();
+    } else if (error.code === '42501' && error.message === 'Übung nicht verfügbar oder abgelaufen') {
+      el('exercise').selectedOptions[0]?.remove();
+      el('exercise').value = '';
+      renderExercise(null);
+    }
+    message(error.message);
+  }
+
+  async function openWorkspace(list) {
+    options(el('exercise'), list, 'Übung auswählen');
+    el('login').hidden = true;
+    el('logout').hidden = false;
+    el('workspace').hidden = false;
+    message('Als Ausbilder angemeldet.');
+    if (list.length) {
+      el('exercise').value = list[0].id;
+      renderExercise(await rpc({ p_action: 'status', p_session: list[0].id }));
+      showView(true);
+    }
   }
 
   async function run(work) {
@@ -319,8 +408,8 @@
     try {
       await work();
     } catch (error) {
-      if (error.status === 401 || error.code === '42501' || el('workspace').hidden) signedOut();
-      message(error.message);
+      if (el('workspace').hidden) el('login').hidden = false;
+      handleError(error);
     } finally {
       busy = false;
       for (const control of document.querySelectorAll('form button, #logout, #exercise, #createCustom, #startBus, #attachBus')) control.disabled = false;
@@ -345,25 +434,17 @@
       return;
     }
     void run(async () => {
-      session(await api.signIn(email, password));
+      const data = await api.signIn(email, password);
       el('password').value = '';
-      const list = await rpc({ p_action: 'list' });
-      options(el('exercise'), list, 'Übung auswählen');
-      el('login').hidden = true;
-      el('logout').hidden = false;
-      el('workspace').hidden = false;
-      message('Als Ausbilder angemeldet.');
-      if (list.length) {
-        el('exercise').value = list[0].id;
-        renderExercise(await rpc({ p_action: 'status', p_session: list[0].id }));
-        showView(true);
-      }
+      const list = await api.trainer({ p_action: 'list' }, data.access_token);
+      saveSession(data, crypto.randomUUID(), Date.now() + sessionLifetime);
+      await openWorkspace(list);
     });
   });
 
   el('logout').addEventListener('click', () => {
     if (busy) return;
-    signedOut();
+    signedOut(true);
     message('Abgemeldet.');
   });
   el('exercise').addEventListener('change', () => {
@@ -580,7 +661,13 @@
     drawPreview();
   }, 200);
   async function poll() {
-    if (!auth || !exercise || busy || polling || document.hidden) return;
+    if (!auth || busy || polling || document.hidden) return;
+    if (Date.now() >= auth.until) {
+      signedOut(true);
+      message(needsLogin().message);
+      return;
+    }
+    if (!exercise) return;
     polling = true;
     const version = actionVersion;
     try {
@@ -588,8 +675,7 @@
       if (auth && version === actionVersion) renderExercise(next);
     } catch (error) {
       if (auth && version === actionVersion) {
-        if (error.status === 401 || error.code === '42501') signedOut();
-        message(error.message);
+        handleError(error);
       }
     } finally {
       polling = false;
@@ -597,4 +683,24 @@
   }
 
   setInterval(poll, 3000);
+  window.addEventListener('storage', (event) => {
+    if ((event.key !== sessionKey && event.key !== null) || !persistentSession || !auth) return;
+    if (readSession()?.id === auth.id) return;
+    signedOut();
+    message('Bitte die Ausbilderansicht neu laden oder erneut anmelden.');
+  });
+
+  const saved = readSession();
+  if (saved) {
+    auth = saved;
+    persistentSession = true;
+    if (Date.now() >= saved.until) {
+      signedOut(true);
+      message(needsLogin().message);
+    } else {
+      el('login').hidden = true;
+      message('Ausbildersitzung wird geladen …');
+      void run(async () => openWorkspace(await rpc({ p_action: 'list' })));
+    }
+  }
 })();

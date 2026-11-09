@@ -5,7 +5,9 @@
 1. In der Ausbilderansicht mit einem freigegebenen, bestätigten Supabase-Auth-Konto
    anmelden. Für die Ersteinrichtung dort E-Mail und Passwort eingeben und
    „Ausbilderkonto einrichten“ wählen. Danach den Bestätigungslink in der E-Mail
-   öffnen, zur Ausbilderansicht zurückkehren und anmelden.
+   öffnen, zur Ausbilderansicht zurückkehren und anmelden. Die Anmeldung
+   bleibt im selben Browserprofil bis zu 24 Stunden gültig. **Abmelden**
+   beendet sie auch in weiteren Ausbilder-Tabs desselben Profils.
 2. In **Konfiguration** eine Übung anlegen und Stationen zusammenstellen
    oder oben eine vorhandene Übung auswählen. Unter **Übung** den
    Übungs-QR zeigen. Teilnehmende
