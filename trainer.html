@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=patient-forecast">
+  <link rel="stylesheet" href="style.css?v=qr-print">
 </head>
 <body><main>
   <section class="panel">
@@ -80,6 +80,17 @@
       <section id="live" class="panel" hidden>
         <h2>Patientenübersicht</h2>
         <p id="liveTitle"></p>
+        <details>
+          <summary>QR-Druckliste (A4)</summary>
+          <label>QR-Codes pro Seite
+            <select id="printPerPage">
+              <option value="2">2 pro Seite</option>
+              <option value="1">1 pro Seite</option>
+            </select>
+          </label>
+          <button id="printStations" type="button">Drucken / als PDF speichern</button>
+          <p class="muted small">Die Liste ist nach Fahrzeugen sortiert. Wähle im Druckdialog deinen Drucker oder „Als PDF speichern“.</p>
+        </details>
         <ul id="patientOverview" class="patient-overview" aria-label="Live-Zustand aller Patienten"></ul>
       </section>
       <section id="patientControls" class="panel" hidden>
@@ -133,10 +144,11 @@
     </div>
   </div>
 </main>
+<div id="stationPrint" class="station-print"></div>
 <script src="patients.js"></script>
 <script src="supabase-config.js"></script>
 <script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
-<script src="trainer.js?v=patient-overview"></script>
+<script src="trainer.js?v=qr-print"></script>
 </body>
 </html>

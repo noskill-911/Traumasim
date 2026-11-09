@@ -11,6 +11,13 @@
     red: 'SK I · Rot', yellow: 'SK II · Gelb', green: 'SK III · Grün',
     black: 'EX · Schwarz', affected: 'Unverletzt betroffen'
   };
+  const busLocations = [
+    'Neben der Fahrertür', 'Vorn am Querplatz, am Boden', 'Im Mittelgang',
+    'Seitlich in der hinteren Sitzreihe', 'Neben der mittleren Tür',
+    'Zweite Sitzreihe, neben dem Sitz', 'An der Mitteltür, am Boden',
+    'Im Türbereich, nahe dem Haltegriff', 'Hinten links am Fensterplatz',
+    'An der Hintertür, zwischen Sitzreihe und Tür'
+  ];
   let auth = null;
   let persistentSession = false;
   let exercise = null;
@@ -222,6 +229,96 @@
     }
   }
 
+  function stationUrl(patient) {
+    const url = new URL('patient.html', location.href);
+    url.search = new URLSearchParams({ case: exercise.case, patient: patient.id });
+    return url;
+  }
+
+  function patientLink(url, patient) {
+    const link = new URL(url);
+    link.hash = new URLSearchParams({ code: patient.code });
+    return link.href;
+  }
+
+  function printLabel(patient) {
+    const number = (value) => String(value).padStart(2, '0');
+    const name = patientName(patient.id);
+    const model = patient.model;
+    if (model?.car_number != null) {
+      const seat = name.split(' · ').at(-1).replace(/^Fahrerplatz$/, 'Fahrer').replace(/^Beifahrerplatz$/, 'Beifahrer');
+      return { group: 'PKW ' + number(model.car_number), label: number(model.car_patient_number) + ' ' + seat };
+    }
+    const bus = /^bus-(5|10)-(\d{2})$/.exec(patient.id);
+    if (bus) {
+      const [, capacity, position] = bus;
+      return {
+        group: 'Bus · ' + capacity + ' Personen',
+        label: position + (position === '01' ? ' Busfahrer' : ' Fahrgast'),
+        place: busLocations[Number(position) - 1]
+      };
+    }
+    return { group: 'Weitere Stationen', label: name };
+  }
+
+  el('printStations').addEventListener('click', () => {
+    if (!exercise?.patients.length) return;
+    if (typeof window.qrcode !== 'function') {
+      message('QR-Codes sind gerade nicht verfügbar. Lade die Seite neu.');
+      return;
+    }
+    const perPage = Number(el('printPerPage').value);
+    const groups = new Map();
+    for (const patient of exercise.patients) {
+      const label = printLabel(patient);
+      const url = stationUrl(patient);
+      const qrUrl = patient.model?.car_number != null ? patientLink(url, patient) : url.href;
+      if (!groups.has(label.group)) groups.set(label.group, []);
+      groups.get(label.group).push({ ...label, qrUrl });
+    }
+    const pages = [];
+    const sortedGroups = [...groups.entries()].sort(([a], [b]) => {
+      const order = (name) => name.startsWith('PKW ') ? 0 : name.startsWith('Bus ') ? 1 : 2;
+      return order(a) - order(b) || a.localeCompare(b, 'de', { numeric: true });
+    });
+    for (const [group, stations] of sortedGroups) {
+      for (let offset = 0; offset < stations.length; offset += perPage) {
+        const sheet = document.createElement('section');
+        sheet.className = 'station-sheet';
+        for (const station of stations.slice(offset, offset + perPage)) {
+          const card = document.createElement('article');
+          const vehicle = document.createElement('h2');
+          vehicle.textContent = group;
+          const patient = document.createElement('p');
+          patient.className = 'station-card-label';
+          patient.textContent = station.label;
+          const code = document.createElement('div');
+          code.className = 'station-card-qr';
+          drawQr(code, station.qrUrl, 'Stations-QR');
+          card.append(vehicle, patient, code);
+          if (station.place) {
+            const place = document.createElement('p');
+            place.className = 'station-card-place';
+            place.textContent = 'Auffindeort · ' + station.place;
+            card.append(place);
+          }
+          sheet.append(card);
+        }
+        pages.push(sheet);
+      }
+    }
+    const print = el('stationPrint');
+    print.classList.toggle('two-per-page', perPage === 2);
+    print.replaceChildren(...pages);
+    document.body.classList.add('printing-stations');
+    window.print();
+  });
+
+  window.addEventListener('afterprint', () => {
+    document.body.classList.remove('printing-stations');
+    el('stationPrint').replaceChildren();
+  });
+
   function renderOverview(rebuild = false) {
     const overview = el('patientOverview');
     if (rebuild) {
@@ -264,19 +361,17 @@
   function renderPatient() {
     const patient = selectedPatient();
     if (!patient) return;
-    const url = new URL('patient.html', location.href);
-    url.search = new URLSearchParams({ case: exercise.case, patient: patient.id });
-    const station = url.href;
-    url.hash = new URLSearchParams({ code: patient.code });
+    const station = stationUrl(patient).href;
+    const link = patientLink(station, patient);
     const carPatient = patient.model?.car_number != null;
     el('stationTitle').textContent = carPatient ? patientName(patient.id) : 'Stations-QR für diesen Patienten';
     const downloadPath = patient.custom ? null : 'qr/' + encodeURIComponent(exercise.case + '-' + patient.id) + '.svg';
-    renderStation(carPatient ? url.href : station, downloadPath);
+    renderStation(carPatient ? link : station, downloadPath);
     const linkField = el('patientLink');
-    if (linkField.value !== url.href) {
-      linkField.value = url.href;
+    if (linkField.value !== link) {
+      linkField.value = link;
       linkField.hidden = true;
-      el('openPatientLink').href = url.href;
+      el('openPatientLink').href = link;
     }
     el('patientStatus').textContent = [categoryLabels[patient.category], api.labels[patient.status],
       api.clock(patient.elapsed)].filter(Boolean).join(' · ');

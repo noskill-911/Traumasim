@@ -11,6 +11,11 @@ Ausbilder legen eine Übung an und zeigen den Übungs-QR. Teilnehmende scannen i
 einmal und wählen eine freigegebene Person oder öffnen im selben Browser
 einen Patienten-QR vor Ort. Stations-QRs sind in der Live-Übersicht der
 Ausbilder unter **Patient im Detail** zu finden.
+
+Unter **Patientenübersicht → QR-Druckliste (A4)** lassen sich die
+Stations-QRs der gewählten Übung fahrzeugweise mit einem oder zwei Codes
+pro Seite drucken. Die Buskarten zeigen den Auffindeort. Im Druckdialog
+kann die Liste auch als PDF gespeichert werden.
 Der erste gültige Patientenaufruf startet den Patienten geräteübergreifend. Beim erneuten Öffnen läuft derselbe Verlauf weiter.
 Die simulierte Vorsichtung erscheint ab 10 Sekunden (SK III, grün),
 20 Sekunden (SK II, gelb) oder 35 Sekunden (SK I, rot) gemeinsamer Patientenzeit.

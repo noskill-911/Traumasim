@@ -49,3 +49,35 @@ button:disabled { opacity: .55; cursor: default; }
 .car-seat label { margin: .4rem 0; }
 #carSituation, .seat-injury { width: 100%; padding: .55rem; }
 .triage.black { background: #101114; border-color: #c2c5cc; color: #f5f5f5; }
+
+.station-print { display: none; }
+@media print {
+  @page { size: A4 portrait; margin: 12mm; }
+  body.printing-stations { color-scheme: light; margin: 0; padding: 0; background: white; color: #161616; }
+  body.printing-stations > main { display: none; }
+  body.printing-stations .station-print { display: block; }
+  .station-sheet {
+    display: grid;
+    grid-template-rows: 1fr;
+    height: 270mm;
+    break-inside: avoid;
+    break-after: page;
+  }
+  .station-sheet:last-child { break-after: auto; }
+  .two-per-page .station-sheet { grid-template-rows: repeat(2, 1fr); }
+  .station-sheet article {
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 2mm;
+    padding: 8mm;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+  .station-sheet article + article { border-top: 1px dashed #707070; }
+  .station-sheet h2 { margin: 0; font-size: 22pt; }
+  .station-card-label { margin: 0; font-size: 17pt; }
+  .station-card-place { margin: 0; font-size: 13pt; }
+  .station-card-qr svg { display: block; width: 88mm; height: 88mm; }
+  .two-per-page .station-card-qr svg { width: 62mm; height: 62mm; }
+}
