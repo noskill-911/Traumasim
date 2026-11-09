@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=trainer-config">
+  <link rel="stylesheet" href="style.css?v=trainer-header">
 </head>
 <body><main>
   <section class="panel">
@@ -29,6 +29,30 @@
         <button id="showConfiguration" type="button" aria-controls="configurationView" aria-pressed="true">Konfiguration</button>
         <button id="showExercise" type="button" aria-controls="exerciseView" aria-pressed="false">Übung</button>
       </nav>
+      <div id="exerciseToolbar" class="exercise-toolbar" hidden>
+        <section id="exerciseJoin" class="exercise-tool" aria-labelledby="exerciseJoinTitle" hidden>
+          <h2 id="exerciseJoinTitle">Übungs-QR</h2>
+          <div id="joinQr" class="exercise-qr"></div>
+          <div class="exercise-tool-actions">
+            <button id="resizeJoinQr" type="button" aria-controls="joinQr">QR vergrößern</button>
+            <button id="copyJoin" type="button">Übungslink kopieren</button>
+          </div>
+          <input id="joinLink" aria-label="Übungslink zum manuellen Kopieren" readonly hidden>
+          <details class="exercise-briefing">
+            <summary>Briefing</summary>
+            <p class="muted small">Zeige den Übungs-QR beim Briefing und platziere die Stations-QRs bei den Patienten. Während der Übung öffnen die Teilnehmenden die Stations-QRs vor Ort im selben Browser.</p>
+            <p id="busBriefing" hidden></p>
+          </details>
+        </section>
+        <section class="exercise-tool" aria-labelledby="exerciseActionsTitle">
+          <h2 id="exerciseActionsTitle">Ganze Übung steuern</h2>
+          <div class="exercise-tool-actions">
+            <button id="resetAll" type="button" data-action="reset_all">Ganze Übung zurücksetzen</button>
+            <button id="closeExercise" class="exercise-end" type="button" data-action="close">Übung beenden</button>
+          </div>
+          <p id="expiry" class="muted small"></p>
+        </section>
+      </div>
       <div id="exerciseComposition" class="exercise-composition" hidden>
         <h2>Übungsbesetzung</h2>
         <dl class="composition-counts">
@@ -132,15 +156,6 @@
           </div>
         </details>
       </section>
-      <details id="exerciseJoin" class="panel" hidden>
-        <summary>Übungs-QR und Briefing</summary>
-        <p id="busBriefing" hidden></p>
-        <p>Zeige den Übungs-QR beim Briefing und platziere die Stations-QRs bei den Patienten. Der Übungs-QR speichert nur den Zugang. Während der Übung suchen die Teilnehmenden die Patienten und öffnen deren Stations-QRs im selben Browser.</p>
-        <div id="joinQr" class="exercise-qr"></div>
-        <label>Übungslink <input id="joinLink" readonly></label>
-        <button id="copyJoin">Übungslink kopieren</button>
-        <p id="expiry" class="muted small"></p>
-      </details>
       <details id="preview" class="panel" hidden>
         <summary>Verlaufsvorschau für den ausgewählten Patienten</summary>
         <p id="secret"></p>
@@ -155,11 +170,6 @@
         <div id="triage" class="triage yellow"></div>
         <div class="grid" id="vitals"></div>
       </details>
-      <details id="exerciseActions" class="panel" hidden>
-        <summary>Ganze Übung steuern</summary>
-        <button id="resetAll" data-action="reset_all">Ganze Übung zurücksetzen</button>
-        <button id="closeExercise" data-action="close">Übung beenden</button>
-      </details>
     </div>
   </div>
 </main>
@@ -168,6 +178,6 @@
 <script src="supabase-config.js"></script>
 <script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
-<script src="trainer.js?v=trainer-config"></script>
+<script src="trainer.js?v=trainer-header"></script>
 </body>
 </html>

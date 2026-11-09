@@ -9,8 +9,8 @@
    bleibt im selben Browserprofil bis zu 24 Stunden gültig. **Abmelden**
    beendet sie auch in weiteren Ausbilder-Tabs desselben Profils.
 2. In **Konfiguration** eine Übung anlegen und Stationen zusammenstellen
-   oder oben eine vorhandene Übung auswählen. Unter **Übung** den
-   Übungs-QR beim Briefing zeigen. Teilnehmende scannen ihn einmal und
+   oder oben eine vorhandene Übung auswählen. Direkt unter der Auswahl
+   steht der Übungs-QR fürs Briefing. Teilnehmende scannen ihn einmal und
    können die Seite danach schließen. Während der Übung suchen sie die
    Patienten und öffnen die Stations-QRs im selben Browser. Der Beitritt
    speichert nur den Übungszugang.
@@ -24,7 +24,8 @@
 5. Die Patientenübersicht zeigt den Status, die Zeit seit Patientenstart
    und bei gestarteten Patienten die aktuelle Sichtungskategorie im
    Übungsmodell. Ein Klick auf den Patienten öffnet seine Auswahl für
-   Steuerung, QR-Code und Vorschau. **Übung beenden** schließt die Übung
+   Steuerung, QR-Code und Vorschau. Die Steuerung für die ganze Übung
+   steht oben neben dem Übungs-QR. **Übung beenden** schließt die Übung
    samt QR-Zugängen.
 6. Die Übung ist auf 45 Minuten ausgelegt. Die Zeit zählt ab dem jeweiligen
    Patientenstart. Bei älteren 25-Minuten-Profilen gelten danach die letzten

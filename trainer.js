@@ -191,7 +191,7 @@
     el('noExercise').hidden = Boolean(next);
     el('live').hidden = !next;
     el('patientControls').hidden = !next;
-    el('exerciseActions').hidden = !next;
+    el('exerciseToolbar').hidden = !next;
     el('preview').hidden = !next;
     renderJoin(next?.join_code);
     el('attachBus').hidden = !next;
@@ -227,17 +227,27 @@
 
   function renderJoin(code) {
     el('exerciseJoin').hidden = !code;
+    const link = el('joinLink');
     if (!code) {
       el('joinQr').replaceChildren();
       delete el('joinQr').dataset.url;
-      el('joinLink').value = '';
+      link.value = '';
+      link.hidden = true;
       return;
     }
     const url = new URL('join.html', location.href);
     url.hash = new URLSearchParams({ access: code });
-    el('joinLink').value = url.href;
+    if (link.value !== url.href) {
+      link.value = url.href;
+      link.hidden = true;
+    }
     drawQr(el('joinQr'), url.href, 'QR-Code zum Übungsbeitritt');
   }
+
+  el('resizeJoinQr').addEventListener('click', () => {
+    const enlarged = el('joinQr').classList.toggle('is-enlarged');
+    el('resizeJoinQr').textContent = enlarged ? 'QR verkleinern' : 'QR vergrößern';
+  });
 
   function drawQr(container, url, title) {
     if (container.dataset.url === url) return;
