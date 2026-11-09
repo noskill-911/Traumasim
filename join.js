@@ -9,6 +9,7 @@
 
   async function join() {
     el('joinRetry').hidden = true;
+    el('joinInstructions').hidden = true;
     el('joinStatus').textContent = 'Übungszugang wird geprüft …';
     let exercise;
     try {
@@ -32,23 +33,9 @@
     }
 
     history.replaceState(null, '', location.pathname + '?' + new URLSearchParams({ case: exercise.case }));
-    el('joinTitle').textContent = exercise.title;
-    const preset = window.TRAUMA_CASES.find((item) => item.id === exercise.case);
-    const patients = exercise.patients ?? (exercise.hidden_stations ? [] : preset?.patients ?? []);
-    const items = patients.map((patient) => {
-      const item = document.createElement('li');
-      const link = document.createElement('a');
-      link.className = 'action';
-      link.href = 'patient.html?' + new URLSearchParams({ case: exercise.case, patient: patient.id });
-      link.textContent = patient.name ?? preset?.patients.find((item) => item.id === patient.id)?.name ?? patient.id;
-      item.append(link);
-      return item;
-    });
-    el('joinedPatients').replaceChildren(...items);
-    el('joinedPatients').hidden = items.length === 0;
-    el('joinStatus').textContent = items.length
-      ? 'Du bist der Übung beigetreten. Wähle eine angezeigte Person oder scanne einen Stations-QR vor Ort im selben Browser.'
-      : 'Du bist der Übung beigetreten. Scanne die einzelnen Patienten-QRs vor Ort.';
+    el('joinTitle').textContent = 'Bereit für die Übung';
+    el('joinStatus').textContent = 'Dein Übungszugang ist in diesem Browser gespeichert.';
+    el('joinInstructions').hidden = false;
   }
 
   el('joinRetry').addEventListener('click', join);

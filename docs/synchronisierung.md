@@ -10,9 +10,10 @@
    beendet sie auch in weiteren Ausbilder-Tabs desselben Profils.
 2. In **Konfiguration** eine Übung anlegen und Stationen zusammenstellen
    oder oben eine vorhandene Übung auswählen. Unter **Übung** den
-   Übungs-QR zeigen. Teilnehmende
-   scannen ihn einmal. Danach funktionieren im selben Browser die vorhandenen
-   Patienten-QR-Codes. Der Beitritt startet noch keinen Patienten.
+   Übungs-QR beim Briefing zeigen. Teilnehmende scannen ihn einmal und
+   können die Seite danach schließen. Während der Übung suchen sie die
+   Patienten und öffnen die Stations-QRs im selben Browser. Der Beitritt
+   speichert nur den Übungszugang.
    Ein separat kopierter Patientenlink gilt weiterhin nur für den jeweiligen
    Patienten dieser Übung und funktioniert auch ohne vorherigen Beitritt.
 3. Beim ersten gültigen Aufruf setzt PostgreSQL die gemeinsame Startzeit. Geöffnete
@@ -39,8 +40,8 @@ Danach den gespeicherten Entwurf oder eine exportierte JSON-Datei in der
 Ausbilderansicht als Live-Übung starten. Unterstützt werden bis zu 30
 Patienten. Ein Live-Durchlauf verwendet eine eigene Kopie der Falldaten.
 
-Teilnehmende scannen den Übungs-QR und wählen auf der Beitrittsseite einen
-Patienten oder nutzen den Stations-QR im selben Browser. Der Stations-QR
+Teilnehmende scannen den Übungs-QR beim Briefing und nutzen später die
+Stations-QRs vor Ort im selben Browser. Der Stations-QR
 eines eigenen Falls gehört zu diesem Live-Durchlauf. Bei der Beispielübung
 gelten weiterhin die vorhandenen Fahrer- und Beifahrer-QRs. Ausbildertexte
 aus eigenen Szenarien sind nur in der Ausbilderansicht verfügbar.

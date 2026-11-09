@@ -7,9 +7,10 @@ Patientensimulator für die Feuerwehr- und Rettungsdienstausbildung.
 - [TraumaSim-Startseite](https://noskill-911.github.io/Traumasim/)
 - [Ausbilderansicht](https://noskill-911.github.io/Traumasim/trainer.html)
 
-Ausbilder legen eine Übung an und zeigen den Übungs-QR. Teilnehmende scannen ihn
-einmal und wählen eine freigegebene Person oder öffnen im selben Browser
-einen Patienten-QR vor Ort. Stations-QRs sind in der Live-Übersicht der
+Ausbilder legen eine Übung an und zeigen beim Briefing den Übungs-QR. Die
+Teilnehmenden speichern damit den Zugang im Browser und können die Seite
+schließen. Während der Übung suchen sie die Patienten und öffnen jeweils
+den Stations-QR vor Ort im selben Browser. Stations-QRs sind in der Live-Übersicht der
 Ausbilder unter **Patient im Detail** zu finden.
 
 Unter **Patientenübersicht → QR-Druckliste (A4)** lassen sich die
