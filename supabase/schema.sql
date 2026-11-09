@@ -226,14 +226,6 @@ begin
    raise exception using errcode = '42501', message = 'Patientenzugang ungültig oder abgelaufen';
  end if;
 
- select coalesce(p.scenario_model, m.model) into model
- from public.traumasim_patients p
- left join traumasim_private.models m on m.case_key = p_case and m.patient_key = p.patient_key
- where p.session_id = exercise.id and p.patient_key = p_patient;
- if model is null then
-   raise exception using errcode = '42501', message = 'Patientenzugang ungültig oder abgelaufen';
- end if;
-
  if p_start_revision is not null then
    -- Serialize starts with whole-exercise resets and instructor commands.
    perform 1 from public.traumasim_sessions s
@@ -250,6 +242,14 @@ begin
  select p.* into patient from public.traumasim_patients p
  where p.session_id = exercise.id and p.patient_key = p_patient;
  if not found then
+   raise exception using errcode = '42501', message = 'Patientenzugang ungültig oder abgelaufen';
+ end if;
+ model := patient.scenario_model;
+ if model is null then
+   select m.model into model from traumasim_private.models m
+   where m.case_key = p_case and m.patient_key = p_patient;
+ end if;
+ if model is null then
    raise exception using errcode = '42501', message = 'Patientenzugang ungültig oder abgelaufen';
  end if;
 
@@ -607,6 +607,11 @@ declare
  entrapment text;
  injury text;
  points jsonb;
+ edit_car boolean := coalesce(p_config ? 'car_number', false);
+ edit_version integer;
+ existing_count integer;
+ has_started boolean;
+ patient_model jsonb;
 begin
  if jsonb_typeof(p_config) is distinct from 'object'
     or octet_length(p_config::text) > 12000
@@ -620,6 +625,10 @@ begin
  if (select count(distinct item->>'seat') from jsonb_array_elements(occupants) item) <> jsonb_array_length(occupants) then
    raise exception using errcode = '22023', message = 'Jeder Sitzplatz darf nur einmal besetzt sein.';
  end if;
+ if edit_car and (p_session is null or coalesce(p_config->>'car_number', '') !~ '^[1-9][0-9]?$'
+    or coalesce(p_config->>'edit_version', '') !~ '^[0-9]{1,9}$') then
+   raise exception using errcode = '22023', message = 'Die Pkw-Auswahl ist ungültig.';
+ end if;
 
  if p_session is null then
    exercise.id := gen_random_uuid();
@@ -631,14 +640,39 @@ begin
    if not found then
      raise exception using errcode = '42501', message = 'Übung nicht verfügbar oder abgelaufen';
    end if;
-   if (select count(*) from public.traumasim_patients p where p.session_id = exercise.id)
+   if not edit_car and (select count(*) from public.traumasim_patients p where p.session_id = exercise.id)
       + jsonb_array_length(occupants) > 30 then
      raise exception using errcode = '22023', message = 'Eine Übung unterstützt insgesamt bis zu 30 Patienten.';
    end if;
  end if;
 
- select coalesce(max((p.scenario_model->>'car_number')::integer), 0) + 1 into car_no
- from public.traumasim_patients p where p.session_id = exercise.id and p.patient_key like 'car-%';
+ if edit_car then
+   car_no := (p_config->>'car_number')::integer;
+   select count(*), bool_or(p.started_at is not null),
+          max(coalesce((p.scenario_model->>'car_edit_version')::integer, 0))
+   into existing_count, has_started, edit_version
+   from public.traumasim_patients p
+   where p.session_id = exercise.id and p.patient_key like 'car-%'
+     and (p.scenario_model->>'car_number')::integer = car_no;
+   if existing_count = 0 then
+     raise exception using errcode = '22023', message = 'Der Pkw wurde in dieser Übung nicht gefunden.';
+   end if;
+   if has_started then
+     raise exception using errcode = '22023', message = 'Setze die gestarteten Patienten dieses Pkw zuerst zurück.';
+   end if;
+   if edit_version <> (p_config->>'edit_version')::integer then
+     raise exception using errcode = '40001', message = 'Der Pkw wurde zwischenzeitlich bearbeitet. Öffne die Bearbeitung erneut.';
+   end if;
+   if existing_count <> jsonb_array_length(occupants)
+      or (select count(distinct item->>'patient_number') from jsonb_array_elements(occupants) item) <> existing_count then
+     raise exception using errcode = '22023', message = 'Speichere alle vorhandenen Insassen genau einmal.';
+   end if;
+   edit_version := edit_version + 1;
+ else
+   edit_version := 0;
+   select coalesce(max((p.scenario_model->>'car_number')::integer), 0) + 1 into car_no
+   from public.traumasim_patients p where p.session_id = exercise.id and p.patient_key like 'car-%';
+ end if;
  car_label := lpad(car_no::text, 2, '0');
 
  for person in select value from jsonb_array_elements(occupants)
@@ -714,20 +748,41 @@ begin
      into points from generate_series(0, 25, 5) minute;
    end if;
 
-   person_no := person_no + 1;
+   if edit_car then
+     if coalesce(person->>'patient_number', '') !~ '^[1-5]$' then
+       raise exception using errcode = '22023', message = 'Die Patientennummer ist ungültig.';
+     end if;
+     person_no := (person->>'patient_number')::integer;
+   else
+     person_no := person_no + 1;
+   end if;
    person_label := lpad(person_no::text, 2, '0');
-   insert into public.traumasim_patients (session_id, patient_key, scenario_model)
-   values (exercise.id, 'car-' || car_label || '-' || person_label, jsonb_build_object(
+   patient_model := jsonb_build_object(
      'name', format('Pkw %s · Patient %s · %s', car_label, person_label, seat_name),
      'intro', format('%s. Sitzplatz %s, %s.', rtrim(vehicle, '.'), seat_name, entrapment),
      'story', injury,
      'questions', '',
      'secret', format('Pkw %s · %s · %s. %s', car_label, seat_name, entrapment, injury),
      'car_number', car_no, 'car_patient_number', person_no,
+     'car_vehicle', nullif(btrim(p_config->>'vehicle'), ''),
+     'car_seat', person->>'seat', 'car_profile', profile, 'car_entrapment', person->>'entrapment',
+     'car_injury', nullif(btrim(person->>'injury'), ''), 'car_edit_version', edit_version,
      'affected', profile = 'affected', 'walkable', profile in ('affected','minor'),
      'nibpFastCycle', profile in ('critical','urgent-red','red-ex'),
      'progression', progression, 'points', points
-   ));
+   );
+   if edit_car then
+     update public.traumasim_patients p
+     set scenario_model = patient_model, updated_at = clock_timestamp()
+     where p.session_id = exercise.id and p.patient_key = 'car-' || car_label || '-' || person_label
+       and (p.scenario_model->>'car_number')::integer = car_no;
+     if not found then
+       raise exception using errcode = '22023', message = 'Ein Insasse wurde in diesem Pkw nicht gefunden.';
+     end if;
+   else
+     insert into public.traumasim_patients (session_id, patient_key, scenario_model)
+     values (exercise.id, 'car-' || car_label || '-' || person_label, patient_model);
+   end if;
  end loop;
  return traumasim_private.trainer('status', exercise.id);
 end;

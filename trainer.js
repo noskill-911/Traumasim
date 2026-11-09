@@ -28,6 +28,7 @@
   let refreshing = null;
   let previewTime = 0;
   let previewTick = null;
+  let carEditVersion = 0;
 
   if (new URLSearchParams(location.hash.slice(1)).has('access_token')) {
     history.replaceState(null, '', location.pathname + location.search);
@@ -195,7 +196,8 @@
     el('preview').hidden = !next;
     renderJoin(next?.join_code);
     el('attachBus').hidden = !next;
-    el('attachCar').hidden = !next;
+    if (changed || el('choose').options.length !== (next?.patients.length ?? 0)) updateCarChoices(changed);
+    updateCarActions();
     const briefing = next?.patients.find((patient) => patient.model?.bus_briefing)?.model.bus_briefing;
     el('busBriefing').hidden = !briefing;
     el('busBriefing').textContent = briefing ?? '';
@@ -552,7 +554,8 @@
     if (busy) return;
     busy = true;
     actionVersion++;
-    for (const control of document.querySelectorAll('form button, #logout, #exercise, #createCustom, #startBus, #attachBus')) control.disabled = true;
+    const controls = document.querySelectorAll('form button, #logout, #exercise, #createCustom, #startBus, #attachBus, #editCar');
+    for (const control of controls) control.disabled = true;
     renderPatient();
     try {
       await work();
@@ -561,7 +564,8 @@
       handleError(error);
     } finally {
       busy = false;
-      for (const control of document.querySelectorAll('form button, #logout, #exercise, #createCustom, #startBus, #attachBus')) control.disabled = false;
+      for (const control of controls) control.disabled = false;
+      updateCarActions();
       renderPatient();
     }
   }
@@ -716,21 +720,131 @@
       }
     });
     el('carSeats').append(group);
-    return { seat, profile, transition, access, entrapment, injury: group.querySelector('.seat-injury') };
+    return { seat, label, group, profile, transition, access, entrapment, injury: group.querySelector('.seat-injury') };
   });
+
+  function carPatients(number) {
+    if (!number) return [];
+    return (exercise?.patients ?? []).filter((patient) => patient.model?.car_number === Number(number));
+  }
+
+  function updateCarChoices(changed) {
+    const select = el('editCar');
+    const previous = changed ? '' : select.value;
+    const numbers = [...new Set((exercise?.patients ?? []).map((p) => p.model?.car_number).filter((n) => n != null))];
+    numbers.sort((a, b) => a - b);
+    select.replaceChildren(new Option('Neuen Pkw konfigurieren', ''),
+      ...numbers.map((number) => new Option('Pkw ' + String(number).padStart(2, '0') + ' bearbeiten', number)));
+    select.value = numbers.includes(Number(previous)) ? previous : '';
+    el('editCarChoice').hidden = !numbers.length;
+    if (changed) loadCarForm();
+  }
+
+  function legacyCarConfig(model) {
+    // Older bookings stored the generated description but not the form values.
+    const seat = model.name.split(' · ').at(-1);
+    const separator = '. Sitzplatz ' + seat + ', ';
+    const at = model.intro.lastIndexOf(separator);
+    const vehicle = at < 0 ? '' : model.intro.slice(0, at);
+    const entrapment = {
+      'eingeschlossen, Ausstieg versperrt': 'enclosed',
+      'im Bereich von Tür und B-Säule eingeklemmt': 'door',
+      'mit einem Bein im deformierten Fußraum eingeklemmt': 'footwell',
+      'zwischen Sitz und Armaturenbrett eingeklemmt': 'dashboard',
+      'im Bereich von Dach und Sitz eingeklemmt': 'roof'
+    }[at < 0 ? '' : model.intro.slice(at + separator.length, -1)] ?? 'none';
+    const profile = model.progression
+      ? { yellow: 'green-yellow', red: 'urgent-red', black: 'red-ex' }[model.progression.to]
+      : model.affected ? 'affected' : model.walkable ? 'minor' : model.nibpFastCycle ? 'critical' : 'urgent';
+    const defaults = {
+      affected: 'Keine Verletzung in dieser Übungsrolle. Die Person ist aufgewühlt.',
+      minor: 'Die Person ist orientiert und klagt über eine schmerzhafte Prellung.',
+      urgent: 'Die Person klagt über starke Schmerzen an einer Extremität. Verdacht auf eine Fraktur.',
+      critical: 'Die Person ist blass, antwortet verzögert und wirkt zunehmend benommen.',
+      'green-yellow': 'Beim Aufprall ist mein Unterschenkel gegen den Sitz vor mir gestoßen. Ein paar Schritte gingen noch, aber es tut weh.',
+      'urgent-red': 'Die Person ist zunächst orientiert und klagt über Schmerzen nach einem Anprall.',
+      'red-ex': 'Die Person ist blass, antwortet verzögert und wirkt zunehmend benommen.'
+    };
+    return {
+      seat: seatControls.find((row) => row.label.toLowerCase() === seat.toLowerCase())?.seat,
+      vehicle: vehicle === 'Fahrzeuglage vor Ort erkunden' ? '' : vehicle,
+      profile, entrapment, injury: model.story === defaults[profile] ? '' : model.story
+    };
+  }
+
+  function loadCarForm() {
+    const patients = carPatients(el('editCar').value);
+    el('carForm').reset();
+    for (const row of seatControls) {
+      row.group.hidden = Boolean(patients.length);
+      row.profile.options[0].disabled = Boolean(patients.length);
+      row.patientNumber = null;
+      row.profile.dispatchEvent(new Event('change'));
+    }
+    carEditVersion = patients[0]?.model.car_edit_version ?? 0;
+    for (const {model} of patients) {
+      const config = model.car_seat ? {
+        seat: model.car_seat, vehicle: model.car_vehicle, profile: model.car_profile,
+        entrapment: model.car_entrapment, injury: model.car_injury
+      } : legacyCarConfig(model);
+      const row = seatControls.find((item) => item.seat === config.seat);
+      if (!row) continue;
+      row.group.hidden = false;
+      row.patientNumber = model.car_patient_number;
+      el('carSituation').value = config.vehicle ?? '';
+      row.profile.value = config.profile;
+      row.access.value = ['none', 'enclosed'].includes(config.entrapment) ? config.entrapment : 'trapped';
+      row.entrapment.value = row.access.value === 'trapped' ? config.entrapment : '';
+      row.injury.value = config.injury ?? '';
+      row.profile.dispatchEvent(new Event('change'));
+      if (model.progression) {
+        row.transition.value = model.progression.at_seconds / 60;
+        row.transition.dispatchEvent(new Event('input'));
+      }
+    }
+    updateCarActions();
+  }
+
+  function updateCarActions() {
+    const patients = carPatients(el('editCar').value);
+    const editing = patients.length > 0;
+    const started = patients.some((patient) => patient.status !== 'ready');
+    el('startCar').hidden = editing;
+    el('attachCar').hidden = !exercise || editing;
+    el('saveCar').hidden = !editing;
+    el('saveCar').disabled = busy || started;
+    const status = el('carEditStatus');
+    status.hidden = !editing;
+    const text = started ? 'Setze die bereits gestarteten Patienten dieses Pkw vor dem Bearbeiten zurück.'
+      : 'Änderungen gelten für die vorhandenen Insassen. Ihre Patienten-QRs bleiben gültig.';
+    if (status.textContent !== text) status.textContent = text;
+  }
+
+  el('editCar').addEventListener('change', loadCarForm);
 
   el('carForm').addEventListener('submit', (event) => {
     event.preventDefault();
     const attach = event.submitter?.id === 'attachCar';
+    const editNumber = Number(el('editCar').value);
+    if (editNumber && el('saveCar').disabled) return;
     void run(async () => {
       const occupants = seatControls.filter((row) => row.profile.value).map((row) => ({
         seat: row.seat, profile: row.profile.value, injury: row.injury.value,
+        patient_number: row.patientNumber,
         entrapment: row.access.value === 'trapped' ? row.entrapment.value : row.access.value,
         transition_minute: row.transition.disabled ? null : row.transition.valueAsNumber
       }));
       if (!occupants.length) throw new Error('Wähle mindestens einen besetzten Sitzplatz.');
-      const next = await rpc({ p_config: { vehicle: el('carSituation').value, occupants },
-        p_session: attach ? exercise.id : null }, api.bookCar);
+      const config = { vehicle: el('carSituation').value, occupants };
+      if (editNumber) Object.assign(config, { car_number: editNumber, edit_version: carEditVersion });
+      const next = await rpc({ p_config: config, p_session: attach || editNumber ? exercise.id : null }, api.bookCar);
+      if (editNumber) {
+        renderExercise(next);
+        resetPreview();
+        loadCarForm();
+        message('Änderungen am Pkw gespeichert.');
+        return;
+      }
       if (attach) {
         renderExercise(next);
         const number = Math.max(...next.patients.map((patient) => patient.model.car_number ?? 0));
@@ -743,8 +857,7 @@
       } else {
         openCreatedExercise(next);
       }
-      el('carForm').reset();
-      for (const row of seatControls) row.profile.dispatchEvent(new Event('change'));
+      loadCarForm();
     });
   });
   el('choose').addEventListener('change', () => {

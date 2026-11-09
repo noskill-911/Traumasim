@@ -84,6 +84,12 @@ Den einzelnen QR-Code in der Ausbilderansicht am jeweiligen Platz auslegen.
 Die Pkw-Personen erscheinen nicht in der Teilnehmerliste und lassen sich
 nur mit ihrem eigenen Patienten-QR öffnen.
 
+Unter **Konfiguration → Pkw mit Insassen → Pkw auswählen** lässt sich
+ein gebuchter Pkw öffnen. Fahrzeuglage, Verletzungsprofile, Befreiungslage,
+Wechselzeiten und eigene Verletzungstexte können dort geändert werden.
+Die Patientennummern und Stations-QRs bleiben dabei gültig. Bereits
+gestartete Patienten dieses Pkw müssen vor dem Speichern zurückgesetzt werden.
+
 ## Einrichtung und Rechte
 
 - `supabase/schema.sql` als Datenbankadministrator anwenden. Es aktualisiert

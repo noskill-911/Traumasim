@@ -72,6 +72,10 @@
           <div class="booking-fields">
             <p>Lege je besetztem Sitzplatz das Verletzungsprofil und die Befreiungslage fest. Jeder Patient erhält einen eigenen QR-Code.</p>
             <p class="muted small">Bei <strong>Eingeschlossen</strong> ist der Ausstieg versperrt. Bei <strong>Eingeklemmt</strong> steckt ein Körperteil fest, etwa im Fußraum.</p>
+            <label id="editCarChoice" hidden>Pkw auswählen
+              <select id="editCar"></select>
+            </label>
+            <p id="carEditStatus" class="muted small" role="status" hidden></p>
             <form id="carForm">
               <label>Fahrzeuglage (optional)
                 <input id="carSituation" maxlength="200" placeholder="z. B. Pkw in Seitenlage, Fahrertür deformiert">
@@ -80,6 +84,7 @@
               <div class="booking-actions">
                 <button id="startCar" type="submit">Als neue Übung starten</button>
                 <button id="attachCar" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
+                <button id="saveCar" type="submit" hidden>Änderungen speichern</button>
               </div>
             </form>
           </div>
@@ -178,6 +183,6 @@
 <script src="supabase-config.js"></script>
 <script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
-<script src="trainer.js?v=trainer-header"></script>
+<script src="trainer.js?v=car-edit"></script>
 </body>
 </html>
