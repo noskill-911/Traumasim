@@ -4,11 +4,13 @@ Patientensimulator für die Feuerwehr- und Rettungsdienstausbildung.
 
 ## Nutzung
 
-- [Patientenbibliothek und QR-Codes](https://noskill-911.github.io/Traumasim/)
+- [TraumaSim-Startseite](https://noskill-911.github.io/Traumasim/)
 - [Ausbilderansicht](https://noskill-911.github.io/Traumasim/trainer.html)
 
 Ausbilder legen eine Übung an und zeigen den Übungs-QR. Teilnehmende scannen ihn
-einmal und öffnen danach im selben Browser die vorhandenen Patienten-QR-Codes.
+einmal und wählen eine freigegebene Person oder öffnen im selben Browser
+einen Patienten-QR vor Ort. Stations-QRs sind in der Live-Übersicht der
+Ausbilder unter **Patient im Detail** zu finden.
 Der erste gültige Patientenaufruf startet den Patienten geräteübergreifend. Beim erneuten Öffnen läuft derselbe Verlauf weiter.
 Die simulierte Vorsichtung erscheint ab 10 Sekunden (SK III, grün),
 20 Sekunden (SK II, gelb) oder 35 Sekunden (SK I, rot) gemeinsamer Patientenzeit.

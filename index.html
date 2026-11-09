@@ -4,57 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="img-src 'self'; connect-src 'none'; base-uri 'none'">
-  <title>TraumaSim · Patientenbibliothek</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'none'; base-uri 'none'">
+  <title>TraumaSim</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body><main>
   <section class="panel">
     <div class="muted">FEUERWEHR · AUSBILDUNG</div>
     <h1>TraumaSim</h1>
-    <p>Patientenbibliothek für dynamische Übungslagen. Jeder Patient hat eine eigene QR-Adresse und startet beim ersten gültigen Aufruf für alle verbundenen Geräte.</p>
-    <a href="trainer.html">Zur Ausbilderansicht</a> · <a href="editor.html">Eigenes Szenario erstellen</a>
+    <p>Patientensimulation für die Feuerwehr- und Rettungsdienstausbildung.</p>
+    <a class="action" href="trainer.html">Zur Ausbilderansicht</a>
   </section>
-  <div id="cases"></div>
-  <p class="muted small">Scanne einmal den Übungs-QR der Ausbilder und öffne danach die Patienten-QR-Codes im selben Browser.</p>
-</main>
-<script src="patients.js"></script>
-<script>
-const root = document.getElementById('cases');
-for (const scenario of window.TRAUMA_CASES) {
-  const box = document.createElement('section');
-  box.className = 'panel';
-  const heading = document.createElement('h2');
-  heading.textContent = scenario.title;
-  box.append(heading);
-
-  for (const patient of scenario.patients) {
-    const item = document.createElement('div');
-    item.className = 'patient-entry';
-    const name = document.createElement('strong');
-    name.textContent = patient.name;
-    const link = document.createElement('a');
-    link.className = 'action';
-    link.textContent = 'Schüleransicht öffnen';
-    link.href = 'patient.html?' + new URLSearchParams({ case: scenario.id, patient: patient.id });
-
-    const qrPath = 'qr/' + encodeURIComponent(scenario.id + '-' + patient.id) + '.svg';
-    const image = document.createElement('img');
-    image.className = 'patient-qr';
-    image.alt = 'QR-Code für ' + patient.name;
-    image.width = 160;
-    image.height = 160;
-    image.src = qrPath;
-    const qr = document.createElement('a');
-    qr.href = qrPath;
-    qr.target = '_blank';
-    qr.rel = 'noopener';
-    qr.textContent = 'QR-Code öffnen / speichern';
-    item.append(name, document.createElement('br'), link, image, qr);
-    box.append(item);
-  }
-  root.append(box);
-}
-</script>
-</body>
+  <section class="panel">
+    <h2>Teilnehmende</h2>
+    <p>Scanne den Übungs-QR, den dir die Ausbilder zeigen. Dort findest du die
+      für diese Übung freigegebenen Patienten. Stations-QRs öffnest du im selben
+      Browser. Einen direkt geteilten Patientenlink kannst du sofort öffnen.</p>
+  </section>
+</main></body>
 </html>

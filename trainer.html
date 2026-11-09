@@ -12,7 +12,6 @@
   <section class="panel">
     <div class="muted">TRAUMASIM · AUSBILDER</div>
     <h1>Ausbilderansicht</h1>
-    <a href="index.html">Patientenbibliothek</a>
     <p id="message" role="status">Bitte mit einem freigegebenen Ausbilderkonto anmelden.</p>
     <form id="login">
       <label>E-Mail <input id="email" type="email" autocomplete="username" required></label>
@@ -96,7 +95,11 @@
           <p><a id="openPatientLink" class="action" target="_blank" rel="noopener noreferrer">Patientenlink öffnen</a>
           <button id="copyLink">Patientenlink kopieren</button></p>
           <input id="patientLink" aria-label="Patientenlink zum manuellen Kopieren" readonly hidden>
-          <div id="station" hidden><h3 id="stationTitle">Stations-QR für diesen Patienten</h3><div id="stationQr" class="exercise-qr"></div></div>
+          <div id="station" hidden>
+            <h3 id="stationTitle">Stations-QR für diesen Patienten</h3>
+            <div id="stationQr" class="exercise-qr"></div>
+            <a id="stationDownload" download hidden>QR-Code als SVG speichern</a>
+          </div>
         </details>
       </section>
       <details id="exerciseJoin" class="panel" hidden>
@@ -134,6 +137,6 @@
 <script src="supabase-config.js"></script>
 <script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
-<script src="trainer.js?v=trainer-session"></script>
+<script src="trainer.js?v=patient-overview"></script>
 </body>
 </html>

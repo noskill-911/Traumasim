@@ -33,29 +33,22 @@
 
     history.replaceState(null, '', location.pathname + '?' + new URLSearchParams({ case: exercise.case }));
     el('joinTitle').textContent = exercise.title;
-    el('joinStatus').textContent = 'Du bist der Übung beigetreten. Scanne jetzt einen Patienten-QR im selben Browser oder öffne die Patientenübersicht.';
-    if (exercise.patients) {
-      el('joinStatus').textContent = 'Du bist der Übung beigetreten. Wähle einen Patienten oder scanne seinen Stations-QR im selben Browser.';
-      const preset = window.TRAUMA_CASES.find((item) => item.id === exercise.case);
-      const items = exercise.patients.map((patient) => {
-        const item = document.createElement('li');
-        const link = document.createElement('a');
-        link.className = 'action';
-        link.href = 'patient.html?' + new URLSearchParams({ case: exercise.case, patient: patient.id });
-        link.textContent = patient.name ?? preset?.patients.find((item) => item.id === patient.id)?.name ?? patient.id;
-        item.append(link);
-        return item;
-      });
-      el('customPatients').replaceChildren(...items);
-      el('customPatients').hidden = items.length === 0;
-      if (exercise.hidden_stations) {
-        el('joinStatus').textContent = items.length
-          ? 'Du bist der Übung beigetreten. Wähle eine angezeigte Person oder scanne einen einzelnen Patienten-QR vor Ort.'
-          : 'Du bist der Übung beigetreten. Scanne die einzelnen Patienten-QRs vor Ort.';
-      }
-    } else {
-      el('joinPatients').hidden = false;
-    }
+    const preset = window.TRAUMA_CASES.find((item) => item.id === exercise.case);
+    const patients = exercise.patients ?? (exercise.hidden_stations ? [] : preset?.patients ?? []);
+    const items = patients.map((patient) => {
+      const item = document.createElement('li');
+      const link = document.createElement('a');
+      link.className = 'action';
+      link.href = 'patient.html?' + new URLSearchParams({ case: exercise.case, patient: patient.id });
+      link.textContent = patient.name ?? preset?.patients.find((item) => item.id === patient.id)?.name ?? patient.id;
+      item.append(link);
+      return item;
+    });
+    el('joinedPatients').replaceChildren(...items);
+    el('joinedPatients').hidden = items.length === 0;
+    el('joinStatus').textContent = items.length
+      ? 'Du bist der Übung beigetreten. Wähle eine angezeigte Person oder scanne einen Stations-QR vor Ort im selben Browser.'
+      : 'Du bist der Übung beigetreten. Scanne die einzelnen Patienten-QRs vor Ort.';
   }
 
   el('joinRetry').addEventListener('click', join);

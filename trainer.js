@@ -207,8 +207,12 @@
     container.dataset.url = url;
   }
 
-  function renderStation(url) {
+  function renderStation(url, downloadPath) {
     const target = el('stationQr');
+    const download = el('stationDownload');
+    download.hidden = !downloadPath;
+    if (downloadPath) download.href = downloadPath;
+    else download.removeAttribute('href');
     el('station').hidden = !url;
     if (!url) {
       target.replaceChildren();
@@ -266,7 +270,8 @@
     url.hash = new URLSearchParams({ code: patient.code });
     const carPatient = patient.model?.car_number != null;
     el('stationTitle').textContent = carPatient ? patientName(patient.id) : 'Stations-QR für diesen Patienten';
-    renderStation(patient.custom ? (carPatient ? url.href : station) : null);
+    const downloadPath = patient.custom ? null : 'qr/' + encodeURIComponent(exercise.case + '-' + patient.id) + '.svg';
+    renderStation(carPatient ? url.href : station, downloadPath);
     const linkField = el('patientLink');
     if (linkField.value !== url.href) {
       linkField.value = url.href;
