@@ -111,7 +111,7 @@ a { color: var(--blue); }
 
 [hidden] { display: none !important; }
 button:disabled { opacity: .55; cursor: default; }
-#joinLink, #patientLink, #email, #password, #exerciseTitle, #templateTitle {
+#joinLink, #patientLink, #email, #password, #exerciseTitle, #templateTitle, #templateRunTitle {
   width: 100%;
   max-width: 42rem;
   padding: .65rem;
@@ -122,6 +122,13 @@ button:disabled { opacity: .55; cursor: default; }
 .exercise-qr svg { display: block; width: 100%; height: auto; background: white; }
 
 .patient-overview { list-style: none; padding: 0; }
+.overview-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: .3rem .85rem;
+}
+.overview-fields label { min-width: 0; margin: .6rem 0; }
+.overview-fields select { display: block; width: 100%; }
 .trainer-views { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
 .trainer-views button { margin: 0; }
 .trainer-views button,
@@ -195,6 +202,15 @@ input#caseTitle, #name, textarea { width: 100%; padding: .55rem; }
 .booking-actions button { margin: 0; }
 #carSeats { display: grid; gap: .65rem; }
 #carSeats .car-seat { min-width: 0; margin: 0; }
+#carChangesDialog {
+  width: min(32rem, calc(100% - 2rem));
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: .65rem;
+  background: var(--surface);
+  color: var(--ink);
+}
+#carChangesDialog::backdrop { background: rgb(13 35 56 / 60%); }
 @media (min-width: 640px) {
   #carSeats { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 }
@@ -227,6 +243,7 @@ input#caseTitle, #name, textarea { width: 100%; padding: .55rem; }
   .station-sheet h2 { margin: 0; color: inherit; font-size: 22pt; }
   .station-card-label { margin: 0; font-size: 17pt; }
   .station-card-place { margin: 0; font-size: 13pt; }
+  .station-card-meta { margin: 0; font-size: 11pt; line-height: 1.3; }
   .station-card-qr svg { display: block; width: 88mm; height: 88mm; }
   .two-per-page .station-card-qr svg { width: 62mm; height: 62mm; }
 }

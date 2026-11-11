@@ -29,6 +29,8 @@
   let previewTime = 0;
   let previewTick = null;
   let carEditVersion = 0;
+  let loadedCarNumber = '';
+  let carFormBaseline = '';
 
   if (new URLSearchParams(location.hash.slice(1)).has('access_token')) {
     history.replaceState(null, '', location.pathname + location.search);
@@ -194,6 +196,7 @@
     el('patientControls').hidden = !next;
     el('exerciseToolbar').hidden = !next;
     el('saveTemplateForm').hidden = !next;
+    el('updateTemplate').hidden = !next;
     el('preview').hidden = !next;
     renderJoin(next?.join_code);
     el('attachBus').hidden = !next;
@@ -217,16 +220,19 @@
       resetPreview();
       return;
     }
-    const rebuild = changed || el('choose').options.length !== next.patients.length;
+    const choose = el('choose');
+    const rebuild = changed || choose.options.length !== next.patients.length
+      || next.patients.some((patient, index) => choose.options[index].value !== patient.id
+        || choose.options[index].textContent !== patientName(patient.id));
     if (rebuild) {
       renderComposition();
-      el('choose').replaceChildren(...next.patients.map((patient) => new Option(patientName(patient.id), patient.id)));
-      el('choose').value = next.patients.some((patient) => patient.id === previous) ? previous : next.patients[0].id;
+      choose.replaceChildren(...next.patients.map((patient) => new Option(patientName(patient.id), patient.id)));
+      choose.value = next.patients.some((patient) => patient.id === previous) ? previous : next.patients[0].id;
       if (changed) resetPreview();
     }
     el('liveTitle').textContent = next.title;
     el('expiry').textContent = 'Zugang gültig bis ' + new Date(next.expires_at).toLocaleString('de-DE');
-    renderOverview(rebuild);
+    renderOverview(rebuild, changed);
     renderPatient();
   }
 
@@ -304,25 +310,74 @@
     return link.href;
   }
 
+  function stationGroup(patient) {
+    if (patient.model?.car_number != null) {
+      return 'PKW ' + String(patient.model.car_number).padStart(2, '0');
+    }
+    const bus = busStationPattern.exec(patient.id);
+    if (bus) return 'Bus · ' + bus[1] + ' Personen';
+    if (exercise.case === 'vu-baum' && ['fahrer', 'beifahrer'].includes(patient.id)) {
+      return 'Beispiel-Pkw';
+    }
+    return 'Weitere Stationen';
+  }
+
+  function compareStationGroups(a, b) {
+    const order = (name) => name.startsWith('PKW ') ? 0 : name.startsWith('Bus ') ? 1 : 2;
+    return order(a) - order(b) || a.localeCompare(b, 'de', { numeric: true });
+  }
+
   function printLabel(patient) {
     const number = (value) => String(value).padStart(2, '0');
     const name = patientName(patient.id);
     const model = patient.model;
     if (model?.car_number != null) {
       const seat = name.split(' · ').at(-1).replace(/^Fahrerplatz$/, 'Fahrer').replace(/^Beifahrerplatz$/, 'Beifahrer');
-      return { group: 'PKW ' + number(model.car_number), label: number(model.car_patient_number) + ' ' + seat };
+      return { label: number(model.car_patient_number) + ' ' + seat };
     }
     const bus = busStationPattern.exec(patient.id);
     if (bus) {
-      const [, capacity, position] = bus;
+      const position = bus[2];
       return {
-        group: 'Bus · ' + capacity + ' Personen',
         label: position + (position === '01' ? ' Busfahrer' : ' Fahrgast'),
         place: busLocations[Number(position) - 1]
       };
     }
-    return { group: 'Weitere Stationen', label: name };
+    return { label: name };
   }
+
+  function updatePrintStations(reset = false) {
+    const group = el('printVehicle').value;
+    const select = el('printStation');
+    const previous = reset ? '' : select.value;
+    const stations = exercise.patients
+      .filter((patient) => !group || stationGroup(patient) === group)
+      .map((patient) => {
+        const label = printLabel(patient).label;
+        return { id: patient.id, title: group ? label : stationGroup(patient) + ' · ' + label };
+      });
+    options(select, stations, group ? 'Alle Stationen dieses Fahrzeugs' : 'Alle Stationen');
+    if (stations.some((station) => station.id === previous)) select.value = previous;
+  }
+
+  function updateStationFilters(reset) {
+    const groups = [...new Set(exercise.patients.map(stationGroup))]
+      .sort(compareStationGroups)
+      .map((group) => ({ id: group, title: group }));
+    for (const id of ['overviewVehicle', 'printVehicle']) {
+      const select = el(id);
+      const previous = reset ? '' : select.value;
+      options(select, groups, 'Alle Fahrzeuge und Stationen');
+      if (groups.some((group) => group.id === previous)) select.value = previous;
+    }
+    if (reset) {
+      el('overviewCategory').value = '';
+      el('overviewStatus').value = '';
+    }
+    updatePrintStations(reset);
+  }
+
+  el('printVehicle').addEventListener('change', () => updatePrintStations());
 
   el('printStations').addEventListener('click', () => {
     if (!exercise?.patients.length) return;
@@ -331,24 +386,32 @@
       return;
     }
     const perPage = Number(el('printPerPage').value);
+    const selectedGroup = el('printVehicle').value;
+    const selectedStation = el('printStation').value;
     const groups = new Map();
     for (const patient of exercise.patients) {
-      const label = printLabel(patient);
+      const group = stationGroup(patient);
+      if (selectedGroup && group !== selectedGroup) continue;
+      if (selectedStation && patient.id !== selectedStation) continue;
       const qrUrl = patientLink(stationUrl(patient), patient);
-      if (!groups.has(label.group)) groups.set(label.group, []);
-      groups.get(label.group).push({ ...label, qrUrl });
+      if (!groups.has(group)) groups.set(group, []);
+      groups.get(group).push({ ...printLabel(patient), qrUrl });
     }
+    if (!groups.size) return;
+    const expiresAt = new Intl.DateTimeFormat('de-DE', {
+      dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Berlin'
+    }).format(new Date(exercise.expires_at));
     const pages = [];
-    const sortedGroups = [...groups.entries()].sort(([a], [b]) => {
-      const order = (name) => name.startsWith('PKW ') ? 0 : name.startsWith('Bus ') ? 1 : 2;
-      return order(a) - order(b) || a.localeCompare(b, 'de', { numeric: true });
-    });
+    const sortedGroups = [...groups.entries()].sort(([a], [b]) => compareStationGroups(a, b));
     for (const [group, stations] of sortedGroups) {
       for (let offset = 0; offset < stations.length; offset += perPage) {
         const sheet = document.createElement('section');
         sheet.className = 'station-sheet';
         for (const station of stations.slice(offset, offset + perPage)) {
           const card = document.createElement('article');
+          const run = document.createElement('p');
+          run.className = 'station-card-meta';
+          run.textContent = exercise.title;
           const vehicle = document.createElement('h2');
           vehicle.textContent = group;
           const patient = document.createElement('p');
@@ -357,13 +420,17 @@
           const code = document.createElement('div');
           code.className = 'station-card-qr';
           drawQr(code, station.qrUrl, 'Stations-QR');
-          card.append(vehicle, patient, code);
+          card.append(run, vehicle, patient, code);
           if (station.place) {
             const place = document.createElement('p');
             place.className = 'station-card-place';
             place.textContent = 'Auffindeort · ' + station.place;
             card.append(place);
           }
+          const validity = document.createElement('p');
+          validity.className = 'station-card-meta';
+          validity.textContent = 'Gültig bis ' + expiresAt + ' Uhr (Berlin)';
+          card.append(validity);
           sheet.append(card);
         }
         pages.push(sheet);
@@ -381,9 +448,14 @@
     el('stationPrint').replaceChildren();
   });
 
-  function renderOverview(rebuild = false) {
+  for (const id of ['overviewVehicle', 'overviewCategory', 'overviewStatus']) {
+    el(id).addEventListener('change', () => renderOverview());
+  }
+
+  function renderOverview(rebuild = false, resetFilters = false) {
     const overview = el('patientOverview');
     if (rebuild) {
+      updateStationFilters(resetFilters);
       const rows = exercise.patients.map((patient) => {
         const row = document.createElement('li');
         const button = document.createElement('button');
@@ -407,8 +479,17 @@
       overview.replaceChildren(...rows);
     }
     const selected = el('choose').value;
+    const groupFilter = el('overviewVehicle').value;
+    const categoryFilter = el('overviewCategory').value;
+    const statusFilter = el('overviewStatus').value;
+    let visible = 0;
     exercise.patients.forEach((patient, index) => {
-      const button = overview.children[index].firstElementChild;
+      const row = overview.children[index];
+      row.hidden = Boolean((groupFilter && stationGroup(patient) !== groupFilter)
+        || (categoryFilter && (patient.category ?? 'none') !== categoryFilter)
+        || (statusFilter && patient.status !== statusFilter));
+      if (!row.hidden) visible++;
+      const button = row.firstElementChild;
       const [, category, status, forecast] = button.children;
       const label = categoryLabels[patient.category];
       button.setAttribute('aria-pressed', String(patient.id === selected));
@@ -418,6 +499,9 @@
       forecast.textContent = forecastLabel(patient);
       forecast.hidden = !forecast.textContent;
     });
+    const count = el('overviewCount');
+    const text = visible + ' von ' + exercise.patients.length + ' Patienten angezeigt.';
+    if (count.textContent !== text) count.textContent = text;
   }
 
   function renderPatient() {
@@ -536,6 +620,7 @@
     persistentSession = false;
     actionVersion++;
     renderExercise(null);
+    loadCarForm();
     el('exercise').replaceChildren();
     renderTemplateOptions([]);
     el('workspace').hidden = true;
@@ -563,6 +648,7 @@
 
   function renderTemplateOptions(templates) {
     options(el('exerciseTemplate'), templates, 'Vorlage auswählen');
+    el('templateRunTitle').value = '';
     el('startTemplateForm').hidden = !templates.length;
     el('noTemplates').hidden = Boolean(templates.length);
   }
@@ -626,13 +712,19 @@
 
   el('logout').addEventListener('click', () => {
     if (busy) return;
-    signedOut(true);
-    message('Abgemeldet.');
+    void run(async () => {
+      if (!await confirmCarChanges()) return;
+      signedOut(true);
+      message('Abgemeldet.');
+    });
   });
   el('exercise').addEventListener('change', () => {
     const id = el('exercise').value;
     el('exercise').value = exercise?.id ?? '';
-    void run(() => switchExercise(id));
+    void run(async () => {
+      if (id === exercise?.id || !await confirmCarChanges()) return;
+      await switchExercise(id);
+    });
   });
   async function switchExercise(id) {
     const select = el('exercise');
@@ -658,10 +750,30 @@
       const select = el('exerciseTemplate');
       select.add(new Option(template.title, template.id), 1);
       select.value = template.id;
+      el('templateRunTitle').value = template.title;
       el('startTemplateForm').hidden = false;
       el('noTemplates').hidden = true;
       el('templateTitle').value = '';
       message('Übungsvorlage gespeichert.');
+    });
+  });
+
+  el('exerciseTemplate').addEventListener('change', () => {
+    const select = el('exerciseTemplate');
+    el('templateRunTitle').value = select.value ? select.selectedOptions[0].textContent : '';
+  });
+
+  el('updateTemplate').addEventListener('click', () => {
+    const select = el('exerciseTemplate');
+    if (!exercise || !select.value) {
+      message('Wähle zuerst eine Vorlage aus.');
+      return;
+    }
+    if (!confirm('Vorlage „' + select.selectedOptions[0].textContent + '“ mit der Besetzung aus „' + exercise.title + '“ aktualisieren?')) return;
+    void run(async () => {
+      if (!await confirmCarChanges()) return;
+      await rpc({ p_action: 'update_template', p_session: exercise.id, p_patient: select.value });
+      message('Übungsvorlage aktualisiert.');
     });
   });
 
@@ -670,13 +782,15 @@
     const id = el('exerciseTemplate').value;
     if (!id) return;
     void run(async () => {
-      openCreatedExercise(await rpc({ p_action: 'start_template', p_session: id }));
+      if (!await confirmCarChanges()) return;
+      openCreatedExercise(await rpc({ p_action: 'start_template', p_session: id, p_title: el('templateRunTitle').value }));
       showView(true);
     });
   });
   el('create').addEventListener('submit', (event) => {
     event.preventDefault();
     void run(async () => {
+      if (!await confirmCarChanges()) return;
       const created = await rpc({ p_action: 'create', p_title: el('exerciseTitle').value });
       openCreatedExercise(created);
       el('exerciseTitle').value = '';
@@ -691,13 +805,23 @@
 
   el('createCustom').addEventListener('click', () => {
     void run(async () => {
+      const feedback = el('scenarioIssue');
+      feedback.hidden = true;
       const input = el('scenarioFile');
       const file = input.files[0];
-      if (file?.size > 200000) throw new Error('Die JSON-Datei ist zu groß.');
+      const validator = window.TraumaScenario;
+      if (file?.size > validator.MAX_BYTES) throw new Error('Die JSON-Datei ist zu groß.');
       const source = file ? await file.text() : localStorage.getItem('traumasim-editor-v1');
       if (!source) throw new Error('Speichere zuerst einen Entwurf im Szenarioeditor oder wähle eine JSON-Datei.');
       let draft;
       try { draft = JSON.parse(source); } catch { throw new Error('Der Entwurf ist keine gültige JSON-Datei.'); }
+      const issue = validator.validate(draft);
+      if (issue) {
+        feedback.textContent = issue.message;
+        feedback.hidden = false;
+        return;
+      }
+      if (!await confirmCarChanges()) return;
       openCreatedExercise(await rpc(draft, api.createCustom));
       input.value = '';
     });
@@ -705,6 +829,7 @@
   for (const [button, attach] of [['startBus', false], ['attachBus', true]]) {
     el(button).addEventListener('click', () => {
       void run(async () => {
+        if (!attach && !await confirmCarChanges()) return;
         const capacity = Number(el('busCapacity').value);
         const params = { p_capacity: capacity, p_session: attach ? exercise.id : null };
         const next = await rpc(params, api.bookBus);
@@ -840,7 +965,8 @@
   }
 
   function loadCarForm() {
-    const patients = carPatients(el('editCar').value);
+    loadedCarNumber = el('editCar').value;
+    const patients = carPatients(loadedCarNumber);
     el('carForm').reset();
     for (const row of seatControls) {
       row.group.hidden = Boolean(patients.length);
@@ -869,6 +995,8 @@
         row.transition.dispatchEvent(new Event('input'));
       }
     }
+    carFormBaseline = JSON.stringify(carFormConfig());
+    showCarDirtyState();
     updateCarActions();
   }
 
@@ -887,46 +1015,104 @@
     if (status.textContent !== text) status.textContent = text;
   }
 
-  el('editCar').addEventListener('change', loadCarForm);
+  function carFormConfig() {
+    const occupants = seatControls.filter((row) => row.profile.value).map((row) => ({
+      seat: row.seat, profile: row.profile.value, injury: row.injury.value,
+      patient_number: row.patientNumber,
+      entrapment: row.access.value === 'trapped' ? row.entrapment.value : row.access.value,
+      transition_minute: row.transition.disabled ? null : row.transition.valueAsNumber
+    }));
+    return { vehicle: el('carSituation').value, occupants };
+  }
+
+  function carFormIsDirty() {
+    return carFormBaseline !== JSON.stringify(carFormConfig());
+  }
+
+  function showCarDirtyState() {
+    const dirty = carFormIsDirty();
+    el('carUnsaved').hidden = !dirty;
+    if (dirty) window.addEventListener('beforeunload', warnBeforeLeaving);
+    else window.removeEventListener('beforeunload', warnBeforeLeaving);
+  }
+
+  function warnBeforeLeaving(event) {
+    event.preventDefault();
+    event.returnValue = '';
+  }
+
+  async function confirmCarChanges() {
+    if (!carFormIsDirty()) return true;
+    const dialog = el('carChangesDialog');
+    const started = carPatients(loadedCarNumber).some((patient) => patient.status !== 'ready');
+    dialog.querySelector('[data-car-choice="save"]').disabled = started;
+    el('carChangesMessage').textContent = started
+      ? 'Ein Patient ist gestartet. Du kannst die Bearbeitung behalten oder die Änderungen verwerfen.'
+      : 'Möchtest du die Änderungen vor dem Wechsel speichern?';
+    dialog.returnValue = 'cancel';
+    const choice = await new Promise((resolve) => {
+      dialog.addEventListener('close', () => resolve(dialog.returnValue), { once: true });
+      dialog.showModal();
+    });
+    if (choice === 'save') {
+      await saveCar(Boolean(exercise));
+      return true;
+    }
+    return choice === 'discard';
+  }
+
+  for (const button of el('carChangesDialog').querySelectorAll('[data-car-choice]')) {
+    button.addEventListener('click', () => el('carChangesDialog').close(button.dataset.carChoice));
+  }
+  el('carForm').addEventListener('input', showCarDirtyState);
+  el('carForm').addEventListener('change', showCarDirtyState);
+
+  el('editCar').addEventListener('change', () => {
+    const select = el('editCar');
+    const number = select.value;
+    select.value = loadedCarNumber;
+    void run(async () => {
+      if (number === loadedCarNumber || !await confirmCarChanges()) return;
+      select.value = number;
+      loadCarForm();
+    });
+  });
 
   el('carForm').addEventListener('submit', (event) => {
     event.preventDefault();
     const attach = event.submitter?.id === 'attachCar';
-    const editNumber = Number(el('editCar').value);
-    if (editNumber && el('saveCar').disabled) return;
-    void run(async () => {
-      const occupants = seatControls.filter((row) => row.profile.value).map((row) => ({
-        seat: row.seat, profile: row.profile.value, injury: row.injury.value,
-        patient_number: row.patientNumber,
-        entrapment: row.access.value === 'trapped' ? row.entrapment.value : row.access.value,
-        transition_minute: row.transition.disabled ? null : row.transition.valueAsNumber
-      }));
-      if (!occupants.length) throw new Error('Wähle mindestens einen besetzten Sitzplatz.');
-      const config = { vehicle: el('carSituation').value, occupants };
-      if (editNumber) Object.assign(config, { car_number: editNumber, edit_version: carEditVersion });
-      const next = await rpc({ p_config: config, p_session: attach || editNumber ? exercise.id : null }, api.bookCar);
-      if (editNumber) {
-        renderExercise(next);
-        resetPreview();
-        loadCarForm();
-        message('Änderungen am Pkw gespeichert.');
-        return;
-      }
-      if (attach) {
-        renderExercise(next);
-        const number = Math.max(...next.patients.map((patient) => patient.model.car_number ?? 0));
-        const first = next.patients.find((patient) => patient.model.car_number === number);
-        el('choose').value = first.id;
-        renderOverview();
-        renderPatient();
-        resetPreview();
-        message('Pkw ' + String(number).padStart(2, '0') + ' hinzugefügt.');
-      } else {
-        openCreatedExercise(next);
-      }
-      loadCarForm();
-    });
+    if (loadedCarNumber && el('saveCar').disabled) return;
+    void run(() => saveCar(attach));
   });
+
+  async function saveCar(attach) {
+    const editNumber = Number(loadedCarNumber);
+    const config = carFormConfig();
+    if (!config.occupants.length) throw new Error('Wähle mindestens einen besetzten Sitzplatz.');
+    if (!el('carForm').reportValidity()) throw new Error('Prüfe die Angaben im Pkw-Formular.');
+    if (editNumber) Object.assign(config, { car_number: editNumber, edit_version: carEditVersion });
+    const next = await rpc({ p_config: config, p_session: attach || editNumber ? exercise.id : null }, api.bookCar);
+    if (editNumber) {
+      renderExercise(next);
+      resetPreview();
+      loadCarForm();
+      message('Änderungen am Pkw gespeichert.');
+      return;
+    }
+    if (attach) {
+      renderExercise(next);
+      const number = Math.max(...next.patients.map((patient) => patient.model.car_number ?? 0));
+      const first = next.patients.find((patient) => patient.model.car_number === number);
+      el('choose').value = first.id;
+      renderOverview();
+      renderPatient();
+      resetPreview();
+      message('Pkw ' + String(number).padStart(2, '0') + ' hinzugefügt.');
+    } else {
+      openCreatedExercise(next);
+    }
+    loadCarForm();
+  }
   el('choose').addEventListener('change', () => {
     renderOverview();
     renderPatient();
@@ -941,6 +1127,7 @@
         ? 'Alle Patienten der Übung „' + exercise.title + '“ zurücksetzen?' : patientName(patient.id) + ' zurücksetzen?')) return;
       if (action === 'close' && !confirm('Übung „' + exercise.title + '“ beenden und alle Zugänge schließen?')) return;
       void run(async () => {
+        if (action === 'close' && !await confirmCarChanges()) return;
         const next = await rpc({ p_action: action, p_session: exercise.id, p_patient: patient.id });
         if (next.closed) {
           const select = el('exercise');
@@ -1020,6 +1207,7 @@
   });
 
   const saved = readSession();
+  loadCarForm();
   if (saved) {
     auth = saved;
     persistentSession = true;

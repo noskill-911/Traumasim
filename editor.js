@@ -4,11 +4,7 @@
   const el = (id) => document.getElementById(id);
   const key = 'traumasim-editor-v1';
   const fields = ['name', 'intro', 'story', 'questions', 'secret'];
-  const measures = [
-    ['s', 'Systolischer Blutdruck', 0, 350], ['d', 'Diastolischer Blutdruck', 0, 350],
-    ['h', 'Puls', 0, 350], ['r', 'Atemfrequenz', 0, 350], ['o', 'SpO₂', 0, 100], ['g', 'GCS', 3, 15]
-  ];
-  const minutes = [0, 5, 10, 15, 20, 25];
+  const { MAX_PATIENTS, MAX_BYTES, MEASURES: measures, MINUTES: minutes, validate } = window.TraumaScenario;
   const initialPoints = () => minutes.map((t) => ({ t, s: 120, d: 80, h: 80, r: 16, o: 98, g: 15 }));
   let data;
   let current = 0;
@@ -33,6 +29,11 @@
 
   function message(text) {
     el('message').textContent = text;
+  }
+
+  function draftStatus(text) {
+    const issue = validate(data);
+    message(issue ? text + ' Vor dem Übungsstart prüfen. ' + issue.message : text + ' Der Entwurf ist startbereit.');
   }
 
   function commit() {
@@ -88,7 +89,7 @@
   });
 
   el('add').addEventListener('click', () => {
-    if (data.patients.length >= 30) return message('Eine Live-Übung unterstützt bis zu 30 Patienten.');
+    if (data.patients.length >= MAX_PATIENTS) return message('Eine Live-Übung unterstützt bis zu ' + MAX_PATIENTS + ' Patienten.');
     commit();
     data.patients.push({ name: 'Neuer Patient ' + (data.patients.length + 1), points: initialPoints() });
     current = data.patients.length - 1;
@@ -107,7 +108,7 @@
     commit();
     try {
       localStorage.setItem(key, JSON.stringify(data));
-      message('Entwurf gespeichert. Du kannst ihn jetzt in der Ausbilderansicht starten.');
+      draftStatus('Entwurf gespeichert.');
     } catch {
       message('Der Entwurf konnte in diesem Browser nicht gespeichert werden.');
     }
@@ -122,19 +123,23 @@
     link.download = 'traumasim-szenario.json';
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    draftStatus('Entwurf exportiert.');
   });
 
   el('import').addEventListener('change', async (event) => {
     const file = event.target.files[0];
     if (!file) return;
     try {
-      if (file.size > 200000) throw new Error('Die Datei ist zu groß.');
+      if (file.size > MAX_BYTES) throw new Error('Die Datei ist zu groß.');
       const incoming = JSON.parse(await file.text());
+      if (Array.isArray(incoming?.patients) && incoming.patients.length > MAX_PATIENTS) {
+        throw new Error('Die Datei enthält ' + incoming.patients.length + ' Patienten. Maximal ' + MAX_PATIENTS + ' sind möglich.');
+      }
       if (!validDraft(incoming)) throw new Error('Ungültiger Szenarioentwurf.');
       data = fillMissingPoints(incoming);
       current = 0;
       render();
-      message('Entwurf importiert. Prüfe die Werte und speichere den Entwurf.');
+      draftStatus('Entwurf importiert. Speichere ihn für die Ausbilderansicht.');
     } catch (error) {
       message('Import fehlgeschlagen. ' + error.message);
     } finally {

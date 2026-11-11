@@ -31,10 +31,13 @@
    die neue Runde. Einzelreset und Übungsreset ändern den zentralen Zustand.
 5. Die Patientenübersicht zeigt den Status, die Zeit seit Patientenstart
    und bei gestarteten Patienten die aktuelle Sichtungskategorie im
-   Übungsmodell. Ein Klick auf den Patienten öffnet seine Auswahl für
+   Übungsmodell. Sie kann nach Fahrzeug, aktueller Sichtung und
+   Startstatus gefiltert werden. Ein Klick auf den Patienten öffnet seine Auswahl für
    Steuerung, QR-Code und Vorschau. Die Steuerung für die ganze Übung
    steht oben neben dem Übungs-QR. **Übung beenden** schließt die Übung
    samt QR-Zugängen.
+   Die **QR-Druckliste (A4)** kann alle Karten, ein Fahrzeug oder eine
+   einzelne Station ausgeben. Auf jeder Karte stehen Übungsname und Gültigkeit.
 6. Die Übung ist auf 45 Minuten ausgelegt. Die Zeit zählt ab dem jeweiligen
    Patientenstart. Bei älteren 25-Minuten-Profilen gelten danach die letzten
    Basiswerte weiter. Die letzten Werte und die Fallinformationen bleiben
@@ -49,11 +52,15 @@ die aktive Zusammenstellung als benannte Vorlage gespeichert werden. Eine
 Vorlage enthält die Besetzung und Patientenprofile und bleibt für den
 Ausbilder verfügbar. Ein Start aus der Vorlage legt einen eigenen
 Durchlauf mit 24 Stunden Gültigkeit und frischen QR-Zugängen an.
+Der Durchlauf kann einen eigenen Namen bekommen. Eine bestehende Vorlage
+lässt sich mit der Besetzung der aktiven Übung aktualisieren.
 
 Im Szenarioeditor Patienten, Texte, Gehfähigkeit und Vitalverläufe pflegen.
 Danach den gespeicherten Entwurf oder eine exportierte JSON-Datei in der
 Ausbilderansicht als Live-Übung starten. Unterstützt werden bis zu 30
-Patienten. Ein Live-Durchlauf verwendet eine eigene Kopie der Falldaten.
+Patienten. Unvollständige Entwürfe bleiben speicherbar. Die Prüfung vor dem
+Start benennt fehlende oder ungültige Angaben. Ein Live-Durchlauf
+verwendet eine eigene Kopie der Falldaten.
 
 Teilnehmende scannen den Übungs-QR beim Briefing und nutzen später die
 Stations-QRs vor Ort im selben Browser. Der Stations-QR
@@ -103,6 +110,8 @@ ein gebuchter Pkw öffnen. Fahrzeuglage, Verletzungsprofile, Befreiungslage,
 Wechselzeiten und eigene Verletzungstexte können dort geändert werden.
 Die Patientennummern und Stations-QRs bleiben dabei gültig. Bereits
 gestartete Patienten dieses Pkw müssen vor dem Speichern zurückgesetzt werden.
+Beim Wechsel des Pkw oder der Übung fragt TraumaSim nach, wenn Änderungen
+noch gespeichert, verworfen oder weiter bearbeitet werden können.
 
 ## Einrichtung und Rechte
 

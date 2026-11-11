@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=hamburg">
+  <link rel="stylesheet" href="style.css?v=workflow-2">
 </head>
 <body><main class="trainer-shell">
   <section class="panel page-banner">
@@ -76,6 +76,7 @@
               <select id="editCar"></select>
             </label>
             <p id="carEditStatus" class="muted small" role="status" hidden></p>
+            <p id="carUnsaved" class="warning small" hidden>Ungespeicherte Pkw-Änderungen</p>
             <form id="carForm">
               <label>Fahrzeuglage (optional)
                 <input id="carSituation" maxlength="200" placeholder="z. B. Pkw in Seitenlage, Fahrertür deformiert">
@@ -114,7 +115,9 @@
           <p id="noTemplates" class="muted small">Du hast noch keine Übungsvorlage gespeichert.</p>
           <form id="startTemplateForm" hidden>
             <label>Vorlage <select id="exerciseTemplate" required></select></label>
+            <label>Name des Durchlaufs <input id="templateRunTitle" maxlength="120" required></label>
             <button type="submit">Vorlage als neue Übung starten</button>
+            <button id="updateTemplate" type="button" hidden>Vorlage mit aktiver Besetzung aktualisieren</button>
           </form>
           <form id="saveTemplateForm" hidden>
             <label>Name der Vorlage <input id="templateTitle" maxlength="120" required></label>
@@ -130,6 +133,7 @@
           <p>Verwende deinen zuletzt gespeicherten Entwurf aus dem <a href="editor.html">Szenarioeditor</a> oder lade dessen JSON-Datei hoch.</p>
           <label>JSON-Datei (optional) <input id="scenarioFile" type="file" accept="application/json,.json"></label>
           <button id="createCustom" type="button">Eigenes Szenario starten</button>
+          <p id="scenarioIssue" class="warning" role="status" hidden></p>
         </details>
       </section>
     </div>
@@ -143,15 +147,43 @@
         <p id="liveTitle"></p>
         <details>
           <summary>QR-Druckliste (A4)</summary>
-          <label>QR-Codes pro Seite
-            <select id="printPerPage">
-              <option value="2">2 pro Seite</option>
-              <option value="1">1 pro Seite</option>
-            </select>
-          </label>
+          <div class="overview-fields">
+            <label>Fahrzeug für den Druck <select id="printVehicle"></select></label>
+            <label>Station für den Druck <select id="printStation"></select></label>
+            <label>QR-Codes pro Seite
+              <select id="printPerPage">
+                <option value="2">2 pro Seite</option>
+                <option value="1">1 pro Seite</option>
+              </select>
+            </label>
+          </div>
           <button id="printStations" type="button">Drucken / als PDF speichern</button>
           <p class="muted small">Die Liste ist nach Fahrzeugen sortiert. Wähle im Druckdialog deinen Drucker oder „Als PDF speichern“.</p>
         </details>
+        <div class="overview-fields" role="group" aria-label="Patientenübersicht filtern">
+          <label>Fahrzeug <select id="overviewVehicle"></select></label>
+          <label>Aktuelle Sichtungskategorie
+            <select id="overviewCategory">
+              <option value="">Alle Kategorien</option>
+              <option value="red">SK I · Rot</option>
+              <option value="yellow">SK II · Gelb</option>
+              <option value="green">SK III · Grün</option>
+              <option value="black">EX · Schwarz</option>
+              <option value="affected">Unverletzt betroffen</option>
+              <option value="none">Noch keine Kategorie</option>
+            </select>
+          </label>
+          <label>Startstatus
+            <select id="overviewStatus">
+              <option value="">Alle Startstatus</option>
+              <option value="ready">Wartet auf Start</option>
+              <option value="running">Läuft</option>
+              <option value="paused">Pausiert</option>
+              <option value="finished">Abgeschlossen</option>
+            </select>
+          </label>
+        </div>
+        <p id="overviewCount" class="muted small" role="status"></p>
         <ul id="patientOverview" class="patient-overview" aria-label="Live-Zustand aller Patienten"></ul>
       </section>
       <section id="patientControls" class="panel" hidden>
@@ -193,11 +225,19 @@
     </div>
   </div>
 </main>
+<dialog id="carChangesDialog" aria-labelledby="carChangesTitle">
+  <h2 id="carChangesTitle">Ungespeicherte Pkw-Änderungen</h2>
+  <p id="carChangesMessage">Möchtest du die Änderungen vor dem Wechsel speichern?</p>
+  <button type="button" data-car-choice="save">Speichern</button>
+  <button type="button" data-car-choice="discard">Verwerfen</button>
+  <button type="button" data-car-choice="cancel" autofocus>Abbrechen</button>
+</dialog>
 <div id="stationPrint" class="station-print"></div>
 <script src="patients.js"></script>
 <script src="supabase-config.js"></script>
 <script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
-<script src="trainer.js?v=exercise-reliability"></script>
+<script src="scenario-validation.js?v=1"></script>
+<script src="trainer.js?v=workflow-2"></script>
 </body>
 </html>

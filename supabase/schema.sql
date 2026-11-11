@@ -387,6 +387,7 @@ declare
  trainer uuid := traumasim_private.require_trainer();
  exercise public.traumasim_sessions%rowtype;
  template traumasim_private.exercise_templates%rowtype;
+ template_patients jsonb;
  new_session_id uuid;
  snapshot_time timestamptz;
  result jsonb;
@@ -408,7 +409,8 @@ begin
    return result;
  end if;
 
- if p_action in ('create', 'save_template') and (p_title is null or length(btrim(p_title)) not between 1 and 120) then
+ if (p_action in ('create', 'save_template') or (p_action = 'start_template' and p_title is not null))
+    and (p_title is null or length(btrim(p_title)) not between 1 and 120) then
    raise exception using errcode = '22023', message = 'Der Titel muss 1 bis 120 Zeichen enthalten.';
  end if;
 
@@ -420,7 +422,7 @@ begin
    end if;
    new_session_id := gen_random_uuid();
    insert into public.traumasim_sessions (id, title, trainer_id, case_key)
-   values (new_session_id, template.title, trainer, case when template.case_key like 'custom-%'
+   values (new_session_id, coalesce(btrim(p_title), template.title), trainer, case when template.case_key like 'custom-%'
      then 'custom-' || new_session_id::text else template.case_key end)
    returning * into exercise;
    insert into public.traumasim_patients (session_id, patient_key, scenario_model)
@@ -448,15 +450,33 @@ begin
    snapshot_time := clock_timestamp();
    case p_action
      when 'status' then null;
-     when 'save_template' then
-       insert into traumasim_private.exercise_templates (trainer_id, title, case_key, patients)
-       select trainer, btrim(p_title), exercise.case_key,
-         jsonb_agg(jsonb_build_object('patient_key', p.patient_key, 'scenario_model', p.scenario_model))
-       from public.traumasim_patients p where p.session_id = exercise.id
-       on conflict (trainer_id, title) do nothing
-       returning * into template;
-       if not found then
-         raise exception using errcode = '22023', message = 'Eine Vorlage mit diesem Namen ist bereits vorhanden.';
+     when 'save_template', 'update_template' then
+       select jsonb_agg(jsonb_build_object('patient_key', p.patient_key, 'scenario_model', p.scenario_model)
+         order by p.patient_key)
+       into template_patients
+       from public.traumasim_patients p where p.session_id = exercise.id;
+       if template_patients is null then
+         raise exception using errcode = '22023', message = 'Für die Vorlage wird mindestens ein Patient benötigt.';
+       end if;
+       if p_action = 'save_template' then
+         insert into traumasim_private.exercise_templates (trainer_id, title, case_key, patients)
+         values (trainer, btrim(p_title), exercise.case_key, template_patients)
+         on conflict (trainer_id, title) do nothing
+         returning * into template;
+         if not found then
+           raise exception using errcode = '22023', message = 'Eine Vorlage mit diesem Namen ist bereits vorhanden.';
+         end if;
+       else
+         if p_patient is null or p_patient !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+           raise exception using errcode = '22023', message = 'Wähle eine gültige Vorlage aus.';
+         end if;
+         update traumasim_private.exercise_templates t
+         set case_key = exercise.case_key, patients = template_patients
+         where t.id = p_patient::uuid and t.trainer_id = trainer
+         returning * into template;
+         if not found then
+           raise exception using errcode = '42501', message = 'Vorlage nicht verfügbar.';
+         end if;
        end if;
        return jsonb_build_object('id', template.id, 'title', template.title);
      when 'close' then
