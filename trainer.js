@@ -750,6 +750,7 @@
     const source = el('patientIdentitySource');
     source.textContent = api.identitySource(identity);
     source.hidden = !identity;
+    api.renderPrimarySurvey(el('patientPrimarySurvey'), patient.primary_survey);
     const station = stationUrl(patient).href;
     const link = patientLink(station, patient);
     const numberedStation = patient.model?.car_number != null;

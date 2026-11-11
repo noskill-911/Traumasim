@@ -535,6 +535,121 @@ begin
 end;
 $$;
 
+-- xABCDE summaries are part of the exercise model. Never interpret free text as a confirmed finding.
+create or replace function traumasim_private.primary_survey(
+ p_model jsonb, p_patient text, p_category text, p_vitals jsonb, p_bp jsonb
+) returns jsonb language plpgsql immutable set search_path = '' as $$
+declare
+ bus_seat text := case when p_patient ~ '^bus-(5|10)-[0-9]{2}$' then split_part(p_patient, '-', 3) end;
+ profile text := coalesce(p_model->>'car_profile', case p_model->'progression'->>'to'
+   when 'yellow' then 'green-yellow' when 'red' then 'urgent-red' when 'black' then 'red-ex'
+ end);
+ station boolean := p_patient like any (array['car-%', 'truck-%', 'object-%']);
+ gcs integer := (p_vitals->>'g')::integer;
+ pulse integer := (p_vitals->>'h')::integer;
+ systolic integer := (p_bp->>'s')::integer;
+ x_finding text := 'Keine kritische äußere Blutung im Fallprofil beschrieben.';
+ a_finding text := 'Atemweg und HWS-Befund sind im Fallprofil nicht gesondert beschrieben.';
+ b_finding text;
+ c_finding text;
+ d_finding text;
+ e_finding text;
+ focus text[] := '{}';
+ risks text[] := '{}';
+begin
+ if p_model is null then return null; end if;
+
+ if p_category = 'black' then
+   b_finding := 'Keine Atembewegungen erkennbar.';
+   c_finding := 'Kein Kreislauf im Übungsmodell dargestellt.';
+   d_finding := 'Keine Reaktion auf Ansprache.';
+   focus := array['B', 'C', 'D'];
+ elsif p_category = 'affected' then
+   b_finding := 'Keine Atembeschwerden im Fallprofil beschrieben.';
+   c_finding := 'Keine Kreislaufbeschwerden im Fallprofil beschrieben.';
+   d_finding := 'Ansprechbar und orientiert. Wirkt aufgewühlt.';
+   e_finding := 'Unverletzt betroffen. Betreuung steht im Vordergrund.';
+   focus := array['E'];
+ else
+   b_finding := format('AF %s/min · SpO₂ %s %%', p_vitals->>'r', p_vitals->>'o');
+   c_finding := concat_ws(' · ', format('Puls %s/min', pulse),
+     case when systolic is not null then format('letzter Blutdruck %s/%s mmHg', systolic, p_bp->>'d') end);
+   d_finding := format('GCS %s', gcs);
+   if gcs < 15 then focus := array_append(focus, 'D'); end if;
+   if gcs <= 12 then
+     risks := array_append(risks, 'A · Bei weiterer Bewusstseinseintrübung kann der Atemweg gefährdet werden.');
+   end if;
+ end if;
+
+ if p_patient = 'fahrer' then
+   e_finding := 'Bein im Fußraum eingeklemmt. Verdacht auf Becken- und Oberschenkelverletzung.';
+   c_finding := 'Verdacht auf innere Blutung. ' || c_finding;
+   focus := focus || array['C', 'E'];
+   risks := array_append(risks, 'C · Fortschreitender Blutverlust mit zunehmender Kreislaufverschlechterung.');
+ elsif p_patient = 'beifahrer' then
+   b_finding := 'Schmerzen beim tiefen Einatmen. ' || b_finding;
+   e_finding := 'Thoraxprellung im Übungsprofil.';
+   focus := array['B', 'E'];
+   risks := array_append(risks, 'B · Schmerzen können die Atemtiefe einschränken.');
+ elsif bus_seat is not null and p_category not in ('affected', 'black') then
+   e_finding := case bus_seat
+     when '01' then 'Schmerz an der linken Schulter, Person gehfähig.'
+     when '02' then 'Platzwunde an der Stirn und Kopfschmerzen.'
+     when '03' then 'Linker Unterarm schmerzhaft, geschwollen und sichtbar verformt.'
+     when '04' then 'Anprall an einer Sitzlehne mit Bauchbeschwerden. Äußerlich kaum Verletzungen sichtbar.'
+     when '06' then 'Rechtes Knie schmerzhaft, aber belastbar.'
+     when '07' then 'Linkes Sprunggelenk geschwollen. Auftreten ist nicht möglich.'
+     when '08' then 'Schmerzen an der rechten Schulter, Arm in Schonhaltung.'
+     when '09' then 'Seitlicher Druckschmerz an der Hüfte. Person gehfähig.'
+     when '10' then 'Schmerzhafter Finger nach Einklemmung am Sitz.'
+   end;
+   focus := focus || array['E'];
+   if bus_seat = '02' then
+     d_finding := case when gcs <= 12 then 'Zunehmend schläfrig, antwortet nur noch knapp. '
+       else 'Antwortet verzögert und ist desorientiert. ' end || d_finding;
+     focus := focus || array['D'];
+     risks := array_append(risks, 'D · Die Bewusstseinslage kann sich nach dem Kopfaufprall verschlechtern.');
+   elsif bus_seat = '04' then
+     if p_category = 'red' then
+       c_finding := 'Blässe und Kreislaufauffälligkeiten nach dem Bauchanprall. ' || c_finding;
+     end if;
+     focus := focus || array['C'];
+     risks := array_append(risks, 'C · Nach stumpfem Bauchtrauma ist eine verzögerte Kreislaufverschlechterung durch innere Blutung möglich.');
+   end if;
+ elsif station and p_category not in ('affected', 'black') then
+   e_finding := case
+     when profile = 'green-yellow' and p_category = 'yellow' then 'Zunehmende Schmerzen und eingeschränkte Beweglichkeit.'
+     when profile = 'urgent' then 'Starke Schmerzen und Schonhaltung im betroffenen Bereich.'
+     when profile in ('urgent-red', 'red-ex', 'critical') then 'Schmerzen oder Anprall nach dem Unfallmechanismus.'
+     when p_category = 'green' then 'Leichte Schmerzen im betroffenen Bereich.'
+     else 'Beschwerden nach dem Unfall; siehe Patientenstory.' end;
+   if p_model->>'car_entrapment' not in ('none', 'enclosed') then
+     e_finding := e_finding || ' Die Einklemmung begrenzt die Untersuchung.';
+   elsif p_model->>'car_entrapment' = 'enclosed' then
+     e_finding := e_finding || ' Die Person ist eingeschlossen.';
+   end if;
+   focus := focus || array['E'];
+   if profile in ('urgent-red', 'red-ex', 'critical') then
+     if p_category = 'red' then
+       c_finding := 'Blässe und Hinweise auf Kreislaufverschlechterung. ' || c_finding;
+       d_finding := 'Verzögerte Reaktion auf Ansprache. ' || d_finding;
+       focus := focus || array['C', 'D'];
+     end if;
+     risks := array_append(risks, 'C/D · Zunehmende Kreislaufstörung und Bewusstseinseintrübung im Verlauf möglich.');
+   elsif profile = 'green-yellow' and p_category = 'green' then
+     risks := array_append(risks, 'E · Schmerzen können zunehmen und die Beweglichkeit einschränken.');
+   end if;
+ end if;
+
+ return jsonb_build_object(
+   'findings', jsonb_build_object('X', x_finding, 'A', a_finding, 'B', b_finding, 'C', c_finding, 'D', d_finding,
+     'E', coalesce(e_finding, 'Weitere Verletzungen und Temperatur sind im Fallprofil nicht gesondert beschrieben.')),
+   'focus', focus, 'risks', risks,
+   'note', case when station then nullif(btrim(p_model->>'car_injury'), '') end
+ );
+end;
+$$;
+
 create or replace function traumasim_private.student_snapshot(
  p_case text, p_patient text, p_code text, p_start_revision integer, p_selection text, p_seen_revision integer
 ) returns jsonb language plpgsql set search_path = '' as $$
@@ -691,6 +806,8 @@ begin
    'triage_mode', exercise.triage_mode,
    'triage_selectable', can_select,
    'observation', case when can_select then observation end,
+   'primary_survey', case when seconds >= least(120, duration) then
+     traumasim_private.primary_survey(model, p_patient, category, vitals, bp_values) end,
    'triage', case when (exercise.triage_mode = 'automatic' and seconds >= triage_delay)
      or (can_select and p_seen_revision = patient.revision and p_selection in ('red', 'yellow', 'green', 'affected', 'black'))
      then jsonb_build_object(
@@ -1170,6 +1287,8 @@ begin
    'code', traumasim_private.patient_code(exercise.id, p.patient_key, exercise.signing_key),
    'preview_code', traumasim_private.preview_code(exercise.id, p.patient_key, exercise.signing_key),
    'model', patient_model.model,
+   'primary_survey', traumasim_private.primary_survey(patient_model.model, p.patient_key,
+     live_survey.category, live_vitals.sample, live_survey.bp),
    'station_stories', case when initial_story.payload is not null then jsonb_build_object(
      'before', initial_story.payload - 'additional',
      'after', case when patient_model.model->'progression'->>'to' is not null
@@ -1180,9 +1299,7 @@ begin
    'custom', p.scenario_model is not null,
    'elapsed', floor(t.seconds),
    'first_triage_seconds', floor(extract(epoch from (p.first_triage_at - exercise.arrived_at))),
-   'category', case when p.started_at is not null then traumasim_private.patient_category(
-     patient_model.model, p.patient_key, p.scenario_model is not null, t.seconds,
-     traumasim_private.vitals(patient_model.model, t.seconds)) end,
+   'category', case when p.started_at is not null then live_survey.category end,
    'status', case when p.started_at is null then 'ready'
      when t.seconds >= limit_time.duration then 'finished' when p.paused_at is not null then 'paused' else 'running' end
  ) order by p.patient_key) into result
@@ -1198,6 +1315,14 @@ begin
  cross join lateral (select traumasim_private.patient_duration(p.scenario_model) as duration) limit_time
  cross join lateral (select least(limit_time.duration,
    traumasim_private.elapsed(p.started_at, p.paused_at, p.accumulated_pause_seconds, snapshot_time)) as seconds) t
+ cross join lateral (select traumasim_private.vitals(patient_model.model, t.seconds) as sample,
+   case when patient_model.model->'nibpFastCycle' = 'true'::jsonb then 180 else 300 end as bp_interval) live_vitals
+ cross join lateral (select
+   traumasim_private.patient_category(patient_model.model, p.patient_key, p.scenario_model is not null,
+     t.seconds, live_vitals.sample) as category,
+   case when t.seconds >= 70 then traumasim_private.vitals(patient_model.model,
+     70 + floor((t.seconds - 70) / live_vitals.bp_interval) * live_vitals.bp_interval) end as bp
+ ) live_survey
  where p.session_id = exercise.id;
  return jsonb_build_object('id', exercise.id, 'title', exercise.title, 'case', exercise.case_key,
    'expires_at', exercise.expires_at, 'patients', result, 'triage_mode', exercise.triage_mode,

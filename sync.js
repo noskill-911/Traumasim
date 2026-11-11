@@ -2,6 +2,46 @@
   'use strict';
 
   const { url, publishableKey } = window.TRAUMASIM_SUPABASE;
+  const surveyFields = {
+    X: 'Kritische äußere Blutung', A: 'Atemweg und HWS', B: 'Atmung',
+    C: 'Kreislauf', D: 'Neurologie', E: 'Weitere Befunde und Umgebung'
+  };
+
+  function renderPrimarySurvey(panel, survey) {
+    panel.hidden = !survey;
+    if (!survey) return;
+    const findings = panel.querySelector('[data-survey-findings]');
+    if (!findings.childElementCount) {
+      for (const [key, label] of Object.entries(surveyFields)) {
+        const row = document.createElement('div');
+        const term = document.createElement('dt');
+        const description = document.createElement('dd');
+        term.textContent = key + ' · ' + label;
+        row.append(term, description);
+        findings.append(row);
+      }
+    }
+    for (const [index, key] of Object.keys(surveyFields).entries()) {
+      const row = findings.children[index];
+      const text = survey.findings[key] || 'Im Fallprofil offen.';
+      if (row.lastElementChild.textContent !== text) row.lastElementChild.textContent = text;
+      row.classList.toggle('survey-focus', survey.focus.includes(key));
+    }
+    const risks = panel.querySelector('[data-survey-risks]');
+    risks.hidden = !survey.risks.length;
+    const list = risks.querySelector('ul');
+    if (list.dataset.items !== JSON.stringify(survey.risks)) {
+      list.dataset.items = JSON.stringify(survey.risks);
+      list.replaceChildren(...survey.risks.map((risk) => {
+        const item = document.createElement('li');
+        item.textContent = risk;
+        return item;
+      }));
+    }
+    const note = panel.querySelector('[data-survey-note]');
+    note.hidden = !survey.note;
+    note.textContent = survey.note ? 'Zusatz aus dem Szenario · ' + survey.note : '';
+  }
 
   async function request(path, body, accessToken) {
     const headers = { apikey: publishableKey, 'Content-Type': 'application/json' };
@@ -54,6 +94,7 @@
     identitySource: (identity) => identity
       ? ['Namensbezug', identity.name_source, identity.name_locality, identity.name_background].filter(Boolean).join(' · ')
       : '',
+    renderPrimarySurvey,
     clock: (seconds) => {
       const minutes = Math.floor(seconds / 60);
       const remainder = Math.floor(seconds % 60);

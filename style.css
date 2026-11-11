@@ -374,6 +374,12 @@ button:disabled { opacity: .55; cursor: default; }
 .patient-overview strong { overflow-wrap: anywhere; }
 .patient-station-label { display: block; font-weight: 400; }
 .patient-name-source { margin: .75rem 0 0; opacity: .85; overflow-wrap: anywhere; }
+.primary-survey dl { margin: 0; }
+.primary-survey dl > div { padding: .45rem .65rem; border-inline-start: .2rem solid transparent; }
+.primary-survey dt { font-weight: 650; }
+.primary-survey dd { margin: 0; }
+.primary-survey .survey-focus { background: var(--surface-soft); border-inline-start-color: var(--blue); }
+.primary-survey ul { margin: .4rem 0 0; padding-inline-start: 1.35rem; }
 .patient-overview .patient-category { margin: 0; padding: .15rem .5rem; border-radius: .35rem; font-size: .85rem; justify-self: start; }
 .patient-runtime, .patient-first-triage { font-variant-numeric: tabular-nums; }
 .patient-forecast, .patient-first-triage { grid-column: 1 / -1; font-size: .85rem; }

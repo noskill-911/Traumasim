@@ -235,6 +235,7 @@
     if (el('questions').textContent !== questions) el('questions').textContent = questions;
     el('patientQuestions').hidden = !questions.trim();
     el('storyPanel').hidden = !snapshot;
+    api.renderPrimarySurvey(el('patientPrimarySurvey'), snapshot?.primary_survey);
     el('startPatient').hidden = preview || snapshot?.status !== 'ready';
     renderTriage();
     monitor = snapshot?.monitor ?? (snapshot?.vitals && { ...snapshot.vitals, ecg: true });
