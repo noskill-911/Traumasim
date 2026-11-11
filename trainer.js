@@ -11,6 +11,10 @@
     red: 'SK I · Rot', yellow: 'SK II · Gelb', green: 'SK III · Grün',
     black: 'SK Schwarz', affected: 'SK B · Betroffene'
   };
+  const carSeatNames = {
+    driver: 'Fahrer', front: 'Beifahrer', 'rear-left': 'hinten links',
+    'rear-center': 'hinten Mitte', 'rear-right': 'hinten rechts'
+  };
   const busStationPattern = /^bus-(5|10)-(\d{2})$/;
   const busLocations = [
     'Neben der Fahrertür', 'Vorn am Querplatz, am Boden', 'Im Mittelgang',
@@ -32,9 +36,6 @@
   });
   let previewTime = 0;
   let previewTick = null;
-  let carEditVersion = 0;
-  let loadedCarNumber = '';
-  let carFormBaseline = '';
 
   if (new URLSearchParams(location.hash.slice(1)).has('access_token')) {
     history.replaceState(null, '', location.pathname + location.search);
@@ -59,9 +60,19 @@
   }
 
   function patientName(id) {
-    return exercise.patients.find((patient) => patient.id === id)?.model?.name
+    const model = exercise.patients.find((patient) => patient.id === id)?.model;
+    const name = model?.name
       ?? window.TRAUMA_CASES.find((item) => item.id === exercise.case)
       ?.patients.find((patient) => patient.id === id)?.name ?? id;
+    if (model?.car_number == null || (model.station_kind ?? 'car') !== 'car') return name;
+    const seat = carSeatName(model);
+    return seat ? 'Pkw ' + model.car_number + ' – ' + seat : name;
+  }
+
+  function carSeatName(model) {
+    const legacySeat = model.name?.split(' · ').at(-1).replace(/platz$/i, '').trim().toLowerCase();
+    return carSeatNames[model.car_seat] ?? Object.values(carSeatNames)
+      .find((name) => name.toLowerCase() === legacySeat);
   }
 
   function options(select, items, label) {
@@ -151,40 +162,13 @@
     drawPreview();
   }
 
-  function renderComposition() {
-    const panel = el('exerciseComposition');
-    panel.hidden = !exercise;
-    if (!exercise) return;
-
-    const cars = new Map();
-    const buses = new Map();
-    let other = 0;
-    for (const patient of exercise.patients) {
-      const carNumber = patient.model?.car_number;
-      const bus = busStationPattern.exec(patient.id);
-      const exampleCar = exercise.case === 'vu-baum' && ['fahrer', 'beifahrer'].includes(patient.id);
-      if (carNumber != null || exampleCar) {
-        const label = exampleCar ? 'Beispiel-Pkw' : 'Pkw ' + String(carNumber).padStart(2, '0');
-        cars.set(label, (cars.get(label) ?? 0) + 1);
-      } else if (bus) {
-        const label = 'Bus (' + bus[1] + ' Plätze)';
-        buses.set(label, (buses.get(label) ?? 0) + 1);
-      } else {
-        other++;
-      }
+  function renderComposition(groups) {
+    const kinds = groups.map(([, patients]) => stationKind(patients[0]));
+    for (const [id, kind] of [['compositionCars', 'car'], ['compositionTrucks', 'truck'],
+      ['compositionBuses', 'bus'], ['compositionObjects', 'object']]) {
+      el(id).textContent = kinds.filter((groupKind) => groupKind === kind).length;
     }
-    el('compositionCars').textContent = cars.size;
-    el('compositionBuses').textContent = buses.size;
     el('compositionPatients').textContent = exercise.patients.length;
-    const vehicles = (counts) => [...counts].sort(([a], [b]) => a.localeCompare(b, 'de', { numeric: true }));
-    const details = [...vehicles(cars), ...vehicles(buses)]
-      .map(([label, count]) => label + ' · ' + count + (count === 1 ? ' Person' : ' Personen'));
-    if (other) details.push(other === 1 ? '1 weitere Person' : other + ' weitere Personen');
-    el('compositionDetails').replaceChildren(...details.map((label) => {
-      const item = document.createElement('li');
-      item.textContent = label;
-      return item;
-    }));
   }
 
   function renderExercise(next) {
@@ -212,7 +196,6 @@
     el('busBriefing').hidden = !briefing;
     el('busBriefing').textContent = briefing ?? '';
     if (!next) {
-      renderComposition();
       el('choose').replaceChildren();
       el('patientOverview').replaceChildren();
       el('liveTitle').textContent = '';
@@ -231,7 +214,6 @@
       || next.patients.some((patient, index) => choose.options[index].value !== patient.id
         || choose.options[index].textContent !== patientName(patient.id));
     if (rebuild) {
-      renderComposition();
       choose.replaceChildren(...next.patients.map((patient) => new Option(patientName(patient.id), patient.id)));
       choose.value = next.patients.some((patient) => patient.id === previous) ? previous : next.patients[0].id;
       if (changed) resetPreview();
@@ -355,30 +337,62 @@
     return link.href;
   }
 
+  function stationKind(patient) {
+    const kind = patient.model?.station_kind;
+    if (kind === 'truck' || kind === 'object') return kind;
+    if (patient.model?.car_number != null) return 'car';
+    if (busStationPattern.test(patient.id)) return 'bus';
+    if (exercise.case === 'vu-baum' && ['fahrer', 'beifahrer'].includes(patient.id)) return 'car';
+    return 'other';
+  }
+
+  function stationNumber(value) {
+    return String(value).padStart(2, '0');
+  }
+
   function stationGroup(patient) {
-    if (patient.model?.car_number != null) {
-      return 'PKW ' + String(patient.model.car_number).padStart(2, '0');
+    const kind = stationKind(patient);
+    const number = patient.model?.car_number;
+    switch (kind) {
+      case 'car': return number == null ? 'Beispiel-Pkw' : 'PKW ' + stationNumber(number);
+      case 'truck': return 'Lkw ' + stationNumber(number);
+      case 'bus': return 'Bus · ' + busStationPattern.exec(patient.id)[1] + ' Personen';
+      case 'object': return 'Einklemmung ' + stationNumber(number);
+      default: return 'Weitere Stationen';
     }
-    const bus = busStationPattern.exec(patient.id);
-    if (bus) return 'Bus · ' + bus[1] + ' Personen';
-    if (exercise.case === 'vu-baum' && ['fahrer', 'beifahrer'].includes(patient.id)) {
-      return 'Beispiel-Pkw';
-    }
-    return 'Weitere Stationen';
   }
 
   function compareStationGroups(a, b) {
-    const order = (name) => name.startsWith('PKW ') ? 0 : name.startsWith('Bus ') ? 1 : 2;
+    const prefixes = ['PKW ', 'Beispiel-Pkw', 'Lkw ', 'Bus ', 'Einklemmung ', 'Weitere Stationen'];
+    const order = (name) => prefixes.findIndex((prefix) => name.startsWith(prefix));
     return order(a) - order(b) || a.localeCompare(b, 'de', { numeric: true });
   }
 
-  function printLabel(patient) {
-    const number = (value) => String(value).padStart(2, '0');
+  function stationGroupName(group) {
+    return group.replace(/^PKW 0*(\d+)$/, 'Pkw $1').replace(/^Bus · (\d+) Personen$/, 'Bus ($1 Plätze)');
+  }
+
+  function overviewGroups() {
+    const groups = new Map();
+    for (const patient of exercise.patients) {
+      const group = stationGroup(patient);
+      if (!groups.has(group)) groups.set(group, []);
+      groups.get(group).push(patient);
+    }
+    return [...groups].sort(([a], [b]) => compareStationGroups(a, b));
+  }
+
+  function stationLabel(patient) {
     const name = patientName(patient.id);
     const model = patient.model;
+    if (stationKind(patient) === 'object') {
+      const detail = [objectTypeLabels[model.object_type], objectPositionLabels[model.object_position],
+        objectEntrapmentLabels[model.car_entrapment]].filter(Boolean).join(' · ');
+      return { label: 'Patient ' + stationNumber(model.car_patient_number), detail, place: model.car_vehicle };
+    }
     if (model?.car_number != null) {
-      const seat = name.split(' · ').at(-1).replace(/^Fahrerplatz$/, 'Fahrer').replace(/^Beifahrerplatz$/, 'Beifahrer');
-      return { label: number(model.car_patient_number) + ' ' + seat };
+      const seat = carSeatName(model) ?? name.split(' · ').at(-1);
+      return { label: stationNumber(model.car_patient_number) + ' ' + seat, place: model.car_vehicle };
     }
     const bus = busStationPattern.exec(patient.id);
     if (bus) {
@@ -398,22 +412,20 @@
     const stations = exercise.patients
       .filter((patient) => !group || stationGroup(patient) === group)
       .map((patient) => {
-        const label = printLabel(patient).label;
-        return { id: patient.id, title: group ? label : stationGroup(patient) + ' · ' + label };
+        const label = stationLabel(patient).label;
+        return { id: patient.id, title: group ? label : stationGroupName(stationGroup(patient)) + ' · ' + label };
       });
-    options(select, stations, group ? 'Alle Stationen dieses Fahrzeugs' : 'Alle Stationen');
+    options(select, stations, group ? 'Alle Patienten dieser Gruppe' : 'Alle Patienten');
     if (stations.some((station) => station.id === previous)) select.value = previous;
   }
 
-  function updateStationFilters(reset) {
-    const groups = [...new Set(exercise.patients.map(stationGroup))]
-      .sort(compareStationGroups)
-      .map((group) => ({ id: group, title: group }));
+  function updateStationFilters(groups, reset) {
+    const choices = groups.map(([group]) => ({ id: group, title: stationGroupName(group) }));
     for (const id of ['overviewVehicle', 'printVehicle']) {
       const select = el(id);
       const previous = reset ? '' : select.value;
-      options(select, groups, 'Alle Fahrzeuge und Stationen');
-      if (groups.some((group) => group.id === previous)) select.value = previous;
+      options(select, choices, 'Alle Fahrzeuge und Stationen');
+      if (choices.some((group) => group.id === previous)) select.value = previous;
     }
     if (reset) {
       el('overviewCategory').value = '';
@@ -455,7 +467,7 @@
       if (selectedStation && patient.id !== selectedStation) continue;
       const qrUrl = patientLink(stationUrl(patient), patient);
       if (!groups.has(group)) groups.set(group, []);
-      groups.get(group).push({ ...printLabel(patient), qrUrl });
+      groups.get(group).push({ ...stationLabel(patient), qrUrl });
     }
     if (!groups.size) return;
     const validUntil = printValidity(exercise.expires_at);
@@ -479,6 +491,12 @@
           code.className = 'station-card-qr';
           drawQr(code, station.qrUrl, 'Stations-QR');
           card.append(run, vehicle, patient, code);
+          if (station.detail) {
+            const detail = document.createElement('p');
+            detail.className = 'station-card-place';
+            detail.textContent = station.detail;
+            card.append(detail);
+          }
           if (station.place) {
             const place = document.createElement('p');
             place.className = 'station-card-place';
@@ -506,53 +524,88 @@
     el(id).addEventListener('change', () => renderOverview());
   }
 
+  function createOverviewGroup(group, patients) {
+    const section = document.createElement('li');
+    section.className = 'patient-group';
+    section.dataset.group = group;
+    const heading = document.createElement('h3');
+    const title = document.createElement('span');
+    title.textContent = stationGroupName(group);
+    const count = document.createElement('span');
+    count.className = 'muted small';
+    heading.append(title, count);
+    const list = document.createElement('ul');
+    list.className = 'patient-overview';
+    for (const patient of patients) {
+      const row = document.createElement('li');
+      row.dataset.patient = patient.id;
+      const button = document.createElement('button');
+      button.type = 'button';
+      const name = document.createElement('strong');
+      name.textContent = patientName(patient.id);
+      const category = document.createElement('span');
+      const status = document.createElement('span');
+      status.className = 'patient-runtime';
+      const forecast = document.createElement('span');
+      forecast.className = 'patient-forecast muted';
+      button.append(name, category, status, forecast);
+      button.addEventListener('click', () => {
+        el('choose').value = patient.id;
+        el('choose').dispatchEvent(new Event('change'));
+        el('choose').focus();
+      });
+      row.append(button);
+      list.append(row);
+    }
+    section.append(heading, list);
+    return section;
+  }
+
   function renderOverview(rebuild = false, resetFilters = false) {
     const overview = el('patientOverview');
+    const focusedId = document.activeElement?.closest('[data-patient]')?.dataset.patient;
     if (rebuild) {
-      updateStationFilters(resetFilters);
-      const rows = exercise.patients.map((patient) => {
-        const row = document.createElement('li');
-        const button = document.createElement('button');
-        button.type = 'button';
-        const name = document.createElement('strong');
-        name.textContent = patientName(patient.id);
-        const category = document.createElement('span');
-        const status = document.createElement('span');
-        status.className = 'patient-runtime';
-        const forecast = document.createElement('span');
-        forecast.className = 'patient-forecast muted';
-        button.append(name, category, status, forecast);
-        button.addEventListener('click', () => {
-          el('choose').value = patient.id;
-          el('choose').dispatchEvent(new Event('change'));
-          el('choose').focus();
-        });
-        row.append(button);
-        return row;
-      });
-      overview.replaceChildren(...rows);
+      const groups = overviewGroups();
+      renderComposition(groups);
+      updateStationFilters(groups, resetFilters);
+      overview.replaceChildren(...groups.map(([group, patients]) => createOverviewGroup(group, patients)));
     }
     const selected = el('choose').value;
     const groupFilter = el('overviewVehicle').value;
     const categoryFilter = el('overviewCategory').value;
     const statusFilter = el('overviewStatus').value;
+    const patients = new Map(exercise.patients.map((patient) => [patient.id, patient]));
+    let focusedRow = null;
     let visible = 0;
-    exercise.patients.forEach((patient, index) => {
-      const row = overview.children[index];
-      row.hidden = Boolean((groupFilter && stationGroup(patient) !== groupFilter)
-        || (categoryFilter && (patient.category ?? 'none') !== categoryFilter)
-        || (statusFilter && patient.status !== statusFilter));
-      if (!row.hidden) visible++;
-      const button = row.firstElementChild;
-      const [, category, status, forecast] = button.children;
-      const label = categoryLabels[patient.category];
-      button.setAttribute('aria-pressed', String(patient.id === selected));
-      category.className = label ? 'triage patient-category ' + patient.category : 'patient-category muted';
-      category.textContent = label ?? '–';
-      status.textContent = api.labels[patient.status] + ' · ' + api.clock(patient.elapsed);
-      forecast.textContent = forecastLabel(patient);
-      forecast.hidden = !forecast.textContent;
-    });
+    for (const section of overview.children) {
+      const groupMatches = !groupFilter || section.dataset.group === groupFilter;
+      const rows = section.lastElementChild.children;
+      let groupVisible = 0;
+      for (const row of rows) {
+        const patient = patients.get(row.dataset.patient);
+        row.hidden = !groupMatches || Boolean((categoryFilter && (patient.category ?? 'none') !== categoryFilter)
+          || (statusFilter && patient.status !== statusFilter));
+        if (!row.hidden) groupVisible++;
+        if (patient.id === focusedId) focusedRow = row;
+        const button = row.firstElementChild;
+        const [, category, status, forecast] = button.children;
+        const label = categoryLabels[patient.category];
+        button.setAttribute('aria-pressed', String(patient.id === selected));
+        category.className = label ? 'triage patient-category ' + patient.category : 'patient-category muted';
+        category.textContent = label ?? '–';
+        status.textContent = api.labels[patient.status] + ' · ' + api.clock(patient.elapsed);
+        forecast.textContent = forecastLabel(patient);
+        forecast.hidden = !forecast.textContent;
+      }
+      const groupCount = section.firstElementChild.lastElementChild;
+      const text = (groupVisible === rows.length ? groupVisible : groupVisible + ' von ' + rows.length)
+        + (rows.length === 1 ? ' Patient' : ' Patienten');
+      if (groupCount.textContent !== text) groupCount.textContent = text;
+      section.hidden = groupVisible === 0;
+      visible += groupVisible;
+    }
+    if (focusedId && (!focusedRow || focusedRow.hidden)) el('overviewVehicle').focus();
+    else if (rebuild && focusedRow) focusedRow.firstElementChild.focus();
     const count = el('overviewCount');
     const text = visible + ' von ' + exercise.patients.length + ' Patienten angezeigt.';
     if (count.textContent !== text) count.textContent = text;
@@ -563,8 +616,12 @@
     if (!patient) return;
     const station = stationUrl(patient).href;
     const link = patientLink(station, patient);
-    const carPatient = patient.model?.car_number != null;
-    el('stationTitle').textContent = carPatient ? patientName(patient.id) : 'Stations-QR für diesen Patienten';
+    const numberedStation = patient.model?.car_number != null;
+    el('stationTitle').textContent = numberedStation ? patientName(patient.id) : 'Stations-QR für diesen Patienten';
+    const { detail, place } = stationLabel(patient);
+    const location = el('stationLocation');
+    location.textContent = [detail, place ? 'Auffindeort · ' + place : ''].filter(Boolean).join(' · ');
+    location.hidden = !location.textContent;
     renderStation(link);
     const previewLink = el('previewPatientLink');
     previewLink.hidden = !patient.preview_code;
@@ -727,7 +784,7 @@
     if (busy) return;
     busy = true;
     actionVersion++;
-    const controls = document.querySelectorAll('form button, #logout, #exercise, #createCustom, #startBus, #attachBus, #editCar, #triageMode');
+    const controls = document.querySelectorAll('form button, #logout, #exercise, #createCustom, #startBus, #attachBus, #editCar, #editTruck, #editObject, #triageMode');
     for (const control of controls) control.disabled = true;
     renderPatient();
     try {
@@ -912,16 +969,53 @@
       });
     });
   }
-  const seatControls = [
-    ['driver', 'Fahrerplatz'], ['front', 'Beifahrerplatz'], ['rear-left', 'Hinten links'],
-    ['rear-center', 'Hinten Mitte'], ['rear-right', 'Hinten rechts']
-  ].map(([seat, label]) => {
+  const objectTypeLabels = {
+    beam: 'Balken', skip: 'Absetzmulde', car: 'Pkw', 'car-bike': 'Pkw und Fahrrad',
+    truck: 'Lkw', bus: 'Bus', machine: 'Maschine'
+  };
+  const objectPositionLabels = { under: 'Unter einem Gegenstand', between: 'Zwischen Gegenständen' };
+  const objectEntrapmentLabels = {
+    'left-arm': 'Linker Arm', 'right-arm': 'Rechter Arm', 'both-arms': 'Beide Arme',
+    'left-leg': 'Linkes Bein', 'right-leg': 'Rechtes Bein', 'both-legs': 'Beide Beine'
+  };
+  const cabSeats = [['driver', 'Fahrerplatz'], ['front', 'Beifahrerplatz']];
+  const stationForms = [
+    setupStationForm('car', 'Car', 'Pkw', [
+      ...cabSeats, ['rear-left', 'Hinten links'], ['rear-center', 'Hinten Mitte'], ['rear-right', 'Hinten rechts']
+    ]),
+    setupStationForm('truck', 'Truck', 'Lkw', cabSeats),
+    setupStationForm('object', 'Object', 'Klemmstelle', [['patient', 'Person']])
+  ];
+
+  for (const [id, labels] of [['objectType', objectTypeLabels], ['objectPosition', objectPositionLabels]]) {
+    el(id).replaceChildren(...Object.entries(labels).map(([value, label]) => new Option(label, value)));
+  }
+
+  function setupStationForm(kind, suffix, title, seats) {
+    const prefix = suffix.toLowerCase();
+    const form = {
+      kind, title, loadedNumber: '', baseline: '', editVersion: 0,
+      card: el(prefix + 'Booking'), fields: el(prefix + 'Form'),
+      choiceLabel: el('edit' + suffix + 'Choice'), select: el('edit' + suffix),
+      start: el('start' + suffix), attach: el('attach' + suffix), save: el('save' + suffix),
+      location: el(prefix + 'Situation'), status: el(prefix + 'EditStatus'), unsaved: el(prefix + 'Unsaved')
+    };
+    if (kind === 'object') {
+      form.objectType = el('objectType');
+      form.objectPosition = el('objectPosition');
+    }
+    form.rows = seats.map(([seat, label]) => createSeatControl(form, el(prefix + 'Seats'), seat, label));
+    return form;
+  }
+
+  function createSeatControl(form, container, seat, label) {
+    const objectStation = form.kind === 'object';
     const group = document.createElement('fieldset');
     group.className = 'car-seat';
     group.innerHTML = `<legend>${label}</legend>
       <label>Besetzung und Verletzungsprofil
         <select class="seat-profile">
-          <option value="">Leer</option><option value="affected">${categoryLabels.affected}</option>
+          <option value="">${objectStation ? 'Profil auswählen' : 'Leer'}</option><option value="affected">${categoryLabels.affected}</option>
           <option value="minor">Leicht verletzt · SK III</option><option value="urgent">Schwer verletzt · SK II</option>
           <option value="critical">Vital bedroht · SK I</option>
           <option value="black">${categoryLabels.black}</option>
@@ -935,7 +1029,12 @@
           <strong class="seat-transition-value" aria-hidden="true"></strong>
           <input class="seat-transition" type="range" min="1" max="44" step="1" disabled>
         </label>
-        <label>Befreiungslage
+        ${objectStation ? `<label>Eingeklemmte Körperregion
+          <select class="seat-entrapment" required disabled>
+            <option value="">Körperregion auswählen</option>
+            ${Object.entries(objectEntrapmentLabels).map(([value, name]) => `<option value="${value}">${name}</option>`).join('')}
+          </select>
+        </label>` : `<label>Befreiungslage
           <select class="seat-access">
             <option value="none">Frei zugänglich</option>
             <option value="enclosed">Eingeschlossen</option>
@@ -949,16 +1048,16 @@
             <option value="footwell">Fußraum / Bein</option><option value="dashboard">Sitz / Armaturenbrett</option>
             <option value="roof">Dach / Sitz</option>
           </select>
-        </label>
+        </label>`}
         <label>Eigene Verletzungsbeschreibung (optional)
           <input class="seat-injury" maxlength="400">
         </label>
-        <div class="seat-move" hidden>
+        ${objectStation ? '' : `<div class="seat-move" hidden>
           <label>Sitzplatz wechseln
             <select class="seat-move-target"></select>
           </label>
           <button class="seat-move-button" type="button">Umsetzen oder tauschen</button>
-        </div>
+        </div>`}
       </div>`;
     const legend = group.querySelector('legend');
     const profile = group.querySelector('.seat-profile');
@@ -975,9 +1074,10 @@
     const moveButton = group.querySelector('.seat-move-button');
     const row = { seat, label, profile, transition, access, entrapment, injury, move, moveTarget, moveButton, patientNumber: null };
     function showEntrapment() {
-      entrapment.disabled = entrapmentLabel.hidden = !profile.value || access.value !== 'trapped';
+      entrapment.disabled = !profile.value || (access != null && access.value !== 'trapped');
+      if (entrapmentLabel) entrapmentLabel.hidden = entrapment.disabled;
     }
-    access.addEventListener('change', showEntrapment);
+    access?.addEventListener('change', showEntrapment);
     function showTransitionMinute() {
       const text = 'Minute ' + transition.value;
       transitionValue.textContent = text;
@@ -987,7 +1087,7 @@
     profile.addEventListener('change', () => {
       if (!profile.value) {
         row.patientNumber = null;
-        access.value = 'none';
+        if (access) access.value = 'none';
         entrapment.value = '';
         injury.value = '';
       }
@@ -1003,30 +1103,35 @@
         showTransitionMinute();
       }
     });
-    moveTarget.addEventListener('change', updateCarActions);
-    moveButton.addEventListener('click', () => moveCarOccupant(row));
-    el('carSeats').append(group);
+    moveTarget?.addEventListener('change', updateCarActions);
+    moveButton?.addEventListener('click', () => moveCarOccupant(form, row));
+    container.append(group);
     return row;
-  });
+  }
 
-  function carPatients(number) {
-    if (!number) return [];
-    return (exercise?.patients ?? []).filter((patient) => patient.model?.car_number === Number(number));
+  function stationPatients(form) {
+    return (exercise?.patients ?? []).filter(({model}) =>
+      model?.car_number != null && (model.station_kind ?? 'car') === form.kind);
+  }
+
+  function carPatients(form, number = form.loadedNumber) {
+    return number ? stationPatients(form).filter(({model}) => model.car_number === Number(number)) : [];
   }
 
   function updateCarChoices(changed) {
-    const select = el('editCar');
-    const previous = changed ? '' : select.value;
-    const numbers = [...new Set((exercise?.patients ?? []).map((p) => p.model?.car_number).filter((n) => n != null))];
-    numbers.sort((a, b) => a - b);
-    select.replaceChildren(new Option('Neuen Pkw konfigurieren', ''),
-      ...numbers.map((number) => new Option('Pkw ' + String(number).padStart(2, '0') + ' bearbeiten', number)));
-    select.value = numbers.includes(Number(previous)) ? previous : '';
-    el('editCarChoice').hidden = !numbers.length;
+    for (const form of stationForms) {
+      const previous = changed ? '' : form.select.value;
+      const numbers = [...new Set(stationPatients(form).map(({model}) => model.car_number))].sort((a, b) => a - b);
+      const firstOption = form.kind === 'object' ? 'Neue Klemmstelle konfigurieren' : 'Neuen ' + form.title + ' konfigurieren';
+      form.select.replaceChildren(new Option(firstOption, ''),
+        ...numbers.map((number) => new Option(form.title + ' ' + String(number).padStart(2, '0') + ' bearbeiten', number)));
+      form.select.value = numbers.includes(Number(previous)) ? previous : '';
+      form.choiceLabel.hidden = !numbers.length;
+    }
     if (changed) loadCarForm();
   }
 
-  function legacyCarConfig(model) {
+  function legacyCarConfig(form, model) {
     // Older bookings stored the generated description but not the form values.
     const seat = model.name.split(' · ').at(-1);
     const separator = '. Sitzplatz ' + seat + ', ';
@@ -1052,40 +1157,52 @@
       'red-ex': 'Die Person ist blass, antwortet verzögert und wirkt zunehmend benommen.'
     };
     return {
-      seat: seatControls.find((row) => row.label.toLowerCase() === seat.toLowerCase())?.seat,
+      seat: form.rows.find((row) => row.label.toLowerCase() === seat.toLowerCase())?.seat,
       vehicle: vehicle === 'Fahrzeuglage vor Ort erkunden' ? '' : vehicle,
       profile, entrapment, injury: model.story === defaults[profile] ? '' : model.story
     };
   }
 
-  function loadCarForm() {
-    loadedCarNumber = el('editCar').value;
-    const patients = carPatients(loadedCarNumber);
-    el('carForm').reset();
-    for (const row of seatControls) fillCarSeat(row);
-    carEditVersion = patients[0]?.model.car_edit_version ?? 0;
+  function loadCarForm(form) {
+    if (!form) {
+      for (const item of stationForms) loadCarForm(item);
+      return;
+    }
+    form.loadedNumber = form.select.value;
+    const patients = carPatients(form);
+    form.fields.reset();
+    for (const row of form.rows) fillCarSeat(row);
+    form.editVersion = patients[0]?.model.car_edit_version ?? 0;
     for (const {model} of patients) {
       const config = model.car_seat ? {
         seat: model.car_seat, vehicle: model.car_vehicle, profile: model.car_profile,
         entrapment: model.car_entrapment, injury: model.car_injury
-      } : legacyCarConfig(model);
-      const row = seatControls.find((item) => item.seat === config.seat);
+      } : legacyCarConfig(form, model);
+      const row = form.rows.find((item) => item.seat === config.seat);
       if (!row) continue;
-      el('carSituation').value = config.vehicle ?? '';
+      form.location.value = config.vehicle ?? '';
+      if (form.objectType) {
+        form.objectType.value = model.object_type;
+        form.objectPosition.value = model.object_position;
+      }
       fillCarSeat(row, { ...config, patient_number: model.car_patient_number,
         transition_minute: model.progression ? model.progression.at_seconds / 60 : null });
     }
-    updateCarMoveChoices();
-    carFormBaseline = JSON.stringify(carFormConfig());
+    updateCarMoveChoices(form);
+    form.baseline = JSON.stringify(carFormConfig(form));
     showCarDirtyState();
   }
 
   function fillCarSeat(row, config) {
     row.patientNumber = config?.patient_number ?? null;
     row.profile.value = config?.profile ?? '';
-    const entrapment = config?.entrapment ?? 'none';
-    row.access.value = ['none', 'enclosed'].includes(entrapment) ? entrapment : 'trapped';
-    row.entrapment.value = row.access.value === 'trapped' ? entrapment : '';
+    const entrapment = config?.entrapment ?? (row.access ? 'none' : '');
+    if (row.access) {
+      row.access.value = ['none', 'enclosed'].includes(entrapment) ? entrapment : 'trapped';
+      row.entrapment.value = row.access.value === 'trapped' ? entrapment : '';
+    } else {
+      row.entrapment.value = entrapment;
+    }
     row.injury.value = config?.injury ?? '';
     row.profile.dispatchEvent(new Event('change'));
     if (config?.transition_minute != null) {
@@ -1094,21 +1211,22 @@
     }
   }
 
-  function updateCarMoveChoices() {
-    for (const row of seatControls) {
-      row.move.hidden = !loadedCarNumber || !row.profile.value;
+  function updateCarMoveChoices(form) {
+    for (const row of form.rows) {
+      if (!row.move) continue;
+      row.move.hidden = !form.loadedNumber || !row.profile.value;
       const target = row.moveTarget.value;
       row.moveTarget.replaceChildren(new Option('Zielplatz wählen', ''),
-        ...seatControls.filter((other) => other !== row).map((other) =>
+        ...form.rows.filter((other) => other !== row).map((other) =>
           new Option(other.profile.value ? 'Tauschen mit ' + other.label : other.label, other.seat)));
       row.moveTarget.value = target;
     }
     updateCarActions();
   }
 
-  function moveCarOccupant(row) {
-    if (!loadedCarNumber || busy || !row.profile.value) return;
-    const target = seatControls.find((other) => other.seat === row.moveTarget.value);
+  function moveCarOccupant(form, row) {
+    if (!form.loadedNumber || busy || !row.profile.value) return;
+    const target = form.rows.find((other) => other.seat === row.moveTarget.value);
     if (!target || target === row) return;
     const occupant = carOccupantConfig(row);
     const otherOccupant = target.profile.value ? carOccupantConfig(target) : null;
@@ -1116,49 +1234,58 @@
     fillCarSeat(target, occupant);
     row.moveTarget.value = '';
     target.moveTarget.value = '';
-    updateCarMoveChoices();
+    updateCarMoveChoices(form);
     showCarDirtyState();
     target.profile.focus();
   }
 
   function updateCarActions() {
-    const patients = carPatients(el('editCar').value);
-    const editing = patients.length > 0;
-    const started = patients.some((patient) => patient.status !== 'ready');
-    el('startCar').hidden = editing;
-    el('attachCar').hidden = !exercise || editing;
-    el('saveCar').hidden = !editing;
-    el('saveCar').disabled = busy || started;
-    for (const row of seatControls) row.moveButton.disabled = busy || !row.moveTarget.value;
-    const status = el('carEditStatus');
-    status.hidden = !editing;
-    const text = started ? 'Setze die bereits gestarteten Patienten dieses Pkw vor dem Bearbeiten zurück.'
-      : 'Umgesetzte Insassen behalten ihre Patientennummer und ihren QR-Code. Entfernte Insassen verlieren ihren QR-Zugang. Neue Insassen erhalten einen eigenen Code.';
-    if (status.textContent !== text) status.textContent = text;
+    for (const form of stationForms) {
+      const patients = carPatients(form);
+      const editing = patients.length > 0;
+      const started = patients.some((patient) => patient.status !== 'ready');
+      form.start.hidden = editing;
+      form.attach.hidden = !exercise || editing;
+      form.save.hidden = !editing;
+      form.save.disabled = busy || started;
+      for (const row of form.rows) {
+        if (row.moveButton) row.moveButton.disabled = busy || !row.moveTarget.value;
+      }
+      form.status.hidden = !editing;
+      const text = started ? 'Setze die bereits gestarteten Patienten vor dem Bearbeiten zurück.'
+        : form.kind === 'object' ? 'Die Patientennummer und der QR-Code bleiben erhalten.'
+          : 'Umgesetzte Insassen behalten ihre Patientennummer und ihren QR-Code. Entfernte Insassen verlieren ihren QR-Zugang. Neue Insassen erhalten einen eigenen Code.';
+      if (form.status.textContent !== text) form.status.textContent = text;
+    }
   }
 
   function carOccupantConfig(row) {
     return {
       seat: row.seat, profile: row.profile.value, injury: row.injury.value,
       ...(row.patientNumber == null ? {} : { patient_number: row.patientNumber }),
-      entrapment: row.access.value === 'trapped' ? row.entrapment.value : row.access.value,
+      entrapment: row.access && row.access.value !== 'trapped' ? row.access.value : row.entrapment.value,
       transition_minute: row.transition.disabled ? null : row.transition.valueAsNumber
     };
   }
 
-  function carFormConfig() {
-    const occupants = seatControls.filter((row) => row.profile.value).map(carOccupantConfig);
-    return { vehicle: el('carSituation').value, occupants };
+  function carFormConfig(form) {
+    const occupants = form.rows.filter((row) => row.profile.value).map(carOccupantConfig);
+    const config = { vehicle: form.location.value, occupants };
+    if (form.kind !== 'car') config.kind = form.kind;
+    if (form.objectType) {
+      config.object_type = form.objectType.value;
+      config.object_position = form.objectPosition.value;
+    }
+    return config;
   }
 
-  function carFormIsDirty() {
-    return carFormBaseline !== JSON.stringify(carFormConfig());
+  function carFormIsDirty(form) {
+    return form.baseline !== JSON.stringify(carFormConfig(form));
   }
 
   function showCarDirtyState() {
-    const dirty = carFormIsDirty();
-    el('carUnsaved').hidden = !dirty;
-    if (dirty) window.addEventListener('beforeunload', warnBeforeLeaving);
+    for (const form of stationForms) form.unsaved.hidden = !carFormIsDirty(form);
+    if (stationForms.some(carFormIsDirty)) window.addEventListener('beforeunload', warnBeforeLeaving);
     else window.removeEventListener('beforeunload', warnBeforeLeaving);
   }
 
@@ -1167,80 +1294,108 @@
     event.returnValue = '';
   }
 
-  async function confirmCarChanges() {
-    if (!carFormIsDirty()) return true;
-    const dialog = el('carChangesDialog');
-    const started = carPatients(loadedCarNumber).some((patient) => patient.status !== 'ready');
-    dialog.querySelector('[data-car-choice="save"]').disabled = started;
-    el('carChangesMessage').textContent = started
-      ? 'Ein Patient ist gestartet. Du kannst die Bearbeitung behalten oder die Änderungen verwerfen.'
-      : 'Möchtest du die Änderungen vor dem Wechsel speichern?';
-    dialog.returnValue = 'cancel';
-    const choice = await new Promise((resolve) => {
-      dialog.addEventListener('close', () => resolve(dialog.returnValue), { once: true });
-      dialog.showModal();
-    });
-    if (choice === 'save') {
-      await saveCar(Boolean(exercise));
-      return true;
+  async function confirmCarChanges(forms = stationForms, discardNow = false) {
+    for (const form of forms) {
+      if (!carFormIsDirty(form)) continue;
+      const dialog = el('carChangesDialog');
+      const started = carPatients(form).some((patient) => patient.status !== 'ready');
+      dialog.querySelector('[data-car-choice="save"]').disabled = started;
+      el('carChangesTitle').textContent = form.unsaved.textContent;
+      el('carChangesMessage').textContent = started
+        ? 'Ein Patient ist gestartet. Du kannst die Bearbeitung behalten oder die Änderungen verwerfen.'
+        : 'Möchtest du die Änderungen vor dem Wechsel speichern?';
+      dialog.returnValue = 'cancel';
+      const choice = await new Promise((resolve) => {
+        dialog.addEventListener('close', () => resolve(dialog.returnValue), { once: true });
+        dialog.showModal();
+      });
+      if (choice === 'save') await saveCar(form, Boolean(exercise));
+      else if (choice !== 'discard') return false;
+      else if (discardNow) loadCarForm(form);
     }
-    return choice === 'discard';
+    return true;
   }
 
   for (const button of el('carChangesDialog').querySelectorAll('[data-car-choice]')) {
     button.addEventListener('click', () => el('carChangesDialog').close(button.dataset.carChoice));
   }
-  el('carForm').addEventListener('input', showCarDirtyState);
-  el('carForm').addEventListener('change', (event) => {
-    if (event.target.classList.contains('seat-profile')) updateCarMoveChoices();
-    showCarDirtyState();
-  });
-
-  el('editCar').addEventListener('change', () => {
-    const select = el('editCar');
-    const number = select.value;
-    select.value = loadedCarNumber;
-    void run(async () => {
-      if (number === loadedCarNumber || !await confirmCarChanges()) return;
-      select.value = number;
-      loadCarForm();
+  for (const form of stationForms) {
+    form.card.querySelector('summary').addEventListener('click', (event) => {
+      if (form.card.open) return;
+      if (busy) {
+        event.preventDefault();
+        return;
+      }
+      const others = stationForms.filter((other) => other !== form);
+      const closeOthers = () => {
+        for (const other of others) other.card.open = false;
+      };
+      if (!others.some(carFormIsDirty)) {
+        closeOthers();
+        return;
+      }
+      event.preventDefault();
+      void run(async () => {
+        if (!await confirmCarChanges(others, true)) return;
+        closeOthers();
+        form.card.open = true;
+      });
     });
-  });
 
-  el('carForm').addEventListener('submit', (event) => {
-    event.preventDefault();
-    const attach = event.submitter?.id === 'attachCar';
-    if (loadedCarNumber && el('saveCar').disabled) return;
-    void run(() => saveCar(attach));
-  });
+    form.fields.addEventListener('input', showCarDirtyState);
+    form.fields.addEventListener('change', (event) => {
+      if (event.target.classList.contains('seat-profile')) updateCarMoveChoices(form);
+      showCarDirtyState();
+    });
 
-  async function saveCar(attach) {
-    const editNumber = Number(loadedCarNumber);
-    const config = carFormConfig();
-    if (!config.occupants.length) throw new Error('Wähle mindestens einen besetzten Sitzplatz.');
-    if (!el('carForm').reportValidity()) throw new Error('Prüfe die Angaben im Pkw-Formular.');
-    if (editNumber) Object.assign(config, { car_number: editNumber, edit_version: carEditVersion });
+    form.select.addEventListener('change', () => {
+      const number = form.select.value;
+      form.select.value = form.loadedNumber;
+      void run(async () => {
+        if (number === form.loadedNumber || !await confirmCarChanges([form])) return;
+        form.select.value = number;
+        loadCarForm(form);
+      });
+    });
+
+    form.fields.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const attach = event.submitter === form.attach;
+      if (form.loadedNumber && form.save.disabled) return;
+      void run(() => saveCar(form, attach));
+    });
+  }
+
+  async function saveCar(form, attach) {
+    const editNumber = Number(form.loadedNumber);
+    const config = carFormConfig(form);
+    if (!config.occupants.length) throw new Error(form.kind === 'object'
+      ? 'Wähle ein Verletzungsprofil für die Person.' : 'Wähle mindestens einen besetzten Sitzplatz.');
+    if (!form.fields.reportValidity()) throw new Error('Prüfe die Angaben im Formular.');
+    if (editNumber) Object.assign(config, { car_number: editNumber, edit_version: form.editVersion });
     const next = await rpc({ p_config: config, p_session: attach || editNumber ? exercise.id : null }, api.bookCar);
     if (editNumber) {
       renderExercise(next);
       resetPreview();
-      loadCarForm();
-      message('Änderungen am Pkw gespeichert.');
+      loadCarForm(form);
+      message(form.kind === 'object' ? 'Änderungen an der Klemmstelle gespeichert.'
+        : 'Änderungen am ' + form.title + ' gespeichert.');
       return;
     }
     if (attach) {
       renderExercise(next);
-      const number = Math.max(...next.patients.map((patient) => patient.model.car_number ?? 0));
-      const first = next.patients.find((patient) => patient.model.car_number === number);
+      const patients = stationPatients(form);
+      const number = Math.max(...patients.map(({model}) => model.car_number));
+      const first = patients.find(({model}) => model.car_number === number);
       el('choose').value = first.id;
       renderOverview();
       renderPatient();
       resetPreview();
-      message('Pkw ' + String(number).padStart(2, '0') + ' hinzugefügt.');
+      message(form.title + ' ' + String(number).padStart(2, '0') + ' hinzugefügt.');
     } else {
       openCreatedExercise(next);
     }
-    loadCarForm();
+    loadCarForm(form);
   }
   el('choose').addEventListener('change', () => {
     renderOverview();

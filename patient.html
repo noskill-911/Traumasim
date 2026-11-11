@@ -1,5 +1,5 @@
 <!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
-<title>TraumaSim · Patientenansicht</title><link rel="stylesheet" href="style.css?v=triage-buttons"></head><body><main id="content">
+<title>TraumaSim · Patientenansicht</title><link rel="stylesheet" href="style.css?v=vehicle-stations"></head><body><main id="content">
 <div class="panel page-banner"><div class="muted">TRAUMASIM · PATIENTENSIMULATION</div><h1 id="caseTitle">Übungslage</h1><h2 id="patientTitle"></h2><p id="intro"></p><p id="syncStatus" role="status">Verbindung zur Übung wird geprüft …</p>
 <p id="previewBanner" class="muted" hidden>Schüler-Vorschau · Der Verlauf wird hier nur angezeigt.</p>
 <p id="connectionNotice" class="warning" role="status" hidden></p>
@@ -18,6 +18,7 @@
   <button class="triage triage-choice affected" type="button" data-category="affected">SK B · Betroffene</button>
   <button class="triage triage-choice black" type="button" data-category="black">SK Schwarz</button>
 </div>
+<button id="cancelTriageChange" type="button" hidden>Abbrechen</button>
 </section>
 <section class="panel" id="triagePanel" aria-label="Sichtungskategorie im Übungsmodell" hidden>
   <div id="triageAutoLabel" class="muted">Sichtungskategorie · Übungsmodell</div>
@@ -34,6 +35,7 @@
       </div>
     </div>
   </div>
+  <button id="changeTriageChoice" type="button" aria-controls="triageChoicePanel" hidden>Eigene SK ändern</button>
   <div id="triageExplanation" class="triage-explanation" hidden>
     <div id="triageReason"></div>
     <div id="patientCondition" class="condition"></div>
@@ -53,4 +55,4 @@
 <div id="storyPanel" class="panel" hidden><details open><summary>🗣 Patientenstory – Was ist passiert?</summary><blockquote id="story"></blockquote><p><strong>Auf Nachfrage:</strong> <span id="questions"></span></p></details></div>
 <div id="clockPanel" class="panel" hidden><div class="muted small">Gemeinsame Patientenzeit: <span id="elapsed">00:00</span></div></div>
 <p class="muted small">Nur für Ausbildung. Simulierte Werte und Kategorien sind keine klinische Prognose und keine validierte Umsetzung des Hamburger mSTaRT-Verfahrens.</p>
-</main><script src="patients.js"></script><script src="supabase-config.js"></script><script src="sync.js?v=workflow-3"></script><script src="student.js?v=triage-buttons"></script></body></html>
+</main><script src="patients.js"></script><script src="supabase-config.js"></script><script src="sync.js?v=workflow-3"></script><script src="student.js?v=vehicle-stations"></script></body></html>

@@ -241,7 +241,7 @@ begin
         <> sha256(convert_to(p_code, 'UTF8')) then
    raise exception using errcode = '42501', message = 'Patientenzugang ungültig oder abgelaufen';
  end if;
- if exercise_access and p_patient like 'car-%' then
+ if exercise_access and p_patient like any (array['car-%', 'truck-%', 'object-%']) then
    raise exception using errcode = 'P0002', message = 'Für diesen Patienten ist der einzelne Stations-QR erforderlich.';
  end if;
 
@@ -375,7 +375,15 @@ begin
    -- Preserve the complete snapshot for previously loaded student pages.
    'vitals', case when not affected and category <> 'black' and seconds >= 120 then vitals || jsonb_build_object('s', bp_values->'s', 'd', bp_values->'d') end
  ) || case when patient.scenario_model is not null then jsonb_build_object('brief', jsonb_build_object(
-   'title', exercise.title, 'name', model->>'name', 'intro', model->>'intro',
+   'title', exercise.title,
+   'name', coalesce(case when p_patient like 'car-%' then
+     'Pkw ' || (model->>'car_number') || ' – ' || coalesce(case model->>'car_seat'
+       when 'driver' then 'Fahrer' when 'front' then 'Beifahrer'
+       when 'rear-left' then 'hinten links' when 'rear-center' then 'hinten Mitte'
+       when 'rear-right' then 'hinten rechts' end,
+       (regexp_match(model->>'name', ' · (Fahrer|Beifahrer|hinten links|hinten Mitte|hinten rechts)(platz)?$'))[1])
+     end, model->>'name'),
+   'intro', model->>'intro',
    'story', case
      when static_black then coalesce(nullif(model->>'story', ''), observation)
      when category = 'black' then 'Die Person gibt im Übungsmodell keine Antwort mehr.'
@@ -710,10 +718,17 @@ returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
  trainer uuid := traumasim_private.require_trainer();
  exercise public.traumasim_sessions%rowtype;
- seats text[] := array['driver','front','rear-left','rear-center','rear-right'];
+ station_kind text := case when p_config ? 'kind' then p_config->>'kind' else 'car' end;
+ station_prefix text := station_kind || '-';
+ station_name text;
+ seats text[];
  seat_names text[] := array['Fahrerplatz','Beifahrerplatz','hinten links','hinten Mitte','hinten rechts'];
  occupants jsonb := p_config->'occupants';
- vehicle text := coalesce(nullif(btrim(p_config->>'vehicle'), ''), 'Fahrzeuglage vor Ort erkunden.');
+ vehicle text := nullif(btrim(p_config->>'vehicle'), '');
+ object_type text := p_config->>'object_type';
+ object_position text := p_config->>'object_position';
+ object_name text;
+ object_location text;
  person jsonb;
  car_no integer;
  person_no bigint;
@@ -726,6 +741,8 @@ declare
  transition_minute integer;
  progression jsonb;
  entrapment text;
+ location_description text;
+ station_patient_key text;
  injury text;
  points jsonb;
  edit_car boolean := coalesce(p_config ? 'car_number', false);
@@ -739,23 +756,60 @@ begin
     or octet_length(p_config::text) > 12000
     or length(vehicle) > 200
     or jsonb_typeof(occupants) is distinct from 'array' then
-   raise exception using errcode = '22023', message = 'Die Pkw-Konfiguration ist ungültig.';
+   raise exception using errcode = '22023', message = 'Die Stationskonfiguration ist ungültig.';
  end if;
- if jsonb_array_length(occupants) not between 1 and 5 then
-   raise exception using errcode = '22023', message = 'Wähle mindestens einen und höchstens fünf besetzte Sitzplätze.';
+ case station_kind
+   when 'car' then
+     station_name := 'Pkw';
+     seats := array['driver','front','rear-left','rear-center','rear-right'];
+   when 'truck' then
+     station_name := 'Lkw';
+     seats := array['driver','front'];
+   when 'object' then
+     station_name := 'Einklemmung';
+     seats := array['patient'];
+     seat_names := array['Einklemmung'];
+     object_name := case object_type
+       when 'beam' then 'einem Betonträger'
+       when 'skip' then 'einer Mulde'
+       when 'car' then 'einem Pkw'
+       when 'car-bike' then 'einem Pkw'
+       when 'truck' then 'einem Lkw'
+       when 'bus' then 'einem Bus'
+       when 'machine' then 'einer Maschine'
+     end;
+     object_location := case object_position
+       when 'under' then 'unter ' || object_name
+         || case when object_type = 'car-bike' then ' neben einem Fahrrad' else '' end
+       when 'between' then 'zwischen ' || object_name
+         || case when object_type = 'car-bike' then ' und einem Fahrrad' else ' und einem Hindernis' end
+     end;
+     if object_location is null then
+       raise exception using errcode = '22023', message = 'Wähle ein Objekt und die Lage der Einklemmung.';
+     end if;
+   else
+     raise exception using errcode = '22023', message = 'Die Stationsart ist ungültig.';
+ end case;
+ if jsonb_array_length(occupants) not between 1 and cardinality(seats) then
+   raise exception using errcode = '22023', message = case station_kind
+     when 'car' then 'Wähle mindestens einen und höchstens fünf besetzte Sitzplätze.'
+     when 'truck' then 'Wähle mindestens einen und höchstens zwei besetzte Sitzplätze.'
+     else 'Eine Einklemmung an einem Objekt benötigt genau einen Patienten.'
+   end;
  end if;
  if (select count(distinct item->>'seat') from jsonb_array_elements(occupants) item) <> jsonb_array_length(occupants) then
    raise exception using errcode = '22023', message = 'Jeder Sitzplatz darf nur einmal besetzt sein.';
  end if;
  if edit_car and (p_session is null or coalesce(p_config->>'car_number', '') !~ '^[1-9][0-9]?$'
     or coalesce(p_config->>'edit_version', '') !~ '^[0-9]{1,9}$') then
-   raise exception using errcode = '22023', message = 'Die Pkw-Auswahl ist ungültig.';
+   raise exception using errcode = '22023', message = 'Die Stationsauswahl ist ungültig.';
  end if;
 
  if p_session is null then
    exercise.id := gen_random_uuid();
    insert into public.traumasim_sessions (id, title, case_key, trainer_id)
-   values (exercise.id, 'Pkw-Lage', 'custom-' || exercise.id::text, trainer);
+   values (exercise.id, case when station_kind = 'object' then 'Einklemmung an einem Objekt'
+     else station_name || '-Lage' end, 'custom-' || exercise.id::text, trainer);
  else
    select s.* into exercise from public.traumasim_sessions s
    where s.id = p_session and s.trainer_id = trainer and s.expires_at > clock_timestamp() for update;
@@ -772,16 +826,16 @@ begin
                        (p.scenario_model->>'car_patient_sequence')::bigint))
    into existing_count, has_started, edit_version, last_person_no
    from public.traumasim_patients p
-   where p.session_id = exercise.id and p.patient_key like 'car-%'
+   where p.session_id = exercise.id and p.patient_key like station_prefix || '%'
      and (p.scenario_model->>'car_number')::integer = car_no;
    if existing_count = 0 then
-     raise exception using errcode = '22023', message = 'Der Pkw wurde in dieser Übung nicht gefunden.';
+     raise exception using errcode = '22023', message = 'Die Station wurde in dieser Übung nicht gefunden.';
    end if;
    if has_started then
-     raise exception using errcode = '22023', message = 'Setze die gestarteten Patienten dieses Pkw zuerst zurück.';
+     raise exception using errcode = '22023', message = 'Setze die gestarteten Patienten dieser Station zuerst zurück.';
    end if;
    if edit_version <> (p_config->>'edit_version')::integer then
-     raise exception using errcode = '40001', message = 'Der Pkw wurde zwischenzeitlich bearbeitet. Öffne die Bearbeitung erneut.';
+     raise exception using errcode = '40001', message = 'Die Station wurde zwischenzeitlich bearbeitet. Öffne die Bearbeitung erneut.';
    end if;
    if (select count(item->>'patient_number') <> count(distinct item->>'patient_number')
        from jsonb_array_elements(occupants) item) then
@@ -795,7 +849,7 @@ begin
    edit_version := 0;
    last_booked_person_no := jsonb_array_length(occupants);
    select coalesce(max((p.scenario_model->>'car_number')::integer), 0) + 1 into car_no
-   from public.traumasim_patients p where p.session_id = exercise.id and p.patient_key like 'car-%';
+   from public.traumasim_patients p where p.session_id = exercise.id and p.patient_key like station_prefix || '%';
  end if;
  if (select count(*) from public.traumasim_patients p where p.session_id = exercise.id)
     - existing_count + jsonb_array_length(occupants) > 30 then
@@ -805,7 +859,7 @@ begin
 
  if edit_car then
    delete from public.traumasim_patients p
-   where p.session_id = exercise.id and p.patient_key like 'car-%'
+   where p.session_id = exercise.id and p.patient_key like station_prefix || '%'
      and (p.scenario_model->>'car_number')::integer = car_no
      and not exists (select 1 from jsonb_array_elements(occupants) item
                      where item->>'patient_number' = p.scenario_model->>'car_patient_number');
@@ -815,14 +869,27 @@ begin
    order by array_position(seats, value->>'seat') loop
    seat_name := seat_names[array_position(seats, person->>'seat')];
    profile := person->>'profile';
-   entrapment := case person->>'entrapment'
-     when 'none' then 'frei zugänglich, keine Einklemmung'
-     when 'enclosed' then 'eingeschlossen, Ausstieg versperrt'
-     when 'door' then 'im Bereich von Tür und B-Säule eingeklemmt'
-     when 'footwell' then 'mit einem Bein im deformierten Fußraum eingeklemmt'
-     when 'dashboard' then 'zwischen Sitz und Armaturenbrett eingeklemmt'
-     when 'roof' then 'im Bereich von Dach und Sitz eingeklemmt'
-   end;
+   if station_kind = 'object' then
+     entrapment := case person->>'entrapment'
+       when 'left-arm' then 'mit dem linken Arm'
+       when 'right-arm' then 'mit dem rechten Arm'
+       when 'both-arms' then 'mit beiden Armen'
+       when 'left-leg' then 'mit dem linken Bein'
+       when 'right-leg' then 'mit dem rechten Bein'
+       when 'both-legs' then 'mit beiden Beinen'
+     end;
+     location_description := format('Die Person ist %s %s eingeklemmt.', entrapment, object_location);
+   else
+     entrapment := case person->>'entrapment'
+       when 'none' then 'frei zugänglich, keine Einklemmung'
+       when 'enclosed' then 'eingeschlossen, Ausstieg versperrt'
+       when 'door' then 'im Bereich von Tür und B-Säule eingeklemmt'
+       when 'footwell' then 'mit einem Bein im deformierten Fußraum eingeklemmt'
+       when 'dashboard' then 'zwischen Sitz und Armaturenbrett eingeklemmt'
+       when 'roof' then 'im Bereich von Dach und Sitz eingeklemmt'
+     end;
+     location_description := format('Sitzplatz %s, %s.', seat_name, entrapment);
+   end if;
    if seat_name is null or profile is null or profile not in ('affected','black','minor','urgent','critical','green-yellow','urgent-red','red-ex')
       or entrapment is null or length(coalesce(person->>'injury', '')) > 400 then
      raise exception using errcode = '22023', message = 'Sitzplatz, Verletzungsprofil oder Befreiungslage sind ungültig.';
@@ -900,31 +967,41 @@ begin
      person_no := last_person_no;
    end if;
    person_label := lpad(person_no::text, greatest(2, length(person_no::text)), '0');
+   station_patient_key := station_prefix || car_label || '-' || person_label;
    patient_model := jsonb_build_object(
-     'name', format('Pkw %s · Patient %s · %s', car_label, person_label, seat_name),
-     'intro', format('%s. Sitzplatz %s, %s.', rtrim(vehicle, '.'), seat_name, entrapment),
+     'name', format('%s %s · Patient %s', station_name, car_label, person_label)
+       || case when station_kind = 'object' then '' else ' · ' || seat_name end,
+     'intro', concat_ws(' ', case when vehicle is not null then rtrim(vehicle, '.') || '.'
+       when station_kind <> 'object' then 'Fahrzeuglage vor Ort erkunden.' end, location_description),
      'story', injury,
      'questions', '',
-     'secret', format('Pkw %s · %s · %s. %s', car_label, seat_name, entrapment, injury),
+     'secret', case when station_kind = 'object' then format('%s %s · %s %s', station_name, car_label, location_description, injury)
+       else format('%s %s · %s · %s. %s', station_name, car_label, seat_name, entrapment, injury) end,
      'car_number', car_no, 'car_patient_number', person_no, 'car_patient_sequence', last_booked_person_no,
-     'car_vehicle', nullif(btrim(p_config->>'vehicle'), ''),
+     'car_vehicle', vehicle,
      'car_seat', person->>'seat', 'car_profile', profile, 'car_entrapment', person->>'entrapment',
      'car_injury', nullif(btrim(person->>'injury'), ''), 'car_edit_version', edit_version,
      'affected', profile = 'affected', 'black', profile = 'black', 'walkable', profile in ('affected','minor'),
      'nibpFastCycle', profile in ('critical','urgent-red','red-ex'),
      'progression', progression, 'points', points
    );
+   if station_kind <> 'car' then
+     patient_model := patient_model || jsonb_build_object('station_kind', station_kind);
+   end if;
+   if station_kind = 'object' then
+     patient_model := patient_model || jsonb_build_object('object_type', object_type, 'object_position', object_position);
+   end if;
    if retain_person then
      update public.traumasim_patients p
      set scenario_model = patient_model, updated_at = clock_timestamp()
-     where p.session_id = exercise.id and p.patient_key = 'car-' || car_label || '-' || person_label
+     where p.session_id = exercise.id and p.patient_key = station_patient_key
        and (p.scenario_model->>'car_number')::integer = car_no;
      if not found then
-       raise exception using errcode = '22023', message = 'Ein Insasse wurde in diesem Pkw nicht gefunden.';
+       raise exception using errcode = '22023', message = 'Eine Person wurde an dieser Station nicht gefunden.';
      end if;
    else
      insert into public.traumasim_patients (session_id, patient_key, scenario_model)
-     values (exercise.id, 'car-' || car_label || '-' || person_label, patient_model);
+     values (exercise.id, station_patient_key, patient_model);
    end if;
  end loop;
  return traumasim_private.trainer('status', exercise.id);

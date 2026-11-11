@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=triage-buttons">
+  <link rel="stylesheet" href="style.css?v=vehicle-stations">
 </head>
 <body><main class="trainer-shell">
   <section class="panel page-banner">
@@ -65,15 +65,6 @@
           <p id="expiry" class="muted small"></p>
         </section>
       </div>
-      <div id="exerciseComposition" class="exercise-composition" hidden>
-        <h2>Übungsbesetzung</h2>
-        <dl class="composition-counts">
-          <div><dt>Pkw</dt><dd id="compositionCars">0</dd></div>
-          <div><dt>Busse</dt><dd id="compositionBuses">0</dd></div>
-          <div><dt>Personen</dt><dd id="compositionPatients">0</dd></div>
-        </dl>
-        <ul id="compositionDetails" class="composition-details muted small"></ul>
-      </div>
     </section>
     <div id="configurationView">
       <section class="panel">
@@ -116,6 +107,53 @@
               <button id="startBus" type="button">Als neue Übung starten</button>
               <button id="attachBus" type="button" hidden>Zur aktiven Übung hinzufügen</button>
             </div>
+          </div>
+        </details>
+        <details class="booking-card" id="truckBooking">
+          <summary><span>Lkw mit Insassen</span><span class="muted small">Fahrer- und Beifahrerplatz</span></summary>
+          <div class="booking-fields">
+            <label id="editTruckChoice" hidden>Lkw auswählen
+              <select id="editTruck"></select>
+            </label>
+            <p id="truckEditStatus" class="muted small" role="status" hidden></p>
+            <p id="truckUnsaved" class="warning small" hidden>Ungespeicherte Lkw-Änderungen</p>
+            <form id="truckForm">
+              <label>Fahrzeuglage (optional)
+                <input id="truckSituation" maxlength="200" placeholder="z. B. Lkw in Seitenlage">
+              </label>
+              <div id="truckSeats"></div>
+              <div class="booking-actions">
+                <button id="startTruck" type="submit">Als neue Übung starten</button>
+                <button id="attachTruck" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
+                <button id="saveTruck" type="submit" hidden>Änderungen speichern</button>
+              </div>
+            </form>
+          </div>
+        </details>
+      </section>
+      <section class="panel">
+        <h2>Weitere Einsatzstellen</h2>
+        <details class="booking-card" id="objectBooking">
+          <summary><span>Einklemmung unter oder zwischen Gegenständen</span></summary>
+          <div class="booking-fields">
+            <label id="editObjectChoice" hidden>Klemmstelle auswählen
+              <select id="editObject"></select>
+            </label>
+            <p id="objectEditStatus" class="muted small" role="status" hidden></p>
+            <p id="objectUnsaved" class="warning small" hidden>Ungespeicherte Änderungen an der Klemmstelle</p>
+            <form id="objectForm">
+              <label>Gegenstand <select id="objectType" required></select></label>
+              <label>Klemmlage <select id="objectPosition" required></select></label>
+              <label>Auffindeort oder Lage (optional)
+                <input id="objectSituation" maxlength="200" placeholder="z. B. neben der Werkstatttür">
+              </label>
+              <div id="objectSeats"></div>
+              <div class="booking-actions">
+                <button id="startObject" type="submit">Als neue Übung starten</button>
+                <button id="attachObject" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
+                <button id="saveObject" type="submit" hidden>Änderungen speichern</button>
+              </div>
+            </form>
           </div>
         </details>
       </section>
@@ -172,10 +210,17 @@
           <strong id="overviewSyncStatus" role="status"></strong>
           <span> · Letzter erfolgreicher Abruf <time id="overviewSyncTime"></time></span>
         </p>
+        <dl id="exerciseComposition" class="composition-counts" aria-label="Besetzung der gesamten Übung">
+          <div><dt>Pkw</dt><dd id="compositionCars">0</dd></div>
+          <div><dt>Lkw</dt><dd id="compositionTrucks">0</dd></div>
+          <div><dt>Busse</dt><dd id="compositionBuses">0</dd></div>
+          <div><dt>Einklemmungsstellen</dt><dd id="compositionObjects">0</dd></div>
+          <div><dt>Personen</dt><dd id="compositionPatients">0</dd></div>
+        </dl>
         <details>
           <summary>QR-Druckliste (A4)</summary>
           <div class="overview-fields">
-            <label>Fahrzeug für den Druck <select id="printVehicle"></select></label>
+            <label>Fahrzeug oder Station für den Druck <select id="printVehicle"></select></label>
             <label>Station für den Druck <select id="printStation"></select></label>
             <label>QR-Codes pro Seite
               <select id="printPerPage">
@@ -185,10 +230,10 @@
             </label>
           </div>
           <button id="printStations" type="button">Drucken / als PDF speichern</button>
-          <p class="muted small">Die Liste ist nach Fahrzeugen sortiert. Wähle im Druckdialog deinen Drucker oder „Als PDF speichern“.</p>
+          <p class="muted small">Wähle im Druckdialog deinen Drucker oder „Als PDF speichern“.</p>
         </details>
         <div class="overview-fields" role="group" aria-label="Patientenübersicht filtern">
-          <label>Fahrzeug <select id="overviewVehicle"></select></label>
+          <label>Fahrzeug oder Station <select id="overviewVehicle"></select></label>
           <label>Aktuelle Sichtungskategorie
             <select id="overviewCategory">
               <option value="">Alle Kategorien</option>
@@ -211,7 +256,7 @@
           </label>
         </div>
         <p id="overviewCount" class="muted small" role="status"></p>
-        <ul id="patientOverview" class="patient-overview" aria-label="Live-Zustand aller Patienten"></ul>
+        <ul id="patientOverview" class="patient-groups" aria-label="Live-Zustand der Patienten nach Fahrzeug oder Station"></ul>
       </section>
       <section id="patientControls" class="panel" hidden>
         <h2>Patient im Detail</h2>
@@ -230,6 +275,7 @@
           <input id="patientLink" aria-label="Patientenlink zum manuellen Kopieren" readonly hidden>
           <div id="station" hidden>
             <h3 id="stationTitle">Stations-QR für diesen Patienten</h3>
+            <p id="stationLocation" class="muted small" hidden></p>
             <div id="stationQr" class="exercise-qr"></div>
             <button id="stationDownload" type="button" hidden>QR-Code als SVG speichern</button>
           </div>
@@ -265,6 +311,6 @@
 <script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
 <script src="scenario-validation.js?v=triage"></script>
-<script src="trainer.js?v=triage-buttons"></script>
+<script src="trainer.js?v=vehicle-stations"></script>
 </body>
 </html>

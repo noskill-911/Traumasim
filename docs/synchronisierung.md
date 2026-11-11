@@ -32,7 +32,10 @@
 4. Beim Zurücksetzen bleibt der Zugangscode gültig. Bereits geöffnete Geräte
    zeigen „Wartet auf Start“. Ein erneuter Aufruf oder „Patient starten“ startet
    die neue Runde. Einzelreset und Übungsreset ändern den zentralen Zustand.
-5. Unter **Übung** zeigt die Patientenübersicht den Status, die Zeit seit Patientenstart
+5. Unter **Übung** stehen die Besetzungszahlen direkt in der Patientenübersicht.
+   Die Patienten sind nach Fahrzeug und Klemmstelle gruppiert. Bei einem Pkw
+   zeigt der Name den Sitzplatz, zum Beispiel **Pkw 1 – Fahrer**.
+   Die Übersicht zeigt den Status, die Zeit seit Patientenstart
    und bei gestarteten Patienten die aktuelle Sichtungskategorie im
    Übungsmodell. Sie kann nach Fahrzeug, aktueller Sichtung und
    Startstatus gefiltert werden. Über der Liste steht die Uhrzeit des letzten
@@ -56,6 +59,8 @@ pro Übung **Eigene Sichtung vor Auflösung** aktivieren. Teilnehmende wählen
 dann am Patienten per Schaltfläche **SK I**, **SK II**, **SK III**,
 **SK B · Betroffene** oder **SK Schwarz**. Die eigene Wahl bleibt sichtbar.
 Nach vier Sekunden erscheint daneben die **Soll-SK** aus dem Übungsmodell.
+Über **Eigene SK ändern** lässt sich der Patient erneut sichten. Nach der
+neuen Auswahl erscheint die Soll-SK erneut nach vier Sekunden.
 Standardmäßig erscheint die hinterlegte Kategorie weiterhin automatisch.
 
 ## Eigene Szenarien
@@ -130,6 +135,24 @@ Bereits
 gestartete Patienten dieses Pkw müssen vor dem Speichern zurückgesetzt werden.
 Beim Wechsel des Pkw oder der Übung fragt TraumaSim nach, wenn Änderungen
 noch gespeichert, verworfen oder weiter bearbeitet werden können.
+
+## Lkw mit Insassen und Einklemmungsstellen
+
+Unter **Fahrzeuge zusammenstellen → Lkw mit Insassen** lassen sich Fahrer-
+und Beifahrerplatz einzeln besetzen. Verletzungsprofile und Befreiungslage
+werden je Sitzplatz wie beim Pkw gewählt.
+
+Unter **Einklemmung unter oder zwischen Gegenständen** wird je Stelle eine
+Person angelegt. Zur Auswahl stehen Betonträger, Mulde, Pkw, Pkw und Fahrrad,
+Lkw, Bus und Maschine. Dazu werden die Position **unter** oder **zwischen**
+und die Klemmstelle gewählt. Möglich sind linker oder rechter Arm, linkes
+oder rechtes Bein sowie beide Arme oder beide Beine. Ein Auffindeort kann
+eingetragen werden.
+
+Lkw und Einklemmungsstellen lassen sich zu einer vorhandenen Übung
+hinzufügen oder als eigene Übung starten. Jede Person hat einen eigenen
+Stations-QR. Die Übersicht zählt beide Typen getrennt und die A4-Druckliste
+kann auf einen Lkw oder eine Einklemmungsstelle eingegrenzt werden.
 
 ## Einrichtung und Rechte
 
