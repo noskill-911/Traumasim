@@ -91,8 +91,7 @@ main { max-width: 49rem; margin: auto; }
   padding-block: .65rem;
 }
 .trainer-shell:has(#workspace:not([hidden])) .trainer-banner h1 { grid-area: 2 / 1; font-size: clamp(1.15rem, 3.6vw, 1.55rem); }
-.trainer-shell:has(#workspace:not([hidden])) .trainer-login-qr { grid-area: 1 / 2 / 3; width: 4rem; font-size: .66rem; line-height: 1.2; white-space: nowrap; }
-.trainer-shell:has(#workspace:not([hidden])) .trainer-login-qr-image { width: 3.25rem; }
+.trainer-shell:has(#workspace:not([hidden])) .trainer-login-qr { grid-area: 1 / 2 / 3; width: 4.5rem; font-size: .66rem; line-height: 1.2; white-space: nowrap; }
 .trainer-shell:has(#workspace:not([hidden])) .trainer-banner #logout { grid-area: 3 / 2; margin: 0; padding-inline: .45rem; }
 .trainer-shell:has(#workspace:not([hidden])) .trainer-banner #message { grid-area: 3 / 1; margin: 0; font-size: .85rem; }
 @media (max-width: 370px) {
