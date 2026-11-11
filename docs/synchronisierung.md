@@ -8,8 +8,13 @@
    öffnen, zur Ausbilderansicht zurückkehren und anmelden. Die Anmeldung
    bleibt im selben Browserprofil bis zu 24 Stunden gültig. **Abmelden**
    beendet sie auch in weiteren Ausbilder-Tabs desselben Profils.
+   Der **Ausbilder-QR** in der Kopfzeile öffnet die Anmeldeseite auf einem
+   anderen Gerät. Dort meldet sich der Kollege mit seinem Ausbilderkonto an.
 2. In **Konfiguration** eine Übung anlegen und Stationen zusammenstellen
    oder oben bei **Aktive Übung** eine vorhandene Übung auswählen.
+   Die **Übungsübersicht** zeigt aktive und inaktive Übungen sowie Vorlagen
+   mit Besetzung und Sichtungskategorien. Von dort lassen sich Übungen
+   öffnen und vorkonfigurierte Vorlagen auswählen.
    Über **Übung umbenennen** lässt sich der Name der aktiven Übung ändern.
    Direkt darunter steht der Übungs-QR fürs Briefing. Über **Übungs-QR als A4 drucken**
    lässt er sich als eigener Aushang mit Übungsname und Gültigkeit ausgeben.
@@ -40,14 +45,16 @@
    sowie, falls eingetragen, Lage oder Auffindeort.
    Die Übersicht zeigt den Status, die Zeit seit Patientenstart
    und bei gestarteten Patienten die aktuelle Sichtungskategorie im
-   Übungsmodell. Sie kann nach aktueller Sichtung und Startstatus gefiltert
-   werden. Über der Liste steht die Uhrzeit des letzten
+   Übungsmodell. Über der Liste steht die Uhrzeit des letzten
    erfolgreichen Abrufs. Bei einer Unterbrechung bleiben die zuletzt
    geladenen Daten sichtbar und sind als veraltet gekennzeichnet.
    Ein Klick auf den Patienten öffnet seine Auswahl für
    Steuerung, QR-Code und Vorschau. Die Steuerung für die ganze Übung
-   steht oben neben dem Übungs-QR. **Übung beenden** schließt die Übung
-   samt QR-Zugängen.
+   steht oben neben dem Übungs-QR. **Übung beenden** schaltet die Übung
+   inaktiv und sperrt ihre QR-Zugänge. In der Übungsübersicht kann sie
+   mit denselben QR-Codes wieder aktiviert werden. Laufende Patientenverläufe
+   sind dabei pausiert und lassen sich gezielt fortsetzen.
+   **Übung löschen** steht bei den inaktiven Übungen zur Verfügung.
    **Eintreffen erfassen** startet die gemeinsame Stoppuhr. Die Übersicht
    zeigt je Patient die Zeit vom Eintreffen bis zur ersten erfassten
    Sichtung. In der Schüleransicht zählt die Auswahl der eigenen SK,

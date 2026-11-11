@@ -16,7 +16,8 @@
     return;
   }
 
-  el('caseTitle').textContent = scenario?.title ?? 'TraumaSim';
+  const defaultTitle = preset ? scenario.title : 'TraumaSim';
+  el('caseTitle').textContent = defaultTitle;
   el('patientTitle').textContent = preset?.name ?? 'Übungspatient';
   const storageKey = 'traumasim-access:' + caseId + ':' + patientId;
   function readLinkFragment() {
@@ -107,7 +108,29 @@
     }
   }
 
-function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+=2){let p=(x/width*6-phase)%1;if(p<0)p+=1;let y=45;if(kind==='ecg'){if(p<.58)y=45;else if(p<.64)y=43-4*Math.sin((p-.58)/.06*Math.PI);else if(p<.69)y=45+10*(p-.64)/.05;else if(p<.72)y=55-47*(p-.69)/.03;else if(p<.75)y=8+58*(p-.72)/.03;else if(p<.79)y=66-21*(p-.75)/.04;else if(p<.95)y=45-7*Math.sin((p-.79)/.16*Math.PI)}else if(kind==='pleth'){y=62-34*Math.pow(Math.max(0,Math.sin(Math.PI*p)),5)-8*Math.sin(Math.PI*p)}else{y=45-19*Math.sin(2*Math.PI*p)}out+=(x===0?'M':'L')+x+' '+y.toFixed(1)+' '}return out}
+  const ecgTrace = el('ecgTrace');
+  const ecgBeatWidth = 100;
+  const ecgBeat = 'h58 c1.25 0 1.75 -6 3 -6 s1.75 6 3 6 l5 10 3 -47 3 58 4 -21 c3 0 5 -7 8 -7 s5 7 8 7 h5 ';
+  // A full extra beat on the left keeps the clipped trace continuous at each phase wrap.
+  ecgTrace.setAttribute('d', 'M-100 45 ' + ecgBeat.repeat(7));
+
+  function wavePath(kind, phase) {
+    let path = '';
+    const width = 600;
+    for (let x = 0; x <= width; x += 2) {
+      let position = (x / width * 6 - phase) % 1;
+      if (position < 0) position += 1;
+      let y;
+      if (kind === 'pleth') {
+        const pulse = Math.sin(Math.PI * position);
+        y = 62 - 34 * Math.pow(Math.max(0, pulse), 5) - 8 * pulse;
+      } else {
+        y = 45 - 19 * Math.sin(2 * Math.PI * position);
+      }
+      path += (x === 0 ? 'M' : 'L') + x + ' ' + y.toFixed(1) + ' ';
+    }
+    return path;
+  }
   function animateWaves(now) {
     if (!monitor) {
       animation = waveFrameTime = null;
@@ -118,7 +141,7 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     waveFrameTime = now;
     cardiacPhase = (cardiacPhase + step * (monitor.h ?? 0) / 60 * .16) % 1;
     respPhase = (respPhase + step * (monitor.r ?? 0) / 60 * .16) % 1;
-    if (monitor.ecg) el('ecgTrace').setAttribute('d', wavePath('ecg', cardiacPhase));
+    if (monitor.ecg) ecgTrace.setAttribute('transform', 'translate(' + cardiacPhase * ecgBeatWidth + ' 0)');
     if (monitor.o != null) el('plethTrace').setAttribute('d', wavePath('pleth', cardiacPhase));
     if (monitor.r != null) el('respTrace').setAttribute('d', wavePath('resp', respPhase));
     animation = requestAnimationFrame(animateWaves);
@@ -195,7 +218,7 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
 
   function render() {
     const brief = snapshot && (snapshot.brief ?? preset);
-    el('caseTitle').textContent = brief?.title ?? scenario?.title ?? 'TraumaSim';
+    el('caseTitle').textContent = brief?.title ?? defaultTitle;
     el('patientTitle').textContent = brief?.name ?? preset?.name ?? 'Übungspatient';
     el('intro').textContent = brief?.intro ?? '';
     const story = brief?.story ?? '';
@@ -241,7 +264,7 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
       el('rr').textContent = r ?? '—';
       el('spo').textContent = o ?? '—';
       el('gcs').textContent = g ?? '—';
-      el('ecgTrace').toggleAttribute('hidden', !ecg);
+      ecgTrace.toggleAttribute('hidden', !ecg);
       el('plethTrace').toggleAttribute('hidden', o == null);
       el('respTrace').toggleAttribute('hidden', r == null);
       if (animation === null) animation = requestAnimationFrame(animateWaves);

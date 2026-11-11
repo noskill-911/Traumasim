@@ -1,14 +1,14 @@
 window.TRAUMA_CASES = [
   {
     "id": "vu-baum",
-    "title": "Verkehrsunfall – Pkw gegen Baum",
+    "title": "Verkehrsunfall",
     "patients": [
       {
         "id": "fahrer",
         "name": "Patient 1 · Fahrer",
         "intro": "Fahrer im Fußraum eingeklemmt. Linkes Bein deformiert. Patient zunächst ansprechbar.",
-        "story": "Ich bin von der Straße abgekommen und gegen den Baum gefahren. Mein linkes Bein steckt hier fest, ich kann es nicht bewegen. Könnt ihr mich hier rausholen?",
-        "questions": "Mein Kollege saß neben mir. Ich war angeschnallt. Mir ist etwas schwindelig."
+        "story": "Es hat einen Aufprall gegeben. Mein linkes Bein steckt im Fußraum fest, ich kann es nicht bewegen. Könnt ihr mir helfen?",
+        "questions": "Ich war angeschnallt. Mir ist etwas schwindelig."
       },
       {
         "id": "beifahrer",

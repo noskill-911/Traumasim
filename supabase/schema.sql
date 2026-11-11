@@ -30,7 +30,8 @@ alter table public.traumasim_sessions
  add column if not exists case_key text not null default 'vu-baum',
  add column if not exists signing_key uuid not null default gen_random_uuid(),
  add column if not exists triage_mode text not null default 'automatic' check (triage_mode in ('automatic', 'choose')),
- add column if not exists arrived_at timestamptz;
+ add column if not exists arrived_at timestamptz,
+ add column if not exists inactive_at timestamptz;
 alter table public.traumasim_patients
  add column if not exists revision integer not null default 0,
  add column if not exists scenario_model jsonb,
@@ -123,7 +124,7 @@ begin
 
  select s.* into exercise from public.traumasim_sessions s
  where s.id = split_part(p_code, '.', 1)::uuid and s.trainer_id is not null
-   and s.expires_at > clock_timestamp();
+   and s.inactive_at is null and s.expires_at > clock_timestamp();
  if not found or sha256(convert_to(traumasim_private.exercise_code(exercise.id, exercise.case_key, exercise.signing_key), 'UTF8'))
        <> sha256(convert_to(p_code, 'UTF8')) then
    raise exception using errcode = '42501', message = 'Übungszugang ungültig oder abgelaufen';
@@ -401,7 +402,7 @@ begin
  from public.traumasim_sessions s
  where s.id = split_part(p_code, '.', 1)::uuid and s.case_key = p_case
    and s.trainer_id is not null
-   and s.expires_at > clock_timestamp();
+   and s.inactive_at is null and s.expires_at > clock_timestamp();
  if not found or p_patient is null
    or sha256(convert_to(case
         when exercise_access then traumasim_private.exercise_code(exercise.id, exercise.case_key, exercise.signing_key)
@@ -417,8 +418,8 @@ begin
  if p_start_revision is not null and not preview_access then
    -- Serialize starts with whole-exercise resets and instructor commands.
    select s.* into exercise from public.traumasim_sessions s
-   where s.id = exercise.id and s.expires_at > clock_timestamp() for update;
-   if not found then
+   where s.id = exercise.id and s.inactive_at is null and s.expires_at > clock_timestamp() for update;
+   if not found or exercise.expires_at <= clock_timestamp() then
      raise exception using errcode = '42501', message = 'Patientenzugang ungültig oder abgelaufen';
    end if;
    update public.traumasim_patients
@@ -601,7 +602,7 @@ begin
 
  -- Recheck the timing reference, mode and patient revision while serialized with trainer actions.
  select s.* into exercise from public.traumasim_sessions s
- where s.id = (snapshot->>'exercise_id')::uuid and s.expires_at > clock_timestamp() for update;
+ where s.id = (snapshot->>'exercise_id')::uuid and s.inactive_at is null and s.expires_at > clock_timestamp() for update;
  if not found or exercise.triage_mode <> 'choose' or exercise.arrived_at is null
     or exercise.arrived_at > marked_at or exercise.expires_at <= clock_timestamp() then
    return jsonb_build_object('recorded', false);
@@ -629,6 +630,72 @@ begin
 end;
 $$;
 
+create or replace function traumasim_private.list_overview(p_trainer uuid, p_now timestamptz)
+returns jsonb language sql stable set search_path = '' as $$
+ with entries as (
+   select s.id, s.title, s.case_key, s.expires_at, s.inactive_at,
+     least(p_now, s.expires_at, s.inactive_at) as course_at,
+     case when s.inactive_at is null and s.expires_at > p_now then 'active' else 'inactive' end as section,
+     case when s.inactive_at is null and s.expires_at > p_now then s.created_at
+       else coalesce(s.inactive_at, s.expires_at) end as sort_at,
+     null::jsonb as saved_patients
+   from public.traumasim_sessions s where s.trainer_id = p_trainer
+   union all
+   select t.id, t.title, t.case_key, null, null, p_now, 'templates', t.created_at, t.patients
+   from traumasim_private.exercise_templates t where t.trainer_id = p_trainer
+ ), roster as (
+   select e.id, e.section, p.patient_key, p.scenario_model, p.started_at,
+     p.paused_at, p.accumulated_pause_seconds
+   from entries e join public.traumasim_patients p on p.session_id = e.id
+   where e.section <> 'templates'
+   union all
+   select e.id, e.section, p.patient_key, p.scenario_model, null, null, 0
+   from entries e
+   cross join lateral jsonb_to_recordset(e.saved_patients) as p(patient_key text, scenario_model jsonb)
+   where e.section = 'templates'
+ ), summaries as (
+   select e.id, e.section,
+     jsonb_build_object(
+       'car', count(distinct case when p.patient_key like 'car-%' then split_part(p.patient_key, '-', 2)
+         when e.case_key = 'vu-baum' and p.patient_key in ('fahrer', 'beifahrer') then 'preset' end),
+       'truck', count(distinct split_part(p.patient_key, '-', 2)) filter (where p.patient_key like 'truck-%'),
+       'bus', count(distinct split_part(p.patient_key, '-', 2)) filter (where p.patient_key like 'bus-%'),
+       'object', count(distinct split_part(p.patient_key, '-', 2)) filter (where p.patient_key like 'object-%'),
+       'patients', count(p.patient_key)
+     ) as counts,
+     jsonb_build_object(
+       'red', count(*) filter (where category.value = 'red'),
+       'yellow', count(*) filter (where category.value = 'yellow'),
+       'green', count(*) filter (where category.value = 'green'),
+       'affected', count(*) filter (where category.value = 'affected'),
+       'black', count(*) filter (where category.value = 'black')
+     ) as categories
+   from entries e
+   left join roster p on p.id = e.id and p.section = e.section
+   left join traumasim_private.models m on m.case_key = e.case_key and m.patient_key = p.patient_key
+   cross join lateral (select coalesce(p.scenario_model, m.model) as model) patient_model
+   cross join lateral (select least(traumasim_private.patient_duration(patient_model.model),
+     traumasim_private.elapsed(p.started_at, least(p.paused_at, e.course_at), p.accumulated_pause_seconds, e.course_at)
+   ) as seconds) t
+   cross join lateral (select case when p.patient_key is not null then
+     traumasim_private.patient_category(patient_model.model, p.patient_key, p.scenario_model is not null,
+       t.seconds, traumasim_private.vitals(patient_model.model, t.seconds)) end as value) category
+   group by e.id, e.section
+ ), overview as (
+   select e.section, e.sort_at, e.id,
+     jsonb_build_object('id', e.id, 'title', e.title, 'counts', s.counts, 'categories', s.categories)
+     || case when e.section = 'templates' then '{}'::jsonb
+       else jsonb_build_object('expires_at', e.expires_at, 'inactive_at', e.inactive_at) end as item
+   from entries e join summaries s on s.id = e.id and s.section = e.section
+ )
+ select jsonb_build_object(
+   'active', coalesce(jsonb_agg(item order by sort_at desc, id) filter (where section = 'active'), '[]'::jsonb),
+   'inactive', coalesce(jsonb_agg(item order by sort_at desc, id) filter (where section = 'inactive'), '[]'::jsonb),
+   'templates', coalesce(jsonb_agg(item order by sort_at desc, id) filter (where section = 'templates'), '[]'::jsonb)
+ )
+ from overview;
+$$;
+
 create or replace function traumasim_private.trainer(
  p_action text default 'list', p_session uuid default null, p_patient text default null, p_title text default null
 ) returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -640,15 +707,21 @@ declare
  new_session_id uuid;
  renamed_title text;
  snapshot_time timestamptz;
+ archive_time timestamptz;
+ exercise_active boolean;
  result jsonb;
 begin
 
+
+ if p_action = 'list_overview' then
+   return traumasim_private.list_overview(trainer, clock_timestamp());
+ end if;
 
  if p_action = 'list' then
    select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'title', s.title, 'expires_at', s.expires_at)
      order by s.created_at desc), '[]'::jsonb) into result
    from public.traumasim_sessions s
-   where s.trainer_id = trainer and s.expires_at > clock_timestamp();
+   where s.trainer_id = trainer and s.inactive_at is null and s.expires_at > clock_timestamp();
    return result;
  end if;
 
@@ -686,9 +759,19 @@ begin
  else
    select s.* into exercise
    from public.traumasim_sessions s
-   where s.id = p_session and s.trainer_id = trainer and s.expires_at > clock_timestamp()
+   where s.id = p_session and s.trainer_id = trainer
    for update;
-   if not found or exercise.expires_at <= clock_timestamp() then
+   if not found then
+     raise exception using errcode = '42501', message = 'Übung nicht verfügbar oder abgelaufen';
+   end if;
+
+   snapshot_time := clock_timestamp();
+   exercise_active := exercise.inactive_at is null and exercise.expires_at > snapshot_time;
+   if p_action in ('reactivate', 'delete_exercise') then
+     if exercise_active then
+       raise exception using errcode = '22023', message = 'Diese Aktion ist nur bei inaktiven Übungen möglich.';
+     end if;
+   elsif not exercise_active then
      raise exception using errcode = '42501', message = 'Übung nicht verfügbar oder abgelaufen';
    end if;
 
@@ -697,7 +780,6 @@ begin
    ) then
      raise exception using errcode = '22023', message = 'Patient gehört nicht zu dieser Übung';
    end if;
-   snapshot_time := clock_timestamp();
    case p_action
      when 'status' then null;
      when 'rename_exercise' then
@@ -758,9 +840,23 @@ begin
          end if;
        end if;
        return jsonb_build_object('id', template.id, 'title', template.title);
-     when 'close' then
-       update public.traumasim_sessions set expires_at = snapshot_time where id = exercise.id;
-       return jsonb_build_object('id', exercise.id, 'closed', true);
+     when 'close', 'reactivate' then
+       archive_time := case when p_action = 'close' then snapshot_time
+         else coalesce(exercise.inactive_at, exercise.expires_at) end;
+       update public.traumasim_patients p
+       set paused_at = greatest(p.started_at, archive_time), updated_at = snapshot_time
+       where p.session_id = exercise.id and p.started_at is not null and p.paused_at is null
+         and traumasim_private.elapsed(p.started_at, null, p.accumulated_pause_seconds, archive_time)
+           < traumasim_private.patient_duration(p.scenario_model);
+       if p_action = 'close' then
+         update public.traumasim_sessions s set inactive_at = archive_time where s.id = exercise.id;
+         return jsonb_build_object('id', exercise.id, 'closed', true);
+       end if;
+       update public.traumasim_sessions s set inactive_at = null, expires_at = snapshot_time + interval '24 hours'
+       where s.id = exercise.id returning s.* into exercise;
+     when 'delete_exercise' then
+       delete from public.traumasim_sessions s where s.id = exercise.id;
+       return jsonb_build_object('id', exercise.id, 'deleted', true);
      when 'reset', 'reset_all' then
        update public.traumasim_patients
        set started_at = null, paused_at = null, accumulated_pause_seconds = 0,
@@ -941,8 +1037,9 @@ begin
    values (exercise.id, template.title, 'custom-' || exercise.id::text, trainer);
  else
    select s.* into exercise from public.traumasim_sessions s
-   where s.id = p_session and s.trainer_id = trainer and s.expires_at > clock_timestamp() for update;
-   if not found then
+   where s.id = p_session and s.trainer_id = trainer and s.inactive_at is null
+     and s.expires_at > clock_timestamp() for update;
+   if not found or exercise.expires_at <= clock_timestamp() then
      raise exception using errcode = '42501', message = 'Übung nicht verfügbar oder abgelaufen';
    end if;
    if exists (select 1 from public.traumasim_patients p
@@ -1070,8 +1167,9 @@ begin
      else station_name || '-Lage' end, 'custom-' || exercise.id::text, trainer);
  else
    select s.* into exercise from public.traumasim_sessions s
-   where s.id = p_session and s.trainer_id = trainer and s.expires_at > clock_timestamp() for update;
-   if not found then
+   where s.id = p_session and s.trainer_id = trainer and s.inactive_at is null
+     and s.expires_at > clock_timestamp() for update;
+   if not found or exercise.expires_at <= clock_timestamp() then
      raise exception using errcode = '42501', message = 'Übung nicht verfügbar oder abgelaufen';
    end if;
  end if;

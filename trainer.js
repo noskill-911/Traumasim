@@ -2,6 +2,9 @@
   'use strict';
 
   const el = (id) => document.getElementById(id);
+  const trainerUrl = new URL('trainer.html', location.href).href;
+  el('trainerLoginLink').href = trainerUrl;
+  drawQr(el('trainerLoginQr'), trainerUrl, 'QR-Code zur Ausbilderanmeldung');
   const api = window.TraumaSync;
   const previewDuration = Number(el('seek').max) * 60;
   const actions = Array.from(document.querySelectorAll('[data-action]'));
@@ -11,6 +14,7 @@
     red: 'SK I · Rot', yellow: 'SK II · Gelb', green: 'SK III · Grün',
     black: 'SK Schwarz', affected: 'SK B · Betroffene'
   };
+  const managementCounts = { car: 'Pkw', truck: 'Lkw', bus: 'Busse', object: 'Klemmstellen', patients: 'Personen' };
   const carSeatNames = {
     driver: 'Fahrer', front: 'Beifahrer', 'rear-left': 'hinten links',
     'rear-center': 'hinten Mitte', 'rear-right': 'hinten rechts'
@@ -46,15 +50,20 @@
     el('message').textContent = text;
   }
 
-  function showView(live) {
-    el('configurationView').hidden = live;
-    el('exerciseView').hidden = !live;
-    el('showConfiguration').setAttribute('aria-pressed', String(!live));
-    el('showExercise').setAttribute('aria-pressed', String(live));
+  function showView(view) {
+    for (const [name, button] of [['configuration', 'showConfiguration'], ['exercise', 'showExercise'], ['management', 'showManagement']]) {
+      el(name + 'View').hidden = view !== name;
+      el(button).setAttribute('aria-pressed', String(view === name));
+    }
+    updateExerciseToolbar();
   }
 
-  el('showConfiguration').addEventListener('click', () => showView(false));
-  el('showExercise').addEventListener('click', () => showView(true));
+  function updateExerciseToolbar() {
+    el('exerciseToolbar').hidden = !exercise || !el('managementView').hidden;
+  }
+
+  el('showConfiguration').addEventListener('click', () => showView('configuration'));
+  el('showExercise').addEventListener('click', () => showView('exercise'));
 
   function selectedPatient() {
     return exercise?.patients.find((patient) => patient.id === el('choose').value);
@@ -203,7 +212,7 @@
     el('noExercise').hidden = Boolean(next);
     el('live').hidden = !next;
     el('patientControls').hidden = !next;
-    el('exerciseToolbar').hidden = !next;
+    updateExerciseToolbar();
     el('saveTemplateForm').hidden = !next;
     el('updateTemplate').hidden = !next;
     el('preview').hidden = !next;
@@ -343,7 +352,10 @@
     const qr = window.qrcode(0, 'M');
     qr.addData(url);
     qr.make();
-    container.innerHTML = qr.createSvgTag({ cellSize: 5, scalable: true, title });
+    container.innerHTML = qr.createSvgTag({ cellSize: 5, scalable: true });
+    const svg = container.firstElementChild;
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', title);
     container.dataset.url = url;
   }
 
@@ -562,10 +574,6 @@
     el('exercisePrint').replaceChildren();
   });
 
-  for (const id of ['overviewCategory', 'overviewStatus']) {
-    el(id).addEventListener('change', () => renderOverview());
-  }
-
   function createOverviewGroup(group, patients) {
     const section = document.createElement('li');
     section.className = 'patient-group';
@@ -620,33 +628,22 @@
     return section;
   }
 
-  function renderOverview(rebuild = false, resetFilters = false) {
+  function renderOverview(rebuild = false, resetPrint = false) {
     const overview = el('patientOverview');
     const focusedId = document.activeElement?.closest('[data-patient]')?.dataset.patient;
-    if (resetFilters) {
-      el('overviewCategory').value = '';
-      el('overviewStatus').value = '';
-    }
     if (rebuild) {
       const groups = overviewGroups();
       renderComposition(groups);
-      updatePrintFilters(groups, resetFilters);
+      updatePrintFilters(groups, resetPrint);
       overview.replaceChildren(...groups.map(([group, patients]) => createOverviewGroup(group, patients)));
     }
     const selected = el('choose').value;
-    const categoryFilter = el('overviewCategory').value;
-    const statusFilter = el('overviewStatus').value;
     const patients = new Map(exercise.patients.map((patient) => [patient.id, patient]));
     let focusedRow = null;
-    let visible = 0;
     for (const section of overview.children) {
       const rows = section.lastElementChild.children;
-      let groupVisible = 0;
       for (const row of rows) {
         const patient = patients.get(row.dataset.patient);
-        row.hidden = Boolean((categoryFilter && (patient.category ?? 'none') !== categoryFilter)
-          || (statusFilter && patient.status !== statusFilter));
-        if (!row.hidden) groupVisible++;
         if (patient.id === focusedId) focusedRow = row;
         const button = row.firstElementChild;
         const [, category, status, forecast, firstTriage] = button.children;
@@ -661,8 +658,7 @@
         firstTriage.hidden = !firstTriage.textContent;
       }
       const groupCount = section.firstElementChild.lastElementChild;
-      const text = (groupVisible === rows.length ? groupVisible : groupVisible + ' von ' + rows.length)
-        + (rows.length === 1 ? ' Patient' : ' Patienten');
+      const text = rows.length + (rows.length === 1 ? ' Patient' : ' Patienten');
       if (groupCount.textContent !== text) groupCount.textContent = text;
       const lead = patients.get(rows[0].dataset.patient);
       const context = section.querySelector('.station-group-context');
@@ -673,14 +669,9 @@
         ? [identification, lead.model?.car_vehicle].filter(Boolean).join(' · ') : '';
       if (context.textContent !== contextText) context.textContent = contextText;
       context.hidden = !contextText;
-      section.hidden = groupVisible === 0;
-      visible += groupVisible;
     }
-    if (focusedId && (!focusedRow || focusedRow.hidden)) el('overviewCategory').focus();
+    if (focusedId && !focusedRow) el('choose').focus();
     else if (rebuild && focusedRow) focusedRow.firstElementChild.focus();
-    const count = el('overviewCount');
-    const text = visible + ' von ' + exercise.patients.length + ' Patienten angezeigt.';
-    if (count.textContent !== text) count.textContent = text;
   }
 
   function renderPatient() {
@@ -820,8 +811,9 @@
     loadCarForm();
     el('exercise').replaceChildren();
     renderTemplateOptions([]);
+    for (const id of ['activeExercises', 'inactiveExercises', 'exerciseTemplates']) el(id).replaceChildren();
     el('workspace').hidden = true;
-    showView(false);
+    showView('configuration');
     el('logout').hidden = true;
     el('login').hidden = false;
     if (revoke && current) void api.signOut(current.access_token).catch(() => {});
@@ -847,12 +839,173 @@
     return error.code === '42501' && error.message === 'Übung nicht verfügbar oder abgelaufen';
   }
 
-  function renderTemplateOptions(templates) {
-    options(el('exerciseTemplate'), templates, 'Vorlage auswählen');
-    el('templateRunTitle').value = '';
+  function renderTemplateOptions(templates, keepSelection = false) {
+    const select = el('exerciseTemplate');
+    const selected = keepSelection ? select.value : '';
+    options(select, templates, 'Vorlage auswählen');
+    if (templates.some((template) => template.id === selected)) select.value = selected;
+    else el('templateRunTitle').value = '';
     el('startTemplateForm').hidden = !templates.length;
     el('noTemplates').hidden = Boolean(templates.length);
   }
+
+  function managementCard(item, kind) {
+    const card = document.createElement('li');
+    card.className = 'management-card';
+    card.dataset.exercise = item.id;
+    const title = document.createElement('h4');
+    title.id = 'management-' + kind + '-' + item.id;
+    title.textContent = item.title;
+    card.append(title);
+
+    if (kind !== 'template') {
+      const subtitle = document.createElement('p');
+      subtitle.className = 'muted small';
+      const timestamp = document.createElement('time');
+      timestamp.dateTime = item.inactive_at ?? item.expires_at;
+      timestamp.textContent = new Date(timestamp.dateTime).toLocaleString('de-DE');
+      const prefix = kind === 'active' ? 'QR-Zugang bis ' : item.inactive_at ? 'Deaktiviert am ' : 'Abgelaufen am ';
+      subtitle.append(prefix, timestamp);
+      card.append(subtitle);
+    }
+
+    const counts = document.createElement('dl');
+    counts.className = 'management-counts';
+    counts.setAttribute('aria-label', 'Besetzung');
+    for (const [key, label] of Object.entries(managementCounts)) {
+      const cell = document.createElement('div');
+      const caption = document.createElement('dt');
+      caption.textContent = label;
+      const value = document.createElement('dd');
+      value.textContent = item.counts[key] ?? 0;
+      cell.append(caption, value);
+      counts.append(cell);
+    }
+
+    const categories = document.createElement('ul');
+    categories.className = 'management-categories';
+    categories.setAttribute('aria-label', 'Sichtungskategorien');
+    for (const [key, label] of Object.entries(categoryLabels)) {
+      const total = item.categories[key] ?? 0;
+      if (total === 0) continue;
+      const category = document.createElement('li');
+      category.className = 'triage ' + key;
+      const value = document.createElement('strong');
+      value.textContent = total;
+      category.append(label + ' ', value);
+      categories.append(category);
+    }
+
+    const controls = document.createElement('div');
+    controls.className = 'management-actions';
+    const entries = kind === 'active' ? [['open', 'Öffnen'], ['deactivate', 'Deaktivieren']]
+      : kind === 'inactive' ? [['reactivate', 'Reaktivieren'], ['delete', 'Übung löschen']]
+        : [['template', 'Vorlage auswählen']];
+    for (const [action, label] of entries) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.managementAction = action;
+      button.setAttribute('aria-describedby', title.id);
+      button.textContent = label;
+      button.addEventListener('click', () => manageExercise(item, action));
+      controls.append(button);
+    }
+    categories.hidden = !categories.childElementCount;
+    card.append(counts, categories, controls);
+    return card;
+  }
+
+  async function refreshManagement() {
+    const status = el('managementStatus');
+    const groups = el('managementGroups');
+    status.textContent = 'Übersicht wird geladen …';
+    status.hidden = false;
+    groups.hidden = true;
+    try {
+      const { active, inactive, templates } = await rpc({ p_action: 'list_overview' });
+      for (const [id, kind, items] of [['activeExercises', 'active', active], ['inactiveExercises', 'inactive', inactive],
+        ['exerciseTemplates', 'template', templates]]) {
+        el(id).replaceChildren(...items.map((item) => managementCard(item, kind)));
+        el(id + 'Empty').hidden = Boolean(items.length);
+      }
+      const select = el('exercise');
+      options(select, active, 'Übung auswählen');
+      select.value = exercise && active.some((item) => item.id === exercise.id) ? exercise.id : '';
+      if (exercise && !select.value) renderExercise(null);
+      renderTemplateOptions(templates, true);
+      status.hidden = true;
+      groups.hidden = false;
+    } catch (error) {
+      status.textContent = 'Übersicht konnte nicht geladen werden.';
+      throw error;
+    }
+  }
+
+  async function changeExerciseLifecycle(action, id) {
+    try {
+      return await rpc({ p_action: action, p_session: id });
+    } catch (error) {
+      if (!exerciseUnavailable(error) && error.code !== '22023') throw error;
+      message(error.message);
+      await refreshManagement();
+      return null;
+    }
+  }
+
+  function manageExercise(item, action) {
+    if (busy) return;
+    if (action === 'template') {
+      const select = el('exerciseTemplate');
+      select.value = item.id;
+      select.dispatchEvent(new Event('change'));
+      el('templateSettings').open = true;
+      showView('configuration');
+      el('templateRunTitle').focus();
+      return;
+    }
+    if (action === 'deactivate') {
+      requestDeactivation(item);
+      return;
+    }
+    if (action === 'delete' && !confirm('Übung „' + item.title + '“ mit ihren Patienten und Übungsdaten endgültig löschen?')) return;
+    void run(async () => {
+      if (action === 'delete') {
+        if (!await changeExerciseLifecycle('delete_exercise', item.id)) return;
+        message('Übung endgültig gelöscht.');
+        await refreshManagement();
+      } else if (item.id === exercise?.id || await confirmCarChanges()) {
+        if (action === 'open') await switchExercise(item.id);
+        else {
+          const next = await changeExerciseLifecycle('reactivate', item.id);
+          if (!next) return;
+          selectExercise(next);
+          showView('exercise');
+          message('Übung reaktiviert. Die vorhandenen QR-Zugänge sind wieder gültig.');
+        }
+      }
+    });
+  }
+
+  function requestDeactivation(item) {
+    if (!confirm('Übung „' + item.title + '“ deaktivieren? Die QR-Zugänge werden gesperrt. Du kannst die Übung später reaktivieren.')) return;
+    void run(async () => {
+      if (exercise?.id === item.id && !await confirmCarChanges()) return;
+      const closed = await changeExerciseLifecycle('close', item.id);
+      showView('management');
+      if (!closed) return;
+      const select = el('exercise');
+      Array.from(select.options).find((option) => option.value === item.id)?.remove();
+      if (exercise?.id === item.id) selectExercise(null);
+      message('Übung deaktiviert. Die QR-Zugänge sind geschlossen.');
+      await refreshManagement();
+    });
+  }
+
+  el('showManagement').addEventListener('click', () => {
+    showView('management');
+    void run(refreshManagement);
+  });
+  el('refreshManagement').addEventListener('click', () => void run(refreshManagement));
 
   async function openWorkspace(list) {
     options(el('exercise'), list, 'Übung auswählen');
@@ -870,7 +1023,7 @@
     if (busy) return;
     busy = true;
     actionVersion++;
-    const controls = document.querySelectorAll('form button, #logout, #exercise, #editExerciseTitle, #createCustom, #startBus, #attachBus, #editCar, #editTruck, #editObject, #triageMode');
+    const controls = document.querySelectorAll('form button, #logout, #exercise, #editExerciseTitle, #createCustom, #startBus, #attachBus, #editCar, #editTruck, #editObject, #triageMode, #showManagement, #refreshManagement, [data-management-action]');
     for (const control of controls) control.disabled = true;
     renderPatient();
     try {
@@ -996,11 +1149,20 @@
       if (!exerciseUnavailable(error)) throw error;
       Array.from(select.options).find((option) => option.value === id)?.remove();
       message(error.message);
+      if (!el('managementView').hidden) await refreshManagement();
       return;
+    }
+    selectExercise(next);
+    showView(next ? 'exercise' : 'configuration');
+  }
+
+  function selectExercise(next) {
+    const select = el('exercise');
+    if (next && !Array.from(select.options).some((option) => option.value === next.id)) {
+      select.add(new Option(next.title, next.id), 1);
     }
     select.value = next?.id ?? '';
     renderExercise(next);
-    showView(Boolean(next));
   }
 
   el('saveTemplateForm').addEventListener('submit', (event) => {
@@ -1045,7 +1207,7 @@
     void run(async () => {
       if (!await confirmCarChanges()) return;
       openCreatedExercise(await rpc({ p_action: 'start_template', p_session: id, p_title: el('templateRunTitle').value }));
-      showView(true);
+      showView('exercise');
     });
   });
   el('create').addEventListener('submit', (event) => {
@@ -1058,9 +1220,7 @@
     });
   });
   function openCreatedExercise(created) {
-    el('exercise').add(new Option(created.title, created.id), 1);
-    el('exercise').value = created.id;
-    renderExercise(created);
+    selectExercise(created);
     message('Übung angelegt. Ergänze weitere Stationen oder öffne die Übungsansicht.');
   }
 
@@ -1548,23 +1708,17 @@
   for (const button of actions) {
     button.addEventListener('click', () => {
       const action = button.dataset.action;
-      const patient = isExerciseAction(action) ? null : selectedPatient();
       if (!exercise || busy || button.disabled) return;
+      if (action === 'close') {
+        requestDeactivation(exercise);
+        return;
+      }
+      const patient = isExerciseAction(action) ? null : selectedPatient();
       if (action.startsWith('reset') && !confirm(action === 'reset_all'
         ? 'Alle Patienten der Übung „' + exercise.title + '“ zurücksetzen?' : patientName(patient.id) + ' zurücksetzen?')) return;
-      if (action === 'close' && !confirm('Übung „' + exercise.title + '“ beenden und alle Zugänge schließen?')) return;
       if (action === 'clear_arrival' && !confirm('Zeitmessung und alle erfassten Sichtungszeiten zurücksetzen? Die Patientenverläufe laufen weiter.')) return;
       void run(async () => {
-        if (action === 'close' && !await confirmCarChanges()) return;
         const next = await rpc({ p_action: action, p_session: exercise.id, p_patient: patient?.id });
-        if (next.closed) {
-          const select = el('exercise');
-          Array.from(select.options).find((option) => option.value === next.id)?.remove();
-          select.value = '';
-          renderExercise(null);
-          message('Übung beendet. Die QR-Zugänge sind geschlossen.');
-          return;
-        }
         renderExercise(next);
         if (action.startsWith('reset')) message('Zurückgesetzt.');
         if (action === 'start_arrival') message('Eintreffen erfasst.');

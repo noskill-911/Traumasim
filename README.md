@@ -34,8 +34,10 @@ bilden einen Übungsablauf ab.
 
 Die Ausbilderansicht erlaubt Pausieren, Fortsetzen und das Zurücksetzen eines
 Patienten oder der ganzen Übung. Die Übersicht zeigt alle Patienten der
-gewählten Übung. Die Ausbilder können eine Übung beenden und damit die
-QR-Zugänge schließen. Übungen laufen spätestens nach 24 Stunden ab.
+gewählten Übung. **Übung beenden** deaktiviert die QR-Zugänge. In der
+Übungsübersicht lassen sich aktive und inaktive Übungen sowie Vorlagen
+auswählen. Inaktive Übungen können erneut aktiviert oder gelöscht werden.
+Ein aktiver Zugang gilt 24 Stunden.
 
 Eigene Szenarien im Szenarioeditor bearbeiten und als Entwurf speichern.
 In der Ausbilderansicht **Eigenes Szenario als Übung starten** öffnen und

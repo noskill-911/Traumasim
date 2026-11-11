@@ -6,13 +6,18 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=station-pictograms">
+  <link rel="stylesheet" href="style.css?v=exercise-management">
 </head>
 <body><main class="trainer-shell">
-  <section class="panel page-banner">
+  <section class="panel page-banner trainer-banner">
     <div class="muted">TRAUMASIM · AUSBILDER</div>
     <h1>Ausbilderansicht</h1>
     <p id="message" role="status">Bitte mit einem freigegebenen Ausbilderkonto anmelden.</p>
+    <a id="trainerLoginLink" class="trainer-login-qr" href="trainer.html" target="_blank" rel="noopener"
+      aria-label="Ausbilder-QR, Anmeldung in neuem Tab öffnen">
+      <span id="trainerLoginQr" class="trainer-login-qr-image" aria-hidden="true"></span>
+      <span>Ausbilder-QR</span>
+    </a>
     <form id="login">
       <label>E-Mail <input id="email" type="email" autocomplete="username" required></label>
       <label>Passwort <input id="password" type="password" autocomplete="current-password" required></label>
@@ -41,13 +46,18 @@
           </form>
           <label for="exercise">Übung auswählen oder wechseln</label>
           <select id="exercise"></select>
+          <button id="showManagement" type="button" aria-controls="managementView" aria-pressed="false">Übungsübersicht</button>
         </section>
         <nav class="trainer-views" aria-label="Ausbilderbereiche">
           <button id="showConfiguration" type="button" aria-label="Konfiguration" aria-controls="configurationView" aria-pressed="true">
-            <strong>Konfiguration</strong><span>Fahrzeuge, Patienten und Vorlagen</span>
+            <strong>Konfiguration</strong>
+            <svg class="trainer-view-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg?v=exercise-management#configuration"></use></svg>
+            <span>Fahrzeuge, Patienten und Vorlagen</span>
           </button>
           <button id="showExercise" type="button" aria-label="Übung" aria-controls="exerciseView" aria-pressed="false">
-            <strong>Übung</strong><span>Patientenübersicht und Steuerung</span>
+            <strong>Übung</strong>
+            <svg class="trainer-view-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg?v=exercise-management#exercise"></use></svg>
+            <span>Patienten und Steuerung</span>
           </button>
         </nav>
       </div>
@@ -84,6 +94,32 @@
         </section>
       </div>
     </section>
+    <div id="managementView" hidden>
+      <section class="panel" aria-labelledby="managementTitle">
+        <div class="management-heading">
+          <h2 id="managementTitle">Übungsübersicht</h2>
+          <button id="refreshManagement" type="button">Übersicht aktualisieren</button>
+        </div>
+        <p id="managementStatus" class="muted small" role="status" hidden></p>
+        <div id="managementGroups" hidden>
+          <section aria-labelledby="activeExercisesTitle">
+            <h3 id="activeExercisesTitle">Aktive Übungen</h3>
+            <p id="activeExercisesEmpty" class="muted small" hidden>Keine aktiven Übungen.</p>
+            <ul id="activeExercises" class="management-list"></ul>
+          </section>
+          <section aria-labelledby="inactiveExercisesTitle">
+            <h3 id="inactiveExercisesTitle">Inaktive Übungen</h3>
+            <p id="inactiveExercisesEmpty" class="muted small" hidden>Keine inaktiven Übungen.</p>
+            <ul id="inactiveExercises" class="management-list"></ul>
+          </section>
+          <section aria-labelledby="exerciseTemplatesTitle">
+            <h3 id="exerciseTemplatesTitle">Gespeicherte Vorlagen</h3>
+            <p id="exerciseTemplatesEmpty" class="muted small" hidden>Keine gespeicherten Vorlagen.</p>
+            <ul id="exerciseTemplates" class="management-list"></ul>
+          </section>
+        </div>
+      </section>
+    </div>
     <div id="configurationView">
       <section class="panel">
         <h2>Fahrzeuge zusammenstellen</h2>
@@ -198,7 +234,7 @@
       </section>
       <section class="panel">
         <h2>Weitere Übungsstarts</h2>
-        <details>
+        <details id="templateSettings">
           <summary>Übungsvorlagen</summary>
           <p class="muted small">Eine Vorlage speichert die Besetzung und Patientenprofile. Jeder Start erzeugt eine neue Übung mit eigenen QR-Zugängen für 24 Stunden.</p>
           <p id="noTemplates" class="muted small">Du hast noch keine Übungsvorlage gespeichert.</p>
@@ -260,29 +296,6 @@
           <button id="printStations" type="button">Drucken / als PDF speichern</button>
           <p class="muted small">Wähle im Druckdialog deinen Drucker oder „Als PDF speichern“.</p>
         </details>
-        <div class="overview-fields" role="group" aria-label="Patientenübersicht filtern">
-          <label>Aktuelle Sichtungskategorie
-            <select id="overviewCategory">
-              <option value="">Alle Kategorien</option>
-              <option value="red">SK I · Rot</option>
-              <option value="yellow">SK II · Gelb</option>
-              <option value="green">SK III · Grün</option>
-              <option value="black">SK Schwarz</option>
-              <option value="affected">SK B · Betroffene</option>
-              <option value="none">Noch keine Kategorie</option>
-            </select>
-          </label>
-          <label>Startstatus
-            <select id="overviewStatus">
-              <option value="">Alle Startstatus</option>
-              <option value="ready">Wartet auf Start</option>
-              <option value="running">Läuft</option>
-              <option value="paused">Pausiert</option>
-              <option value="finished">Abgeschlossen</option>
-            </select>
-          </label>
-        </div>
-        <p id="overviewCount" class="muted small" role="status"></p>
         <ul id="patientOverview" class="patient-groups" aria-label="Live-Zustand der Patienten nach Fahrzeug oder Station"></ul>
       </section>
       <section id="patientControls" class="panel" hidden>
@@ -342,11 +355,11 @@
   <button type="button" data-car-choice="cancel" autofocus>Abbrechen</button>
 </dialog>
 <div id="exercisePrint" class="exercise-print"></div>
-<script src="patients.js"></script>
+<script src="patients.js?v=verkehrsunfall"></script>
 <script src="supabase-config.js"></script>
 <script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
 <script src="scenario-validation.js?v=triage"></script>
-<script src="trainer.js?v=station-pictograms"></script>
+<script src="trainer.js?v=exercise-management"></script>
 </body>
 </html>
