@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=station-stories">
+  <link rel="stylesheet" href="style.css?v=station-pictograms">
 </head>
 <body><main class="trainer-shell">
   <section class="panel page-banner">
@@ -27,7 +27,18 @@
       <div class="workspace-header">
         <section class="active-exercise" aria-labelledby="activeExerciseLabel activeExerciseTitle">
           <div id="activeExerciseLabel" class="active-exercise-label">Aktive Übung</div>
-          <h2 id="activeExerciseTitle">Keine Übung ausgewählt</h2>
+          <div class="exercise-title-line">
+            <h2 id="activeExerciseTitle">Keine Übung ausgewählt</h2>
+            <button id="editExerciseTitle" type="button" aria-controls="renameExerciseForm" hidden>Übung umbenennen</button>
+          </div>
+          <form id="renameExerciseForm" hidden>
+            <label for="renameExerciseTitle">Übungsname</label>
+            <input id="renameExerciseTitle" maxlength="120" required>
+            <div class="rename-exercise-actions">
+              <button id="saveExerciseTitle" type="submit">Speichern</button>
+              <button id="cancelExerciseTitle" type="button">Abbrechen</button>
+            </div>
+          </form>
           <label for="exercise">Übung auswählen oder wechseln</label>
           <select id="exercise"></select>
         </section>
@@ -78,7 +89,7 @@
         <h2>Fahrzeuge zusammenstellen</h2>
         <p class="muted small">Starte mit einem Fahrzeug eine neue Übung oder ergänze die oben ausgewählte Übung.</p>
         <details class="booking-card" id="carBooking">
-          <summary><span>Pkw mit Insassen</span><span class="muted small">Bis zu 5 Sitzplätze</span></summary>
+          <summary><span class="station-heading"><svg class="station-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg#car"></use></svg>Pkw mit Insassen</span><span class="muted small">Bis zu 5 Sitzplätze</span></summary>
           <div class="booking-fields">
             <p>Lege je besetztem Sitzplatz das Verletzungsprofil und die Befreiungslage fest. Wähle „Leer“, um einen Insassen zu entfernen. Beim Bearbeiten kannst du Insassen auch umsetzen.</p>
             <p class="muted small">Bei <strong>Eingeschlossen</strong> ist der Ausstieg versperrt. Bei <strong>Eingeklemmt</strong> steckt ein Körperteil fest, etwa im Fußraum.</p>
@@ -88,9 +99,14 @@
             <p id="carEditStatus" class="muted small" role="status" hidden></p>
             <p id="carUnsaved" class="warning small" hidden>Ungespeicherte Pkw-Änderungen</p>
             <form id="carForm">
-              <label>Fahrzeuglage (optional)
-                <input id="carSituation" maxlength="200" placeholder="z. B. Pkw in Seitenlage, Fahrertür deformiert">
-              </label>
+              <div class="vehicle-fields">
+                <label>Fahrzeug (optional)
+                  <input id="carDescription" maxlength="120" placeholder="z. B. roter Volvo">
+                </label>
+                <label>Lage (optional)
+                  <input id="carSituation" maxlength="200" placeholder="z. B. Seitenlage, Fahrertür deformiert">
+                </label>
+              </div>
               <div id="carSeats"></div>
               <div class="booking-actions">
                 <button id="startCar" type="submit">Als neue Übung starten</button>
@@ -101,7 +117,7 @@
           </div>
         </details>
         <details class="booking-card" id="busBooking">
-          <summary><span>Busunfall</span><span class="muted small">5 oder 10 Personen</span></summary>
+          <summary><span class="station-heading"><svg class="station-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg#bus"></use></svg>Busunfall</span><span class="muted small">5 oder 10 Personen</span></summary>
           <div class="booking-fields">
             <p>Wähle eine vorbereitete Busbesetzung mit eigenen Patientenrollen und Auffindeorten.</p>
             <label>Busbesetzung einschließlich Fahrer
@@ -117,7 +133,7 @@
           </div>
         </details>
         <details class="booking-card" id="truckBooking">
-          <summary><span>Lkw mit Insassen</span><span class="muted small">Fahrer- und Beifahrerplatz</span></summary>
+          <summary><span class="station-heading"><svg class="station-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg#truck"></use></svg>Lkw mit Insassen</span><span class="muted small">Fahrer- und Beifahrerplatz</span></summary>
           <div class="booking-fields">
             <label id="editTruckChoice" hidden>Lkw auswählen
               <select id="editTruck"></select>
@@ -125,9 +141,14 @@
             <p id="truckEditStatus" class="muted small" role="status" hidden></p>
             <p id="truckUnsaved" class="warning small" hidden>Ungespeicherte Lkw-Änderungen</p>
             <form id="truckForm">
-              <label>Fahrzeuglage (optional)
-                <input id="truckSituation" maxlength="200" placeholder="z. B. Lkw in Seitenlage">
-              </label>
+              <div class="vehicle-fields">
+                <label>Fahrzeug (optional)
+                  <input id="truckDescription" maxlength="120" placeholder="z. B. weißer MAN">
+                </label>
+                <label>Lage (optional)
+                  <input id="truckSituation" maxlength="200" placeholder="z. B. Seitenlage am Straßenrand">
+                </label>
+              </div>
               <div id="truckSeats"></div>
               <div class="booking-actions">
                 <button id="startTruck" type="submit">Als neue Übung starten</button>
@@ -141,7 +162,7 @@
       <section class="panel">
         <h2>Weitere Einsatzstellen</h2>
         <details class="booking-card" id="objectBooking">
-          <summary><span>Einklemmung unter oder zwischen Gegenständen</span></summary>
+          <summary><span class="station-heading"><svg class="station-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg#entrapment"></use></svg>Einklemmung unter oder zwischen Gegenständen</span></summary>
           <div class="booking-fields">
             <label id="editObjectChoice" hidden>Klemmstelle auswählen
               <select id="editObject"></select>
@@ -326,6 +347,6 @@
 <script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
 <script src="scenario-validation.js?v=triage"></script>
-<script src="trainer.js?v=station-stories"></script>
+<script src="trainer.js?v=station-pictograms"></script>
 </body>
 </html>

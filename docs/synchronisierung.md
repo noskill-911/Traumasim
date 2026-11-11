@@ -10,6 +10,7 @@
    beendet sie auch in weiteren Ausbilder-Tabs desselben Profils.
 2. In **Konfiguration** eine Übung anlegen und Stationen zusammenstellen
    oder oben bei **Aktive Übung** eine vorhandene Übung auswählen.
+   Über **Übung umbenennen** lässt sich der Name der aktiven Übung ändern.
    Direkt darunter steht der Übungs-QR fürs Briefing. Über **Übungs-QR als A4 drucken**
    lässt er sich als eigener Aushang mit Übungsname und Gültigkeit ausgeben.
    Teilnehmende scannen ihn einmal und
@@ -35,6 +36,8 @@
 5. Unter **Übung** stehen die Besetzungszahlen direkt in der Patientenübersicht.
    Die Patienten sind nach Fahrzeug und Klemmstelle gruppiert. Bei einem Pkw
    zeigt der Name den Sitzplatz, zum Beispiel **Pkw 1 – Fahrer**.
+   Unter den Gruppen stehen die Fahrzeugbezeichnung oder der Gegenstand
+   sowie, falls eingetragen, Lage oder Auffindeort.
    Die Übersicht zeigt den Status, die Zeit seit Patientenstart
    und bei gestarteten Patienten die aktuelle Sichtungskategorie im
    Übungsmodell. Sie kann nach aktueller Sichtung und Startstatus gefiltert
@@ -113,8 +116,9 @@ die internen Hinweise des ausgewählten Patienten.
 Unter **Übungselement Pkw mit Insassen** bis zu fünf Sitzplätze besetzen.
 Verletzungsprofil und Befreiungslage werden je Person gewählt. Zur Auswahl
 stehen **Frei zugänglich**, **Eingeschlossen** und **Eingeklemmt**.
-Für eingeklemmte Personen wird zusätzlich die Klemmstelle gewählt. Eine eigene
-Beschreibung und die Fahrzeuglage können ergänzt werden. **SK B · Betroffene**
+Für eingeklemmte Personen wird zusätzlich die Klemmstelle gewählt.
+Unter **Fahrzeug** kann z. B. „roter Volvo“ und unter **Lage** „Seitenlage“
+eingetragen werden. **SK B · Betroffene**
 und **SK Schwarz** sind auch als feste Profile wählbar. Die Profile
 **SK III → SK II**, **SK II → SK I** und **SK I → SK Schwarz** wechseln
 zur per Schieberegler gewählten Minute ab Patientenstart (Minute 1 bis 44). Voreingestellt

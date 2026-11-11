@@ -192,7 +192,12 @@
     exercise = next;
     syncArrivalClock(next, changed);
     el('triageSettings').hidden = !next;
-    el('activeExerciseTitle').textContent = next?.title ?? 'Keine Übung ausgewählt';
+    const activeTitle = el('activeExerciseTitle');
+    const title = next?.title ?? 'Keine Übung ausgewählt';
+    if (activeTitle.textContent !== title) activeTitle.textContent = title;
+    const option = el('exercise').selectedOptions[0];
+    if (next && option?.value === next.id && option.textContent !== title) option.textContent = title;
+    if (changed) setExerciseTitleEditing(false);
     lastOverviewUpdate = next ? Date.now() : 0;
     renderOverviewSync(navigator.onLine === false ? 'Verbindung unterbrochen' : '');
     el('noExercise').hidden = Boolean(next);
@@ -433,7 +438,9 @@
     }
     if (model?.car_number != null) {
       const seat = carSeatName(model) ?? name.split(' · ').at(-1);
-      return { label: stationNumber(model.car_patient_number) + ' ' + seat, place: model.car_vehicle };
+      const detail = model.car_vehicle_description ? 'Fahrzeug · ' + model.car_vehicle_description : '';
+      return { label: stationNumber(model.car_patient_number) + ' ' + seat, detail,
+        place: model.car_vehicle, placeLabel: 'Lage' };
     }
     const bus = busStationPattern.exec(patient.id);
     if (bus) {
@@ -535,7 +542,7 @@
           if (station.place) {
             const place = document.createElement('p');
             place.className = 'station-card-place';
-            place.textContent = 'Auffindeort · ' + station.place;
+            place.textContent = (station.placeLabel ?? 'Auffindeort') + ' · ' + station.place;
             card.append(place);
           }
           const validity = document.createElement('p');
@@ -564,10 +571,26 @@
     section.className = 'patient-group';
     const heading = document.createElement('h3');
     const title = document.createElement('span');
-    title.textContent = stationGroupName(group);
+    title.className = 'station-heading';
+    const kind = stationKind(patients[0]);
+    if (kind !== 'other') {
+      const svgNamespace = 'http://www.w3.org/2000/svg';
+      const icon = document.createElementNS(svgNamespace, 'svg');
+      icon.classList.add('station-icon');
+      icon.setAttribute('aria-hidden', 'true');
+      icon.setAttribute('focusable', 'false');
+      const use = document.createElementNS(svgNamespace, 'use');
+      use.setAttribute('href', 'station-icons.svg#' + (kind === 'object' ? 'entrapment' : kind));
+      icon.append(use);
+      title.append(icon);
+    }
+    title.append(stationGroupName(group));
     const count = document.createElement('span');
     count.className = 'muted small';
     heading.append(title, count);
+    const context = document.createElement('p');
+    context.className = 'station-group-context small';
+    context.hidden = true;
     const list = document.createElement('ul');
     list.className = 'patient-overview';
     for (const patient of patients) {
@@ -593,7 +616,7 @@
       row.append(button);
       list.append(row);
     }
-    section.append(heading, list);
+    section.append(heading, context, list);
     return section;
   }
 
@@ -641,6 +664,15 @@
       const text = (groupVisible === rows.length ? groupVisible : groupVisible + ' von ' + rows.length)
         + (rows.length === 1 ? ' Patient' : ' Patienten');
       if (groupCount.textContent !== text) groupCount.textContent = text;
+      const lead = patients.get(rows[0].dataset.patient);
+      const context = section.querySelector('.station-group-context');
+      const kind = stationKind(lead);
+      const identification = kind === 'object' ? objectTypeLabels[lead.model.object_type]
+        : lead.model?.car_vehicle_description;
+      const contextText = ['car', 'truck', 'object'].includes(kind)
+        ? [identification, lead.model?.car_vehicle].filter(Boolean).join(' · ') : '';
+      if (context.textContent !== contextText) context.textContent = contextText;
+      context.hidden = !contextText;
       section.hidden = groupVisible === 0;
       visible += groupVisible;
     }
@@ -659,9 +691,9 @@
     const link = patientLink(station, patient);
     const numberedStation = patient.model?.car_number != null;
     el('stationTitle').textContent = numberedStation ? patientName(patient.id) : 'Stations-QR für diesen Patienten';
-    const { detail, place } = stationLabel(patient);
+    const { detail, place, placeLabel = 'Auffindeort' } = stationLabel(patient);
     const location = el('stationLocation');
-    location.textContent = [detail, place ? 'Auffindeort · ' + place : ''].filter(Boolean).join(' · ');
+    location.textContent = [detail, place ? placeLabel + ' · ' + place : ''].filter(Boolean).join(' · ');
     location.hidden = !location.textContent;
     renderStation(link);
     const previewLink = el('previewPatientLink');
@@ -838,7 +870,7 @@
     if (busy) return;
     busy = true;
     actionVersion++;
-    const controls = document.querySelectorAll('form button, #logout, #exercise, #createCustom, #startBus, #attachBus, #editCar, #editTruck, #editObject, #triageMode');
+    const controls = document.querySelectorAll('form button, #logout, #exercise, #editExerciseTitle, #createCustom, #startBus, #attachBus, #editCar, #editTruck, #editObject, #triageMode');
     for (const control of controls) control.disabled = true;
     renderPatient();
     try {
@@ -853,6 +885,54 @@
       renderPatient();
     }
   }
+
+  function setExerciseTitleEditing(editing) {
+    el('renameExerciseForm').hidden = !editing;
+    el('editExerciseTitle').hidden = !exercise || editing;
+    const field = el('renameExerciseTitle');
+    field.setCustomValidity('');
+    field.value = editing ? exercise.title : '';
+    if (editing) {
+      field.focus();
+      field.select();
+    }
+  }
+
+  function cancelExerciseTitleEditing() {
+    if (busy) return;
+    setExerciseTitleEditing(false);
+    el('editExerciseTitle').focus();
+  }
+
+  el('editExerciseTitle').addEventListener('click', () => {
+    if (exercise && !busy) setExerciseTitleEditing(true);
+  });
+  el('cancelExerciseTitle').addEventListener('click', cancelExerciseTitleEditing);
+  el('renameExerciseTitle').addEventListener('input', (event) => event.target.setCustomValidity(''));
+  el('renameExerciseForm').addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    cancelExerciseTitleEditing();
+  });
+  el('renameExerciseForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!exercise || busy) return;
+    const field = el('renameExerciseTitle');
+    const title = field.value.trim();
+    if (!title) {
+      field.setCustomValidity('Gib einen Namen für die Übung ein.');
+      field.reportValidity();
+      return;
+    }
+    const session = exercise.id;
+    await run(async () => {
+      const next = await rpc({ p_action: 'rename_exercise', p_session: session, p_title: title });
+      renderExercise(next);
+      setExerciseTitleEditing(false);
+      message('Übung umbenannt.');
+    });
+    if (exercise?.id === session && el('renameExerciseForm').hidden) el('editExerciseTitle').focus();
+  });
 
   el('triageSettingsForm').addEventListener('submit', (event) => {
     event.preventDefault();
@@ -1057,6 +1137,8 @@
     if (kind === 'object') {
       form.objectType = el('objectType');
       form.objectPosition = el('objectPosition');
+    } else {
+      form.description = el(prefix + 'Description');
     }
     form.rows = seats.map(([seat, label]) => createSeatControl(form, el(prefix + 'Seats'), seat, label));
     return form;
@@ -1226,6 +1308,10 @@
     form.loadedNumber = form.select.value;
     const patients = carPatients(form);
     form.fields.reset();
+    if (form.description) {
+      form.savedDescription = patients[0]?.model.car_vehicle_description ?? '';
+      form.description.value = form.savedDescription;
+    }
     for (const row of form.rows) fillCarSeat(row);
     form.editVersion = patients[0]?.model.car_edit_version ?? 0;
     for (const {model} of patients) {
@@ -1326,6 +1412,8 @@
   function carFormConfig(form) {
     const occupants = form.rows.filter((row) => row.profile.value).map(carOccupantConfig);
     const config = { vehicle: form.location.value, occupants };
+    const description = form.description?.value.trim() ?? '';
+    if (description || form.savedDescription) config.vehicle_description = description;
     if (form.kind !== 'car') config.kind = form.kind;
     if (form.objectType) {
       config.object_type = form.objectType.value;

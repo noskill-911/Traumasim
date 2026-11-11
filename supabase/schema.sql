@@ -638,6 +638,7 @@ declare
  template traumasim_private.exercise_templates%rowtype;
  template_patients jsonb;
  new_session_id uuid;
+ renamed_title text;
  snapshot_time timestamptz;
  result jsonb;
 begin
@@ -699,6 +700,13 @@ begin
    snapshot_time := clock_timestamp();
    case p_action
      when 'status' then null;
+     when 'rename_exercise' then
+       renamed_title := regexp_replace(p_title, '^[[:space:]]+|[[:space:]]+$', '', 'g');
+       if renamed_title is null or length(renamed_title) not between 1 and 120 then
+         raise exception using errcode = '22023', message = 'Der Titel muss 1 bis 120 Zeichen enthalten.';
+       end if;
+       update public.traumasim_sessions s set title = renamed_title where s.id = exercise.id
+       returning s.* into exercise;
      when 'start_arrival' then
        if exercise.arrived_at is null then
          update public.traumasim_sessions s set arrived_at = snapshot_time where s.id = exercise.id
@@ -968,6 +976,9 @@ declare
  seat_names text[] := array['Fahrerplatz','Beifahrerplatz','hinten links','hinten Mitte','hinten rechts'];
  occupants jsonb := p_config->'occupants';
  vehicle text := nullif(btrim(p_config->>'vehicle'), '');
+ vehicle_description text := case when station_kind in ('car', 'truck')
+   then nullif(btrim(p_config->>'vehicle_description'), '') end;
+ existing_vehicle_description text;
  object_type text := p_config->>'object_type';
  object_position text := p_config->>'object_position';
  object_name text;
@@ -1033,6 +1044,10 @@ begin
    else
      raise exception using errcode = '22023', message = 'Die Stationsart ist ungültig.';
  end case;
+ if station_kind in ('car', 'truck') and (jsonb_typeof(p_config->'vehicle_description') not in ('string', 'null')
+    or length(vehicle_description) > 120) then
+   raise exception using errcode = '22023', message = 'Die Fahrzeugbeschreibung darf bis zu 120 Zeichen enthalten.';
+ end if;
  if jsonb_array_length(occupants) not between 1 and cardinality(seats) then
    raise exception using errcode = '22023', message = case station_kind
      when 'car' then 'Wähle mindestens einen und höchstens fünf besetzte Sitzplätze.'
@@ -1066,8 +1081,9 @@ begin
    select count(*), bool_or(p.started_at is not null),
           max(coalesce((p.scenario_model->>'car_edit_version')::integer, 0)),
           max(greatest((p.scenario_model->>'car_patient_number')::bigint,
-                       (p.scenario_model->>'car_patient_sequence')::bigint))
-   into existing_count, has_started, edit_version, last_person_no
+                       (p.scenario_model->>'car_patient_sequence')::bigint)),
+          max(p.scenario_model->>'car_vehicle_description')
+   into existing_count, has_started, edit_version, last_person_no, existing_vehicle_description
    from public.traumasim_patients p
    where p.session_id = exercise.id and p.patient_key like station_prefix || '%'
      and (p.scenario_model->>'car_number')::integer = car_no;
@@ -1079,6 +1095,10 @@ begin
    end if;
    if edit_version <> (p_config->>'edit_version')::integer then
      raise exception using errcode = '40001', message = 'Die Station wurde zwischenzeitlich bearbeitet. Öffne die Bearbeitung erneut.';
+   end if;
+   -- Older clients only submit the Lage field when editing.
+   if station_kind in ('car', 'truck') and not (p_config ? 'vehicle_description') then
+     vehicle_description := existing_vehicle_description;
    end if;
    if (select count(item->>'patient_number') <> count(distinct item->>'patient_number')
        from jsonb_array_elements(occupants) item) then
@@ -1214,7 +1234,9 @@ begin
    patient_model := jsonb_build_object(
      'name', format('%s %s · Patient %s', station_name, car_label, person_label)
        || case when station_kind = 'object' then '' else ' · ' || seat_name end,
-     'intro', concat_ws(' ', case when vehicle is not null then rtrim(vehicle, '.') || '.'
+     'intro', concat_ws(' ', case when vehicle_description is not null then
+       format('Fahrzeug: %s. Lage: %s.', rtrim(vehicle_description, '.'), coalesce(rtrim(vehicle, '.'), 'Vor Ort erkunden'))
+       when vehicle is not null then rtrim(vehicle, '.') || '.'
        when station_kind <> 'object' then 'Fahrzeuglage vor Ort erkunden.' end, location_description),
      'story', injury,
      'questions', '',
@@ -1233,6 +1255,8 @@ begin
    end if;
    if station_kind = 'object' then
      patient_model := patient_model || jsonb_build_object('object_type', object_type, 'object_position', object_position);
+   elsif vehicle_description is not null then
+     patient_model := patient_model || jsonb_build_object('car_vehicle_description', vehicle_description);
    end if;
    if retain_person then
      update public.traumasim_patients p
