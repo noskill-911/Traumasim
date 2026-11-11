@@ -84,6 +84,26 @@ main { max-width: 49rem; margin: auto; }
 .trainer-login-qr-image { display: block; width: 100%; background: #fff; }
 .trainer-login-qr-image:empty { display: none; }
 .trainer-login-qr-image svg { display: block; width: 100%; height: auto; }
+.trainer-shell:has(#workspace:not([hidden])) .trainer-banner {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .2rem .55rem;
+  padding-block: .65rem;
+}
+.trainer-shell:has(#workspace:not([hidden])) .trainer-banner h1 { grid-area: 2 / 1; font-size: clamp(1.15rem, 3.6vw, 1.55rem); }
+.trainer-shell:has(#workspace:not([hidden])) .trainer-login-qr { grid-area: 1 / 2 / 3; width: 4rem; font-size: .66rem; line-height: 1.2; white-space: nowrap; }
+.trainer-shell:has(#workspace:not([hidden])) .trainer-login-qr-image { width: 3.25rem; }
+.trainer-shell:has(#workspace:not([hidden])) .trainer-banner #logout { grid-area: 3 / 2; margin: 0; padding-inline: .45rem; }
+.trainer-shell:has(#workspace:not([hidden])) .trainer-banner #message { grid-area: 3 / 1; margin: 0; font-size: .85rem; }
+@media (max-width: 370px) {
+  .trainer-shell:has(#workspace:not([hidden])) .trainer-banner > :first-child { font-size: .66rem; }
+  .trainer-shell:has(#workspace:not([hidden])) .trainer-banner h1 { font-size: 1rem; }
+}
+@media (min-width: 620px) {
+  .trainer-shell:has(#workspace:not([hidden])) .trainer-banner { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .trainer-shell:has(#workspace:not([hidden])) .trainer-banner #logout { grid-area: 1 / 3 / 4; }
+  .trainer-shell:has(#workspace:not([hidden])) .trainer-login-qr { grid-area: 1 / 2 / 4; }
+}
 .share-dialog {
   box-sizing: border-box;
   width: min(calc(100% - 2rem), 34rem);
@@ -139,6 +159,23 @@ button, select, a.action {
 }
 button, a.action, select { cursor: pointer; }
 button:not(:disabled, .triage-choice):hover, a.action:hover { background: var(--blue-hover); }
+.action-secondary:is(button, a.action), .action-danger:is(button, a.action) {
+  background: var(--surface);
+  color: var(--blue);
+  border-color: currentColor;
+}
+.action-secondary:is(button, a.action):not(:disabled):hover { background: #e0edf7; }
+.action-danger:is(button, a.action) { color: var(--red); }
+.action-danger:is(button, a.action):not(:disabled):hover { background: #fce8ec; }
+.trainer-shell :is(button, a.action, select) { min-height: 2.75rem; }
+.trainer-feedback:not(:empty) {
+  margin: .55rem 0 0;
+  padding: .35rem .55rem;
+  border-left: .2rem solid var(--blue);
+  background: var(--surface-soft);
+  font-size: .9rem;
+}
+.trainer-feedback:empty { margin: 0; }
 select, input:not([type="range"]), textarea {
   max-width: 100%;
   border: 1px solid #718a9f;
@@ -187,7 +224,7 @@ button:disabled { opacity: .55; cursor: default; }
 }
 .overview-fields label { min-width: 0; margin: .6rem 0; }
 .overview-fields select { display: block; width: 100%; }
-.workspace-header { display: grid; gap: .75rem; }
+.workspace-header { display: grid; gap: .55rem; }
 .active-exercise {
   min-width: 0;
   padding: .9rem 1rem;
@@ -197,12 +234,11 @@ button:disabled { opacity: .55; cursor: default; }
   background: #edf5fc;
 }
 .active-exercise-label { color: var(--navy); font-size: .85rem; font-weight: 750; }
-.active-exercise h2 { margin: .25rem 0 .7rem; font-size: clamp(1.25rem, 3vw, 1.65rem); }
+.active-exercise h2 { margin: .25rem 0; font-size: clamp(1.05rem, 3vw, 1.45rem); }
 .active-exercise label { margin: 0; color: var(--muted); font-size: .85rem; }
 .active-exercise select { width: 100%; margin: .2rem 0 0; }
-#showManagement { margin: .5rem 0 0; background: var(--surface); color: var(--blue); }
-#showManagement:not(:disabled):hover { background: #e0edf7; }
-#showManagement[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: white; }
+.exercise-switch { display: flex; align-items: center; gap: .4rem; min-width: 0; }
+.exercise-switch select { flex: 1; min-width: 0; padding-inline: .5rem; font-weight: 500; }
 .management-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .4rem .8rem; }
 .management-heading h2, .management-heading button { margin: 0; }
 .management-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: .65rem; list-style: none; margin: 0; padding: 0; }
@@ -216,8 +252,6 @@ button:disabled { opacity: .55; cursor: default; }
 .management-categories .triage { border-width: 1px; }
 .management-categories .triage strong { display: inline; font-size: inherit; }
 .management-actions button { margin: 0; }
-.management-actions [data-management-action="deactivate"], .management-actions [data-management-action="delete"] { border-color: var(--red); background: var(--surface); color: var(--red); }
-.management-actions [data-management-action="deactivate"]:not(:disabled):hover, .management-actions [data-management-action="delete"]:not(:disabled):hover { background: #fce8ec; }
 #archiveReportDialog {
   width: min(54rem, calc(100% - 1.5rem));
   max-height: calc(100% - 1.5rem);
@@ -232,9 +266,10 @@ button:disabled { opacity: .55; cursor: default; }
 #archiveReportAccess { margin: 0 0 .3rem; }
 .archive-report-heading, .archive-report-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem .65rem; }
 .archive-report-heading { justify-content: space-between; }
-.archive-report-heading h2, .archive-report-heading button, .archive-report-actions button { margin: 0; }
-.archive-report-heading h2 { min-width: 0; }
-.archive-report-actions { margin-top: .75rem; }
+.archive-report-heading h2, .archive-report-actions button { margin: 0; }
+.archive-report-heading h2 { flex: 1 1 13rem; min-width: 0; }
+.archive-report-actions button:not(#exportArchiveCsv) { color: var(--blue); background: var(--surface); }
+.archive-report-actions button:not(#exportArchiveCsv, :disabled):hover { background: #e0edf7; }
 .archive-report-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: .45rem; margin: .8rem 0; }
 .archive-report-meta div { min-width: 0; padding: .4rem .6rem; border-radius: .4rem; background: var(--surface-soft); }
 .archive-report-meta dt { color: var(--muted); font-size: .82rem; }
@@ -246,44 +281,56 @@ button:disabled { opacity: .55; cursor: default; }
 .archive-report-table tbody tr:last-child > * { border-bottom: 0; }
 .archive-report-table tbody th { min-width: 8rem; overflow-wrap: anywhere; }
 .archive-report-table td { font-variant-numeric: tabular-nums; }
-.archive-report-table .triage { display: inline-block; padding: .12rem .35rem; border-width: 1px; border-radius: .35rem; white-space: nowrap; }
-.exercise-title-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0 .65rem; margin: .25rem 0 .7rem; }
+.archive-report-table .triage, .archive-patient-card .triage { display: inline-block; padding: .12rem .35rem; border-width: 1px; border-radius: .35rem; }
+.archive-report-table .triage { white-space: nowrap; }
+.archive-report-cards { display: none; }
+@media (max-width: 660px) {
+  .archive-report-actions { gap: .4rem; }
+  .archive-report-actions button { padding-inline: .6rem; }
+  .archive-report-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .archive-report-meta dd { font-size: .9rem; overflow-wrap: anywhere; }
+  .archive-report-table { display: none; }
+  .archive-report-cards { display: grid; gap: .55rem; margin: 0; padding: 0; list-style: none; }
+  .archive-patient-card { min-width: 0; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: .45rem; }
+  .archive-patient-heading { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .55rem; }
+  .archive-patient-card h3 { flex: 1 1 6.5rem; min-width: 0; margin: 0; font-size: 1rem; }
+  .archive-patient-card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem .65rem; margin: .55rem 0 0; }
+  .archive-patient-card dl > :last-child { grid-column: 1 / -1; }
+  .archive-patient-card dt { color: var(--muted); font-size: .82rem; }
+  .archive-patient-card dd { margin: 0; overflow-wrap: anywhere; font-weight: 650; font-variant-numeric: tabular-nums; }
+}
+.exercise-title-line { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .55rem; margin: .15rem 0 0; }
 .exercise-title-line h2 { margin: 0; }
-#editExerciseTitle, #cancelExerciseTitle { background: var(--surface); color: var(--blue); }
-#editExerciseTitle:not(:disabled):hover, #cancelExerciseTitle:not(:disabled):hover { background: #e0edf7; }
-#editExerciseTitle { margin: 0; }
+#editExerciseTitle { margin: 0; padding: .28rem .5rem; font-size: .85rem; }
 #renameExerciseForm { margin-bottom: .7rem; }
 #renameExerciseTitle { width: 100%; margin: .2rem 0 .4rem; padding: .55rem; font: inherit; }
 .rename-exercise-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
 .rename-exercise-actions button { margin: 0; }
-.trainer-views { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.trainer-views { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .35rem; }
 .trainer-views button {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: center;
+  gap: .3rem;
   min-width: 0;
   margin: 0;
-  padding: .75rem;
+  padding: .45rem .25rem;
   border-color: #a6bed2;
   background: var(--surface-soft);
   color: var(--navy);
-  text-align: left;
+  text-align: center;
 }
-.trainer-views strong { display: block; font-size: clamp(1rem, 2.5vw, 1.3rem); overflow-wrap: anywhere; }
-.trainer-view-icon { width: 1.7rem; height: 1.7rem; margin: .38rem 0 .24rem; flex: none; }
-.trainer-views span { display: block; margin-top: .15rem; font-size: .82rem; line-height: 1.35; overflow-wrap: anywhere; }
-@media (max-width: 420px) {
-  .trainer-views button { padding: .62rem .48rem; }
-  .trainer-views strong { font-size: .9rem; }
+.trainer-views strong { font-size: clamp(.75rem, 2.6vw, 1rem); line-height: 1.2; overflow-wrap: anywhere; }
+.trainer-view-icon { width: 1.2rem; height: 1.2rem; flex: none; }
+@media (max-width: 510px) {
+  .trainer-views { grid-template-columns: 1fr 1.2fr 1fr; }
+  .trainer-views button { flex-direction: column; padding-inline: .12rem; }
 }
 .patient-overview button { border: 1px solid transparent; }
 #exercise, #exerciseTemplate, #choose, .car-seat select { max-width: 100%; }
 .trainer-views button:not(:disabled):hover { background: #e0edf7; }
 .trainer-views button[aria-pressed="true"],
 .trainer-views button[aria-pressed="true"]:hover { background: var(--navy); border-color: var(--navy); color: white; }
-@media (min-width: 740px) {
-  .workspace-header { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-}
 .overview-sync {
   margin: .55rem 0 .8rem;
   padding: .45rem .7rem;
@@ -294,6 +341,23 @@ button:disabled { opacity: .55; cursor: default; }
   font-variant-numeric: tabular-nums;
 }
 .overview-sync[data-stale="true"] { border-color: #946300; background: #fff4d5; color: #593900; }
+.patient-workspace > *, .patient-detail { min-width: 0; }
+.patient-detail h2 { overflow-wrap: anywhere; }
+.patient-back { margin: 0 0 .75rem; }
+.patient-action-buttons { display: flex; flex-wrap: wrap; gap: .35rem; }
+.patient-action-buttons button { margin: 0; }
+#patientFeedback:empty, #patientLinkFeedback:empty { margin: 0; }
+.patient-workspace .patient-overview button { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.patient-workspace .patient-overview strong { grid-column: 1 / -1; }
+@media (min-width: 900px) {
+  .patient-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 1rem; }
+  .patient-back { display: none; }
+  .patient-workspace .patient-groups { max-block-size: min(65vh, 46rem); overflow: auto; padding: 0 .28rem; }
+}
+@media (width < 900px) {
+  .patient-workspace[data-detail-open="false"] > .patient-detail,
+  .patient-workspace[data-detail-open="true"] > #live { display: none; }
+}
 .patient-overview button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 11rem minmax(9rem, auto);
@@ -344,27 +408,41 @@ input#caseTitle, #name, textarea { width: 100%; padding: .55rem; }
 .triage-explanation { margin-top: .6rem; }
 #changeTriageChoice, #cancelTriageChange { margin-top: .65rem; }
 
-.exercise-toolbar { display: grid; gap: .7rem; margin-top: 1rem; }
-.exercise-tool { min-width: 0; padding: .75rem; border: 1px solid var(--line); border-radius: .6rem; background: var(--surface-soft); }
-.exercise-tool h2 { margin: 0 0 .6rem; font-size: 1rem; }
-.exercise-tool .exercise-qr { width: min(100%, 9rem); margin: 0 0 .65rem; }
-.exercise-tool .exercise-qr.is-enlarged { width: min(100%, 21rem); }
+.workspace-panel { padding-block: .7rem; }
+.exercise-toolbar { margin-top: .7rem; padding-top: .65rem; border-top: 1px solid var(--line); }
+.exercise-quick-controls, .arrival-timer { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .65rem; }
+.exercise-quick-controls { justify-content: space-between; }
+.exercise-quick-controls button { margin: 0; }
+#exerciseJoin .exercise-qr { width: min(100%, 11rem); margin: .5rem auto .75rem; }
+#exerciseJoin .exercise-qr.is-enlarged { width: min(100%, 23rem); }
+#exerciseJoin .exercise-tool-actions { justify-content: center; }
 .exercise-tool-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
-.exercise-tool-actions button { margin: 0; }
-.exercise-tool-actions .exercise-end { background: var(--red); border-color: var(--red); }
-.exercise-tool-actions .exercise-end:not(:disabled):hover { background: #92112a; }
-.arrival-timer { margin-bottom: .75rem; padding-bottom: .75rem; border-bottom: 1px solid var(--line); }
-.arrival-timer p { display: flex; align-items: baseline; flex-wrap: wrap; gap: .25rem .7rem; margin: 0 0 .4rem; }
+.exercise-tool-actions :is(button, a.action) { margin: 0; }
+.arrival-timer p { display: flex; align-items: baseline; flex-wrap: wrap; gap: .25rem .4rem; margin: 0; }
 #arrivalClock { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.exercise-tool #joinLink, .exercise-briefing { margin-top: .7rem; }
+#exerciseJoin #joinLink, .exercise-briefing { margin-top: .7rem; }
 .exercise-briefing summary { font-size: .85rem; }
-@media (min-width: 640px) {
-  .exercise-toolbar { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: start; }
+#exerciseAdvanced { margin-top: .45rem; }
+#exerciseAdvanced .exercise-tool-actions { margin-top: .4rem; }
+@media (max-width: 510px) {
+  .arrival-timer { gap: .25rem .4rem; }
+  .arrival-timer p { gap: .25rem; }
+  .arrival-timer p .small { font-size: .8rem; }
+  #startArrival { padding-inline: .48rem; }
 }
-.composition-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: .45rem; margin: 0 0 1rem; }
-.composition-counts div { padding: .45rem .65rem; border-radius: .45rem; background: var(--surface-soft); }
+@media (min-width: 620px) {
+  .active-exercise { display: grid; grid-template-columns: minmax(0, 1fr) minmax(12rem, .6fr); align-items: center; column-gap: .7rem; }
+  .active-exercise-label { grid-column: 1; }
+  .active-exercise .exercise-switch { grid-area: 1 / 2 / 3; }
+  #renameExerciseForm, #exerciseNameFeedback { grid-column: 1 / -1; }
+}
+.composition-counts { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0 0 .65rem; }
+.composition-counts div { display: flex; align-items: baseline; gap: .3rem; padding: .15rem .45rem; border-radius: .35rem; background: var(--surface-soft); }
 .composition-counts dt { color: var(--muted); font-size: .85rem; }
-.composition-counts dd { margin: 0; font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.composition-counts dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+#liveTitle { margin: .2rem 0; font-size: .85rem; color: var(--muted); }
+#live h2 { margin-bottom: .25rem; }
+#live .overview-sync { margin: .45rem 0 .55rem; padding-block: .25rem; }
 #stationLocation { overflow-wrap: anywhere; }
 .booking-card { margin-top: .7rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface-soft); }
 .booking-card summary {
@@ -425,7 +503,7 @@ input#caseTitle, #name, textarea { width: 100%; padding: .55rem; }
 @media print {
   @page { size: A4 portrait; margin: 12mm; }
   body.printing-exercise { color-scheme: light; margin: 0; padding: 0; background: white; color: #161616; }
-  body.printing-exercise > main { display: none; }
+  body.printing-exercise > :is(main, dialog) { display: none; }
   body.printing-exercise .exercise-print { display: block; }
   .briefing-sheet {
     display: grid;

@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=exercise-sharing">
+  <link rel="stylesheet" href="style.css?v=trainer-usability">
 </head>
 <body><main class="trainer-shell">
   <section class="panel page-banner trainer-banner">
@@ -22,77 +22,68 @@
       <label>E-Mail <input id="email" type="email" autocomplete="username" required></label>
       <label>Passwort <input id="password" type="password" autocomplete="current-password" required></label>
       <button>Anmelden</button>
-      <button id="register" type="submit">Ausbilderkonto einrichten</button>
+      <button id="register" class="action-secondary" type="submit">Ausbilderkonto einrichten</button>
     </form>
-    <button id="logout" hidden>Abmelden</button>
+    <button id="logout" class="action-secondary" hidden>Abmelden</button>
   </section>
 
   <div id="workspace" hidden>
-    <section class="panel">
+    <section class="panel workspace-panel">
       <div class="workspace-header">
         <section class="active-exercise" aria-labelledby="activeExerciseLabel activeExerciseTitle">
           <div id="activeExerciseLabel" class="active-exercise-label">Aktive Übung</div>
           <div class="exercise-title-line">
             <h2 id="activeExerciseTitle">Keine Übung ausgewählt</h2>
-            <button id="editExerciseTitle" type="button" aria-controls="renameExerciseForm" hidden>Übung umbenennen</button>
+            <button id="editExerciseTitle" class="action-secondary" type="button" aria-controls="renameExerciseForm" hidden>Umbenennen</button>
           </div>
           <form id="renameExerciseForm" hidden>
             <label for="renameExerciseTitle">Übungsname</label>
             <input id="renameExerciseTitle" maxlength="120" required>
             <div class="rename-exercise-actions">
               <button id="saveExerciseTitle" type="submit">Speichern</button>
-              <button id="cancelExerciseTitle" type="button">Abbrechen</button>
+              <button id="cancelExerciseTitle" class="action-secondary" type="button">Abbrechen</button>
             </div>
           </form>
-          <label for="exercise">Übung auswählen oder wechseln</label>
-          <select id="exercise"></select>
-          <button id="showManagement" type="button" aria-controls="managementView" aria-pressed="false">Übungsübersicht</button>
+          <label class="exercise-switch" for="exercise">Übung wechseln
+            <select id="exercise"></select>
+          </label>
+          <p id="exerciseNameFeedback" class="trainer-feedback" role="status"></p>
         </section>
         <nav class="trainer-views" aria-label="Ausbilderbereiche">
-          <button id="showConfiguration" type="button" aria-label="Konfiguration" aria-controls="configurationView" aria-pressed="true">
-            <strong>Konfiguration</strong>
-            <svg class="trainer-view-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg?v=exercise-management#configuration"></use></svg>
-            <span>Fahrzeuge, Patienten und Vorlagen</span>
+          <button id="showManagement" type="button" aria-controls="managementView" aria-pressed="false">
+            <svg class="trainer-view-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg?v=trainer-usability#overview"></use></svg>
+            <strong>Übersicht</strong>
           </button>
-          <button id="showExercise" type="button" aria-label="Übung" aria-controls="exerciseView" aria-pressed="false">
-            <strong>Übung</strong>
-            <svg class="trainer-view-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg?v=exercise-management#exercise"></use></svg>
-            <span>Patienten und Steuerung</span>
+          <button id="showConfiguration" type="button" aria-controls="configurationView" aria-pressed="true">
+            <svg class="trainer-view-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg?v=trainer-usability#configuration"></use></svg>
+            <strong>Konfiguration</strong>
+          </button>
+          <button id="showExercise" type="button" aria-controls="exerciseView" aria-pressed="false">
+            <svg class="trainer-view-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg?v=trainer-usability#exercise"></use></svg>
+            <strong>Live-Übung</strong>
           </button>
         </nav>
       </div>
       <div id="exerciseToolbar" class="exercise-toolbar" hidden>
-        <section id="exerciseJoin" class="exercise-tool" aria-labelledby="exerciseJoinTitle" hidden>
-          <h2 id="exerciseJoinTitle">Übungs-QR</h2>
-          <div id="joinQr" class="exercise-qr"></div>
-          <div class="exercise-tool-actions">
-            <button id="resizeJoinQr" type="button" aria-controls="joinQr">QR vergrößern</button>
-            <button id="copyJoin" type="button">Übungslink kopieren</button>
-            <button id="printJoinQr" type="button" disabled>Übungs-QR drucken (A4)</button>
-          </div>
-          <input id="joinLink" aria-label="Übungslink zum manuellen Kopieren" readonly hidden>
-          <details class="exercise-briefing">
-            <summary>Briefing</summary>
-            <p class="muted small">Zeige den Übungs-QR beim Briefing und platziere die Stations-QRs bei den Patienten. Während der Übung öffnen die Teilnehmenden die Stations-QRs vor Ort im selben Browser.</p>
-            <p id="busBriefing" hidden></p>
-          </details>
-        </section>
-        <section class="exercise-tool" aria-labelledby="exerciseActionsTitle">
-          <h2 id="exerciseActionsTitle">Ganze Übung steuern</h2>
+        <div class="exercise-quick-controls" role="group" aria-label="Übungssteuerung">
           <div class="arrival-timer">
             <p><span class="muted small">Seit Eintreffen</span> <span id="arrivalClock">–</span></p>
-            <div class="exercise-tool-actions">
-              <button id="startArrival" type="button" data-action="start_arrival" disabled>Eintreffen erfassen</button>
-              <button id="clearArrival" type="button" data-action="clear_arrival" disabled>Zeitmessung zurücksetzen</button>
-            </div>
+            <button id="startArrival" type="button" data-action="start_arrival" disabled>Eintreffen erfassen</button>
           </div>
           <div class="exercise-tool-actions">
-            <button id="shareCurrentExercise" type="button">Übung teilen</button>
-            <button id="resetAll" type="button" data-action="reset_all">Ganze Übung zurücksetzen</button>
-            <button id="closeExercise" class="exercise-end" type="button" data-action="close">Übung beenden</button>
+            <button id="showExerciseQr" class="action-secondary" type="button" aria-haspopup="dialog" aria-controls="exerciseJoin" hidden>Übungs-QR</button>
+            <button id="shareCurrentExercise" class="action-secondary" type="button" aria-haspopup="dialog" aria-controls="shareExerciseDialog">Übung teilen</button>
           </div>
-          <p id="expiry" class="muted small"></p>
-        </section>
+        </div>
+        <details id="exerciseAdvanced">
+          <summary>Weitere Steuerung</summary>
+          <div class="exercise-tool-actions">
+            <button id="clearArrival" class="action-danger" type="button" data-action="clear_arrival" disabled>Zeitmessung zurücksetzen</button>
+            <button id="resetAll" class="action-danger" type="button" data-action="reset_all">Ganze Übung zurücksetzen</button>
+            <button id="closeExercise" class="action-danger" type="button" data-action="close">Übung deaktivieren</button>
+          </div>
+        </details>
+        <p id="exerciseFeedback" class="trainer-feedback" role="status"></p>
       </div>
     </section>
     <section id="stationDraftRecovery" class="panel" aria-labelledby="stationDraftTitle" hidden>
@@ -104,8 +95,9 @@
       <section class="panel" aria-labelledby="managementTitle">
         <div class="management-heading">
           <h2 id="managementTitle">Übungsübersicht</h2>
-          <button id="refreshManagement" type="button">Übersicht aktualisieren</button>
+          <button id="refreshManagement" class="action-secondary" type="button">Übersicht aktualisieren</button>
         </div>
+        <p id="managementFeedback" class="trainer-feedback" role="status"></p>
         <p id="managementStatus" class="muted small" role="status" hidden></p>
         <div id="managementGroups" hidden>
           <section aria-labelledby="activeExercisesTitle">
@@ -151,10 +143,11 @@
               </div>
               <div id="carSeats"></div>
               <div class="booking-actions">
-                <button id="startCar" type="submit">Als neue Übung starten</button>
                 <button id="attachCar" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
                 <button id="saveCar" type="submit" hidden>Änderungen speichern</button>
+                <button id="startCar" type="submit">Als neue Übung starten</button>
               </div>
+              <p id="carFeedback" class="trainer-feedback" role="status"></p>
             </form>
           </div>
         </details>
@@ -169,9 +162,10 @@
               </select>
             </label>
             <div class="booking-actions">
-              <button id="startBus" type="button">Als neue Übung starten</button>
               <button id="attachBus" type="button" hidden>Zur aktiven Übung hinzufügen</button>
+              <button id="startBus" type="button">Als neue Übung starten</button>
             </div>
+            <p id="busFeedback" class="trainer-feedback" role="status"></p>
           </div>
         </details>
         <details class="booking-card" id="truckBooking">
@@ -193,10 +187,11 @@
               </div>
               <div id="truckSeats"></div>
               <div class="booking-actions">
-                <button id="startTruck" type="submit">Als neue Übung starten</button>
                 <button id="attachTruck" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
                 <button id="saveTruck" type="submit" hidden>Änderungen speichern</button>
+                <button id="startTruck" type="submit">Als neue Übung starten</button>
               </div>
+              <p id="truckFeedback" class="trainer-feedback" role="status"></p>
             </form>
           </div>
         </details>
@@ -219,10 +214,11 @@
               </label>
               <div id="objectSeats"></div>
               <div class="booking-actions">
-                <button id="startObject" type="submit">Als neue Übung starten</button>
                 <button id="attachObject" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
                 <button id="saveObject" type="submit" hidden>Änderungen speichern</button>
+                <button id="startObject" type="submit">Als neue Übung starten</button>
               </div>
+              <p id="objectFeedback" class="trainer-feedback" role="status"></p>
             </form>
           </div>
         </details>
@@ -236,6 +232,7 @@
             <option value="choose">Eigene Sichtung vor Auflösung</option>
           </select>
           <button type="submit">Sichtungseinstellung speichern</button>
+          <p id="triageSettingsFeedback" class="trainer-feedback" role="status"></p>
         </form>
       </section>
       <section class="panel">
@@ -248,8 +245,9 @@
             <label>Vorlage <select id="exerciseTemplate" required></select></label>
             <label>Name des Durchlaufs <input id="templateRunTitle" maxlength="120" required></label>
             <button type="submit">Vorlage als neue Übung starten</button>
-            <button id="updateTemplate" type="button" hidden>Vorlage mit aktiver Besetzung aktualisieren</button>
+            <button id="updateTemplate" class="action-secondary" type="button" hidden>Vorlage mit aktiver Besetzung aktualisieren</button>
           </form>
+          <p id="templateFeedback" class="trainer-feedback" role="status"></p>
           <form id="saveTemplateForm" hidden>
             <label>Name der Vorlage <input id="templateTitle" maxlength="120" required></label>
             <button type="submit">Aktive Übung als Vorlage speichern</button>
@@ -258,6 +256,7 @@
         <form id="create">
           <label>Titel für neue Übung <input id="exerciseTitle" maxlength="120" required></label>
           <button>Beispielübung anlegen</button>
+          <p id="createFeedback" class="trainer-feedback" role="status"></p>
         </form>
         <details>
           <summary>Eigenes Szenario als Übung starten</summary>
@@ -265,98 +264,129 @@
           <label>JSON-Datei (optional) <input id="scenarioFile" type="file" accept="application/json,.json"></label>
           <button id="createCustom" type="button">Eigenes Szenario starten</button>
           <p id="scenarioIssue" class="warning" role="status" hidden></p>
+          <p id="customFeedback" class="trainer-feedback" role="status"></p>
         </details>
       </section>
     </div>
     <div id="exerciseView" hidden>
       <section id="noExercise" class="panel">
-        <h2>Patientenübersicht</h2>
+        <h2 id="noExercisePatientsTitle" tabindex="-1">Patientenübersicht</h2>
         <p>Wähle oben eine Übung aus oder lege eine in der Konfiguration an.</p>
       </section>
-      <section id="live" class="panel" hidden>
-        <h2>Patientenübersicht</h2>
-        <p id="liveTitle"></p>
-        <p id="overviewSync" class="overview-sync small" hidden>
-          <strong id="overviewSyncStatus" role="status"></strong>
-          <span> · Letzter erfolgreicher Abruf <time id="overviewSyncTime"></time></span>
-        </p>
-        <dl id="exerciseComposition" class="composition-counts" aria-label="Besetzung der gesamten Übung">
-          <div><dt>Pkw</dt><dd id="compositionCars">0</dd></div>
-          <div><dt>Lkw</dt><dd id="compositionTrucks">0</dd></div>
-          <div><dt>Busse</dt><dd id="compositionBuses">0</dd></div>
-          <div><dt>Einklemmungsstellen</dt><dd id="compositionObjects">0</dd></div>
-          <div><dt>Personen</dt><dd id="compositionPatients">0</dd></div>
-        </dl>
-        <details>
-          <summary>QR-Druckliste (A4)</summary>
-          <div class="overview-fields">
-            <label>Fahrzeug oder Station für den Druck <select id="printVehicle"></select></label>
-            <label>Station für den Druck <select id="printStation"></select></label>
-            <label>QR-Codes pro Seite
-              <select id="printPerPage">
-                <option value="2">2 pro Seite</option>
-                <option value="1">1 pro Seite</option>
-              </select>
-            </label>
-          </div>
-          <button id="printStations" type="button">Drucken / als PDF speichern</button>
-          <p class="muted small">Wähle im Druckdialog deinen Drucker oder „Als PDF speichern“.</p>
-        </details>
-        <ul id="patientOverview" class="patient-groups" aria-label="Live-Zustand der Patienten nach Fahrzeug oder Station"></ul>
-      </section>
-      <section id="patientControls" class="panel" hidden>
-        <h2>Patient im Detail</h2>
-        <label>Patient auswählen <select id="choose"></select></label>
-        <p id="patientStatus" aria-live="off"></p>
-        <div class="patient-triage-timing">
-          <p id="patientTriageTime" class="muted small"></p>
-          <button id="markTriage" type="button" data-action="mark_triage" disabled>Sichtung erfassen</button>
+      <div id="patientWorkspace" class="patient-workspace" data-detail-open="false">
+        <section id="live" class="panel" hidden>
+          <h2 id="patientOverviewTitle" tabindex="-1">Patientenübersicht</h2>
+          <p id="liveTitle"></p>
+          <p id="overviewSync" class="overview-sync small" hidden>
+            <strong id="overviewSyncStatus" role="status"></strong>
+            <span> · Stand <time id="overviewSyncTime"></time></span>
+          </p>
+          <dl id="exerciseComposition" class="composition-counts" aria-label="Besetzung der gesamten Übung">
+            <div><dt>Pkw</dt><dd id="compositionCars">0</dd></div>
+            <div><dt>Lkw</dt><dd id="compositionTrucks">0</dd></div>
+            <div><dt>Busse</dt><dd id="compositionBuses">0</dd></div>
+            <div><dt>Einklemmungsstellen</dt><dd id="compositionObjects">0</dd></div>
+            <div><dt>Personen</dt><dd id="compositionPatients">0</dd></div>
+          </dl>
+          <details>
+            <summary>QR-Druckliste (A4)</summary>
+            <div class="overview-fields">
+              <label>Fahrzeug oder Station für den Druck <select id="printVehicle"></select></label>
+              <label>Station für den Druck <select id="printStation"></select></label>
+              <label>QR-Codes pro Seite
+                <select id="printPerPage">
+                  <option value="2">2 pro Seite</option>
+                  <option value="1">1 pro Seite</option>
+                </select>
+              </label>
+            </div>
+            <button id="printStations" class="action-secondary" type="button">Drucken / als PDF speichern</button>
+            <p id="printFeedback" class="trainer-feedback" role="status"></p>
+            <p class="muted small">Wähle im Druckdialog deinen Drucker oder „Als PDF speichern“.</p>
+          </details>
+          <ul id="patientOverview" class="patient-groups" aria-label="Live-Zustand der Patienten nach Fahrzeug oder Station"></ul>
+        </section>
+        <div id="patientDetail" class="patient-detail" role="region" aria-labelledby="patientDetailTitle" hidden>
+          <section id="patientControls" class="panel" hidden>
+            <h2 id="patientDetailTitle" tabindex="-1"></h2>
+            <button id="backToPatients" class="action-secondary patient-back" type="button">Zur Patientenliste</button>
+            <select id="choose" aria-label="Ausgewählter Patient" hidden></select>
+            <p id="patientStatus" aria-live="off"></p>
+            <div class="patient-triage-timing">
+              <p id="patientTriageTime" class="muted small"></p>
+              <button id="markTriage" type="button" data-action="mark_triage" disabled>Sichtung erfassen</button>
+            </div>
+            <div class="patient-action-buttons">
+              <button id="pausePatient" class="action-secondary" type="button" data-action="pause">Patient pausieren</button>
+              <button id="resumePatient" class="action-secondary" type="button" data-action="resume">Patient fortsetzen</button>
+              <button id="resetPatient" class="action-danger" type="button" data-action="reset">Patient zurücksetzen</button>
+            </div>
+            <p id="patientFeedback" class="trainer-feedback" role="status"></p>
+            <p class="muted small">Nach dem Zurücksetzen wartet der Patient auf einen neuen Aufruf oder auf „Patient starten“.</p>
+            <details>
+              <summary>Patientenlink und Stations-QR</summary>
+              <p><a id="previewPatientLink" class="action action-secondary" target="_blank" rel="noopener noreferrer" hidden>Schüler-Vorschau öffnen</a>
+              <a id="openPatientLink" class="action action-secondary" target="_blank" rel="noopener noreferrer">Patientenlink öffnen</a>
+              <button id="copyLink" class="action-secondary" type="button">Patientenlink kopieren</button></p>
+              <p id="patientLinkFeedback" class="trainer-feedback" role="status"></p>
+              <p class="muted small">Der Patientenlink kann beim ersten Öffnen die Patientenuhr starten.</p>
+              <input id="patientLink" aria-label="Patientenlink zum manuellen Kopieren" readonly hidden>
+              <div id="station" hidden>
+                <h3 id="stationTitle">Stations-QR für diesen Patienten</h3>
+                <p id="stationLocation" class="muted small" hidden></p>
+                <div id="stationQr" class="exercise-qr"></div>
+                <button id="stationDownload" class="action-secondary" type="button" hidden>QR-Code als SVG speichern</button>
+              </div>
+            </details>
+          </section>
+          <details id="preview" class="panel" hidden>
+            <summary>Verlaufsvorschau</summary>
+            <p id="secret"></p>
+            <label>Übungsverlauf bis 45 Minuten prüfen <input id="seek" type="range" min="0" max="45" value="0" step="1"></label>
+            <div class="clock" id="clock">00:00</div>
+            <button id="play">▶ Vorschau starten</button>
+            <button id="pause" class="action-secondary">⏸ Vorschau pausieren</button>
+            <button id="reset" class="action-secondary">↺ Vorschau zurücksetzen</button>
+            <label>Vorschaugeschwindigkeit <select id="speed">
+              <option value="1">1×</option><option value="5">5×</option><option value="30">30×</option><option value="60">60×</option>
+            </select></label>
+            <div id="triage" class="triage yellow"></div>
+            <div id="previewStory" hidden>
+              <h3>Patientenstory</h3>
+              <blockquote id="previewStoryText" class="story-text"></blockquote>
+              <p id="previewStoryAdditional" class="story-text" hidden></p>
+            </div>
+            <div class="grid" id="vitals"></div>
+          </details>
         </div>
-        <button id="pausePatient" data-action="pause">Patient pausieren</button>
-        <button id="resumePatient" data-action="resume">Patient fortsetzen</button>
-        <button id="resetPatient" data-action="reset">Patient zurücksetzen</button>
-        <p class="muted small">Nach dem Zurücksetzen wartet der Patient auf einen neuen Aufruf oder auf „Patient starten“.</p>
-        <details>
-          <summary>Patientenlink und Stations-QR</summary>
-          <p><a id="previewPatientLink" class="action" target="_blank" rel="noopener noreferrer" hidden>Schüler-Vorschau öffnen</a>
-          <a id="openPatientLink" class="action" target="_blank" rel="noopener noreferrer">Patientenlink öffnen</a>
-          <button id="copyLink">Patientenlink kopieren</button></p>
-          <p class="muted small">Der Patientenlink kann beim ersten Öffnen die Patientenuhr starten.</p>
-          <input id="patientLink" aria-label="Patientenlink zum manuellen Kopieren" readonly hidden>
-          <div id="station" hidden>
-            <h3 id="stationTitle">Stations-QR für diesen Patienten</h3>
-            <p id="stationLocation" class="muted small" hidden></p>
-            <div id="stationQr" class="exercise-qr"></div>
-            <button id="stationDownload" type="button" hidden>QR-Code als SVG speichern</button>
-          </div>
-        </details>
-      </section>
-      <details id="preview" class="panel" hidden>
-        <summary>Verlaufsvorschau für den ausgewählten Patienten</summary>
-        <p id="secret"></p>
-        <label>Übungsverlauf bis 45 Minuten prüfen <input id="seek" type="range" min="0" max="45" value="0" step="1"></label>
-        <div class="clock" id="clock">00:00</div>
-        <button id="play">▶ Vorschau starten</button>
-        <button id="pause">⏸ Vorschau pausieren</button>
-        <button id="reset">↺ Vorschau zurücksetzen</button>
-        <label>Vorschaugeschwindigkeit <select id="speed">
-          <option value="1">1×</option><option value="5">5×</option><option value="30">30×</option><option value="60">60×</option>
-        </select></label>
-        <div id="triage" class="triage yellow"></div>
-        <div id="previewStory" hidden>
-          <h3>Patientenstory</h3>
-          <blockquote id="previewStoryText" class="story-text"></blockquote>
-          <p id="previewStoryAdditional" class="story-text" hidden></p>
-        </div>
-        <div class="grid" id="vitals"></div>
-      </details>
+      </div>
     </div>
   </div>
 </main>
+<dialog id="exerciseJoin" class="share-dialog" aria-labelledby="exerciseJoinTitle">
+  <div class="share-dialog-heading">
+    <h2 id="exerciseJoinTitle">Übungs-QR</h2>
+    <button id="closeExerciseQr" class="action-secondary" type="button" autofocus>Schließen</button>
+  </div>
+  <div id="joinQr" class="exercise-qr"></div>
+  <div class="exercise-tool-actions">
+    <button id="resizeJoinQr" class="action-secondary" type="button" aria-controls="joinQr">QR vergrößern</button>
+    <button id="copyJoin" class="action-secondary" type="button">Übungslink kopieren</button>
+    <button id="printJoinQr" class="action-secondary" type="button" disabled>Übungs-QR drucken (A4)</button>
+  </div>
+  <input id="joinLink" aria-label="Übungslink zum manuellen Kopieren" readonly hidden>
+  <p id="joinFeedback" class="trainer-feedback" role="status"></p>
+  <p id="expiry" class="muted small"></p>
+  <details class="exercise-briefing">
+    <summary>Briefing</summary>
+    <p class="muted small">Zeige den Übungs-QR beim Briefing und platziere die Stations-QRs bei den Patienten. Während der Übung öffnen die Teilnehmenden die Stations-QRs vor Ort im selben Browser.</p>
+    <p id="busBriefing" hidden></p>
+  </details>
+</dialog>
 <dialog id="shareExerciseDialog" class="share-dialog" aria-labelledby="shareExerciseTitle">
   <div class="share-dialog-heading">
     <h2 id="shareExerciseTitle">Übung teilen</h2>
-    <button id="closeShareExercise" type="button">Schließen</button>
+    <button id="closeShareExercise" class="action-secondary" type="button">Schließen</button>
   </div>
   <p>Der Link gibt dem ausgewählten Ausbilderkonto Lesezugriff auf diese Übung.</p>
   <form id="shareExerciseForm">
@@ -370,8 +400,8 @@
     <input id="exerciseShareLink" type="url" readonly>
     <div class="exercise-tool-actions">
       <button id="nativeExerciseShare" type="button" hidden>Teilen …</button>
-      <a id="shareViaWhatsApp" class="action" target="_blank" rel="noopener noreferrer">WhatsApp öffnen</a>
-      <button id="copyExerciseShare" type="button">Link kopieren</button>
+      <a id="shareViaWhatsApp" class="action action-secondary" target="_blank" rel="noopener noreferrer">WhatsApp öffnen</a>
+      <button id="copyExerciseShare" class="action-secondary" type="button">Link kopieren</button>
     </div>
   </div>
   <h3>Freigegebene Konten</h3>
@@ -382,7 +412,11 @@
   <p id="archiveReportAccess" class="muted small">Übungsbericht · Lesezugriff</p>
   <div class="archive-report-heading">
     <h2 id="archiveReportTitle">Übungsbericht</h2>
-    <button id="closeArchiveReport" type="button" autofocus>Schließen</button>
+    <div class="archive-report-actions">
+      <button id="exportArchiveCsv" type="button" hidden>CSV herunterladen</button>
+      <button id="refreshArchiveReport" type="button" hidden>Aktualisieren</button>
+      <button id="closeArchiveReport" type="button" autofocus>Schließen</button>
+    </div>
   </div>
   <p id="archiveReportStatus" role="status" hidden></p>
   <div id="archiveReportContent" hidden>
@@ -393,6 +427,7 @@
       <div><dt>Eintreffen</dt><dd id="archiveReportArrival"></dd></div>
     </dl>
     <p id="archiveReportEmpty" class="muted small" hidden>Keine Patienten im Bericht.</p>
+    <ul id="archiveReportCards" class="archive-report-cards" role="list" aria-label="Patienten im Übungsbericht" hidden></ul>
     <div id="archiveReportTable" class="archive-report-table" role="region" aria-label="Patienten im Übungsbericht" tabindex="0">
       <table>
         <thead>
@@ -408,17 +443,13 @@
       </table>
     </div>
   </div>
-  <div class="archive-report-actions">
-    <button id="exportArchiveCsv" type="button" hidden>CSV herunterladen</button>
-    <button id="refreshArchiveReport" type="button" hidden>Aktualisieren</button>
-  </div>
 </dialog>
 <dialog id="carChangesDialog" aria-labelledby="carChangesTitle">
   <h2 id="carChangesTitle">Ungespeicherte Pkw-Änderungen</h2>
   <p id="carChangesMessage">Möchtest du die Änderungen vor dem Wechsel speichern?</p>
   <button type="button" data-car-choice="save">Speichern</button>
-  <button type="button" data-car-choice="discard">Verwerfen</button>
-  <button type="button" data-car-choice="cancel" autofocus>Abbrechen</button>
+  <button class="action-danger" type="button" data-car-choice="discard">Verwerfen</button>
+  <button class="action-secondary" type="button" data-car-choice="cancel" autofocus>Abbrechen</button>
 </dialog>
 <div id="exercisePrint" class="exercise-print"></div>
 <script src="patients.js?v=verkehrsunfall"></script>
@@ -426,6 +457,6 @@
 <script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
 <script src="scenario-validation.js?v=triage"></script>
-<script src="trainer.js?v=exercise-sharing"></script>
+<script src="trainer.js?v=trainer-usability"></script>
 </body>
 </html>

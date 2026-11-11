@@ -12,7 +12,8 @@
    anderen Gerät. Dort meldet sich der Kollege mit seinem Ausbilderkonto an.
 2. In **Konfiguration** eine Übung anlegen und Stationen zusammenstellen
    oder oben bei **Aktive Übung** eine vorhandene Übung auswählen.
-   Die **Übungsübersicht** zeigt aktive und inaktive Übungen sowie Vorlagen
+   Die Navigation wechselt zwischen **Übersicht**, **Konfiguration** und
+   **Live-Übung**. Die **Übersicht** zeigt aktive und inaktive Übungen sowie Vorlagen
    mit Besetzung und Sichtungskategorien. Von dort lassen sich Übungen
    öffnen und vorkonfigurierte Vorlagen auswählen.
    Über **Teilen** kannst du einen Link für ein bestätigtes Ausbilderkonto
@@ -21,8 +22,8 @@
    oder über das Teilen-Menü des Geräts weitergeben. Freigaben lassen sich
    im selben Dialog widerrufen. Ein neuer Link für dieselbe Adresse ersetzt
    den bisherigen.
-   Über **Übung umbenennen** lässt sich der Name der aktiven Übung ändern.
-   Direkt darunter steht der Übungs-QR fürs Briefing. Über **Übungs-QR als A4 drucken**
+   Über **Umbenennen** lässt sich der Name der aktiven Übung ändern.
+   In **Live-Übung** öffnet **Übungs-QR** den Code fürs Briefing. Über **Übungs-QR drucken (A4)**
    lässt er sich als eigener Aushang mit Übungsname und Gültigkeit ausgeben.
    Teilnehmende scannen ihn einmal und
    können die Seite danach schließen. Während der Übung suchen sie die
@@ -54,16 +55,19 @@
    Übungsmodell. Über der Liste steht die Uhrzeit des letzten
    erfolgreichen Abrufs. Bei einer Unterbrechung bleiben die zuletzt
    geladenen Daten sichtbar und sind als veraltet gekennzeichnet.
-   Ein Klick auf den Patienten öffnet seine Auswahl für
-   Steuerung, QR-Code und Vorschau. Die Steuerung für die ganze Übung
-   steht oben neben dem Übungs-QR. **Übung beenden** schaltet die Übung
+   Ein Klick auf den Patienten öffnet Steuerung, QR-Code und Vorschau.
+   Am Desktop erscheinen sie neben der Liste. Auf schmalen Geräten führt
+   **Zur Patientenliste** zur Auswahl zurück. Eintreffzeit, Übungs-QR und
+   Freigabe stehen oben in der Live-Übung. Unter **Weitere Steuerung**
+   schaltet **Übung deaktivieren** die Übung
    inaktiv und sperrt ihre QR-Zugänge. In der Übungsübersicht kann sie
    mit denselben QR-Codes wieder aktiviert werden. Laufende Patientenverläufe
    sind dabei pausiert und lassen sich gezielt fortsetzen.
    Ungespeicherte Stationsentwürfe bleiben im selben Browser erhalten und
    lassen sich nach der Reaktivierung in derselben Übung wiederherstellen.
    Bei inaktiven Übungen öffnet **Bericht ansehen** die Patientenstände und
-   Sichtungszeiten im Lesemodus. Der Bericht lässt sich als CSV herunterladen.
+   Sichtungszeiten im Lesemodus. Auf schmalen Geräten erscheinen die
+   Patienten als Karten. Der CSV-Download steht oben im Bericht.
    **Übung löschen** steht bei den inaktiven Übungen zur Verfügung.
    **Eintreffen erfassen** startet die gemeinsame Stoppuhr. Die Übersicht
    zeigt je Patient die Zeit vom Eintreffen bis zur ersten erfassten

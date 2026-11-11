@@ -53,8 +53,8 @@
     history.replaceState(null, '', location.pathname + location.search);
   }
 
-  function message(text) {
-    el('message').textContent = text;
+  function message(text, region = 'message') {
+    el(region).textContent = text;
   }
 
   function showView(view) {
@@ -66,7 +66,7 @@
   }
 
   function updateExerciseToolbar() {
-    el('exerciseToolbar').hidden = !exercise || !el('managementView').hidden;
+    el('exerciseToolbar').hidden = !exercise || el('exerciseView').hidden;
   }
 
   el('showConfiguration').addEventListener('click', () => showView('configuration'));
@@ -203,9 +203,16 @@
   function renderExercise(next) {
     const previous = selectedPatient()?.id;
     const changed = exercise?.id !== next?.id;
+    const focusWasInDetail = el('patientDetail').contains(document.activeElement);
     const triageMode = next?.triage_mode ?? 'automatic';
     if (changed || (exercise?.triage_mode ?? 'automatic') !== triageMode) el('triageMode').value = triageMode;
     exercise = next;
+    if (changed) {
+      el('exerciseAdvanced').open = false;
+      if (el('exerciseJoin').open) el('exerciseJoin').close();
+      for (const id of ['exerciseFeedback', 'joinFeedback', 'printFeedback', 'exerciseNameFeedback', 'carFeedback',
+        'busFeedback', 'truckFeedback', 'objectFeedback', 'triageSettingsFeedback']) message('', id);
+    }
     syncArrivalClock(next, changed);
     el('triageSettings').hidden = !next;
     const activeTitle = el('activeExerciseTitle');
@@ -213,7 +220,11 @@
     if (activeTitle.textContent !== title) activeTitle.textContent = title;
     const option = el('exercise').selectedOptions[0];
     if (next && option?.value === next.id && option.textContent !== title) option.textContent = title;
-    if (changed) setExerciseTitleEditing(false);
+    if (changed) {
+      setExerciseTitleEditing(false);
+      setPatientDetailOpen(false);
+      clearPatientFeedback();
+    }
     lastOverviewUpdate = next ? Date.now() : 0;
     renderOverviewSync(navigator.onLine === false ? 'Verbindung unterbrochen' : '');
     el('noExercise').hidden = Boolean(next);
@@ -225,12 +236,14 @@
     el('preview').hidden = !next;
     renderJoin(next?.join_code);
     el('attachBus').hidden = !next;
+    el('startBus').classList.toggle('action-secondary', Boolean(next));
     if (changed || el('choose').options.length !== (next?.patients.length ?? 0)) updateCarChoices(changed);
     updateCarActions();
     const briefing = next?.patients.find((patient) => patient.model?.bus_briefing)?.model.bus_briefing;
     el('busBriefing').hidden = !briefing;
     el('busBriefing').textContent = briefing ?? '';
     if (!next) {
+      el('patientDetail').hidden = true;
       el('choose').replaceChildren();
       el('patientOverview').replaceChildren();
       el('liveTitle').textContent = '';
@@ -243,6 +256,7 @@
       renderStation(null);
       resetPreview();
       renderActions();
+      if (focusWasInDetail && !el('exerciseView').hidden) el('noExercisePatientsTitle').focus();
       return;
     }
     const choose = el('choose');
@@ -251,13 +265,18 @@
         || choose.options[index].textContent !== patientName(patient.id));
     if (rebuild) {
       choose.replaceChildren(...next.patients.map((patient) => new Option(patientName(patient.id), patient.id)));
-      choose.value = next.patients.some((patient) => patient.id === previous) ? previous : next.patients[0].id;
-      if (changed) resetPreview();
+      choose.value = next.patients.some((patient) => patient.id === previous) ? previous : next.patients[0]?.id ?? '';
+      if (changed || previous !== choose.value) {
+        setPatientDetailOpen(false);
+        clearPatientFeedback();
+        resetPreview();
+      }
     }
     el('liveTitle').textContent = next.title;
     el('expiry').textContent = 'Zugang gültig bis ' + new Date(next.expires_at).toLocaleString('de-DE');
     renderOverview(rebuild, changed);
     renderPatient();
+    if (focusWasInDetail && (changed || previous !== choose.value) && !el('exerciseView').hidden) focusPatientRow(choose.value);
   }
 
   function syncArrivalClock(next, exerciseChanged) {
@@ -301,7 +320,7 @@
   }
 
   function renderJoin(code) {
-    el('exerciseJoin').hidden = !code;
+    el('showExerciseQr').hidden = !code;
     const link = el('joinLink');
     const qr = el('joinQr');
     const print = el('printJoinQr');
@@ -322,6 +341,18 @@
     drawQr(qr, url.href, 'QR-Code zum Übungsbeitritt');
     print.disabled = !qr.dataset.url;
   }
+
+  el('showExerciseQr').addEventListener('click', () => {
+    if (!exercise?.join_code) return;
+    el('exerciseJoin').showModal();
+  });
+  el('closeExerciseQr').addEventListener('click', () => el('exerciseJoin').close());
+  el('exerciseJoin').addEventListener('close', () => {
+    el('joinLink').hidden = true;
+    el('joinQr').classList.remove('is-enlarged');
+    el('resizeJoinQr').textContent = 'QR vergrößern';
+    message('', 'joinFeedback');
+  });
 
   el('resizeJoinQr').addEventListener('click', () => {
     const enlarged = el('joinQr').classList.toggle('is-enlarged');
@@ -514,8 +545,9 @@
 
   el('printStations').addEventListener('click', () => {
     if (!exercise?.patients.length) return;
+    message('', 'printFeedback');
     if (typeof window.qrcode !== 'function') {
-      message('QR-Codes sind gerade nicht verfügbar. Lade die Seite neu.');
+      message('QR-Codes sind gerade nicht verfügbar. Lade die Seite neu.', 'printFeedback');
       return;
     }
     const perPage = Number(el('printPerPage').value);
@@ -613,6 +645,7 @@
       row.dataset.patient = patient.id;
       const button = document.createElement('button');
       button.type = 'button';
+      button.setAttribute('aria-controls', 'patientDetail');
       const name = document.createElement('strong');
       name.textContent = patientName(patient.id);
       const category = document.createElement('span');
@@ -624,9 +657,12 @@
       firstTriage.className = 'patient-first-triage';
       button.append(name, category, status, forecast, firstTriage);
       button.addEventListener('click', () => {
+        if (busy) return;
+        const changed = el('choose').value !== patient.id;
         el('choose').value = patient.id;
-        el('choose').dispatchEvent(new Event('change'));
-        el('choose').focus();
+        if (changed) el('choose').dispatchEvent(new Event('change'));
+        setPatientDetailOpen(true);
+        if (!desktopPatientView.matches) el('patientDetailTitle').focus();
       });
       row.append(button);
       list.append(row);
@@ -677,14 +713,23 @@
       if (context.textContent !== contextText) context.textContent = contextText;
       context.hidden = !contextText;
     }
-    if (focusedId && !focusedRow) el('choose').focus();
+    if (focusedId && !focusedRow) focusPatientRow(selected);
     else if (rebuild && focusedRow) focusedRow.firstElementChild.focus();
   }
 
   function renderPatient() {
     const patient = selectedPatient();
+    const detailPanel = el('patientDetail');
+    detailPanel.hidden = !patient;
     renderActions(patient);
     if (!patient) return;
+    if (detailPanel.dataset.patientId !== patient.id) {
+      clearPatientFeedback();
+      detailPanel.dataset.patientId = patient.id;
+    }
+    const title = el('patientDetailTitle');
+    const name = patientName(patient.id);
+    if (title.textContent !== name) title.textContent = name;
     const station = stationUrl(patient).href;
     const link = patientLink(station, patient);
     const numberedStation = patient.model?.car_number != null;
@@ -714,6 +759,31 @@
     el('patientTriageTime').textContent = firstTriageLabel(patient) || (exercise.arrived_at
       ? 'Erste Sichtung noch offen.' : 'Erfasse zuerst das Eintreffen in der Übungssteuerung.');
   }
+
+  const desktopPatientView = window.matchMedia('(min-width: 900px)');
+
+  function setPatientDetailOpen(open) {
+    el('patientWorkspace').dataset.detailOpen = String(open);
+  }
+
+  function focusPatientRow(patientId) {
+    const row = el('patientOverview').querySelector('[data-patient="' + CSS.escape(patientId) + '"] button');
+    (row ?? el('patientOverviewTitle')).focus();
+  }
+
+  function clearPatientFeedback() {
+    for (const id of ['patientFeedback', 'patientLinkFeedback']) el(id).textContent = '';
+  }
+
+  el('backToPatients').addEventListener('click', () => {
+    setPatientDetailOpen(false);
+    focusPatientRow(el('choose').value);
+  });
+
+  desktopPatientView.addEventListener('change', ({ matches }) => {
+    if (matches) return;
+    setPatientDetailOpen(el('patientDetail').contains(document.activeElement));
+  });
 
   function isExerciseAction(action) {
     return ['reset_all', 'close', 'start_arrival', 'clear_arrival'].includes(action);
@@ -846,17 +916,19 @@
       && error.message === 'Konto nicht für die Ausbilderansicht freigegeben');
   }
 
-  function handleError(error) {
+  function handleError(error, region) {
     let notice = error.message;
     if (trainerAccessLost(error)) {
       signedOut();
+      region = 'message';
     } else if (exerciseUnavailable(error)) {
       if (hasStationDrafts()) notice += ' Lokale Stationsentwürfe sind nach der Reaktivierung wieder verfügbar.';
       el('exercise').selectedOptions[0]?.remove();
       el('exercise').value = '';
       renderExercise(null);
+      region = 'message';
     }
-    message(notice);
+    message(notice, region);
   }
 
   function exerciseUnavailable(error) {
@@ -922,14 +994,15 @@
 
     const controls = document.createElement('div');
     controls.className = 'management-actions';
-    const entries = kind === 'active' ? [['open', 'Öffnen'], ['deactivate', 'Deaktivieren']]
-      : kind === 'inactive' ? [['report', 'Bericht ansehen'], ['reactivate', 'Reaktivieren'], ['delete', 'Übung löschen']]
+    const entries = kind === 'active' ? [['open', 'Öffnen'], ['share', 'Teilen'], ['deactivate', 'Übung deaktivieren']]
+      : kind === 'inactive' ? [['report', 'Bericht ansehen'], ['reactivate', 'Reaktivieren'], ['share', 'Teilen'], ['delete', 'Übung löschen']]
         : [['template', 'Vorlage auswählen']];
-    if (kind !== 'template') entries.push(['share', 'Teilen']);
     for (const [action, label] of entries) {
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.managementAction = action;
+      if (['deactivate', 'delete'].includes(action)) button.classList.add('action-danger');
+      if (['reactivate', 'share'].includes(action)) button.classList.add('action-secondary');
       button.setAttribute('aria-describedby', title.id);
       button.textContent = label;
       button.addEventListener('click', () => manageExercise(item, action, button));
@@ -943,6 +1016,31 @@
   function archiveTimestamp(value) {
     const time = Date.parse(value);
     return Number.isFinite(time) ? archiveDate.format(time) : '';
+  }
+
+  function archivePatientCard(name, badge, fields) {
+    const card = document.createElement('li');
+    card.className = 'archive-patient-card';
+    const header = document.createElement('div');
+    header.className = 'archive-patient-heading';
+    const title = document.createElement('h3');
+    title.textContent = name;
+    const category = badge.cloneNode(true);
+    if (!category.classList.contains('triage')) category.textContent = 'Keine Sichtungskategorie';
+    header.append(title, category);
+
+    const details = document.createElement('dl');
+    for (const [label, value] of fields) {
+      const field = document.createElement('div');
+      const term = document.createElement('dt');
+      term.textContent = label;
+      const description = document.createElement('dd');
+      description.textContent = value;
+      field.append(term, description);
+      details.append(field);
+    }
+    card.append(header, details);
+    return card;
   }
 
   function renderArchiveReport(report) {
@@ -961,33 +1059,38 @@
         field.replaceChildren(time);
       }
     }
-    const patients = report?.patients ?? [];
-    const rows = patients.map((patient) => {
+    const rows = [];
+    const cards = [];
+    for (const patient of report?.patients ?? []) {
       const row = document.createElement('tr');
       const name = document.createElement('th');
       name.scope = 'row';
       name.textContent = patient.name;
       const category = document.createElement('td');
       const label = categoryLabels[patient.category];
-      if (label) {
-        const badge = document.createElement('span');
-        badge.className = 'triage ' + patient.category;
-        badge.textContent = label;
-        category.append(badge);
-      } else category.textContent = '–';
+      const badge = document.createElement('span');
+      badge.className = label ? 'triage ' + patient.category : 'muted';
+      badge.textContent = label ?? '–';
+      category.append(badge);
       row.append(name, category);
-      for (const text of [api.labels[patient.status] ?? '–',
-        Number.isFinite(patient.elapsed) ? api.clock(patient.elapsed) : '–',
-        Number.isFinite(patient.first_triage_seconds) ? api.clock(patient.first_triage_seconds) : '–']) {
+      const fields = [
+        ['Verlaufsstatus', api.labels[patient.status] ?? '–'],
+        ['Patientenuhr', Number.isFinite(patient.elapsed) ? api.clock(patient.elapsed) : '–'],
+        ['Erste Sichtung nach Eintreffen', Number.isFinite(patient.first_triage_seconds) ? api.clock(patient.first_triage_seconds) : '–']
+      ];
+      for (const [, text] of fields) {
         const cell = document.createElement('td');
         cell.textContent = text;
         row.append(cell);
       }
-      return row;
-    });
+      rows.push(row);
+      cards.push(archivePatientCard(patient.name, badge, fields));
+    }
     el('archiveReportPatients').replaceChildren(...rows);
+    el('archiveReportCards').replaceChildren(...cards);
     el('archiveReportEmpty').hidden = Boolean(rows.length);
     el('archiveReportTable').hidden = !rows.length;
+    el('archiveReportCards').hidden = !cards.length;
     el('archiveReportContent').hidden = !report;
     el('exportArchiveCsv').hidden = !report;
   }
@@ -1111,8 +1214,8 @@
       return await rpc({ p_action: action, p_session: id });
     } catch (error) {
       if (!exerciseUnavailable(error) && error.code !== '22023') throw error;
-      message(error.message);
       await refreshManagement();
+      message(error.message, 'managementFeedback');
       return null;
     }
   }
@@ -1126,10 +1229,10 @@
           openArchiveReport(report, { returnFocus: button });
         } catch (error) {
           if (!exerciseUnavailable(error) && error.code !== '22023') throw error;
-          message(error.message);
           await refreshManagement();
+          message(error.message, 'managementFeedback');
         }
-      });
+      }, 'managementFeedback');
       return;
     }
     if (action === 'share') {
@@ -1153,8 +1256,8 @@
     void run(async () => {
       if (action === 'delete') {
         if (!await changeExerciseLifecycle('delete_exercise', item.id)) return;
-        message('Übung endgültig gelöscht.');
         await refreshManagement();
+        message('Übung endgültig gelöscht.', 'managementFeedback');
       } else if (item.id === exercise?.id || await confirmCarChanges()) {
         if (action === 'open') await switchExercise(item.id);
         else {
@@ -1162,10 +1265,10 @@
           if (!next) return;
           selectExercise(next);
           showView('exercise');
-          message('Übung reaktiviert. Die vorhandenen QR-Zugänge sind wieder gültig.');
+          message('Übung reaktiviert. Die vorhandenen QR-Zugänge sind wieder gültig.', 'exerciseFeedback');
         }
       }
-    });
+    }, 'managementFeedback');
   }
 
   function requestDeactivation(item) {
@@ -1178,16 +1281,16 @@
       const select = el('exercise');
       Array.from(select.options).find((option) => option.value === item.id)?.remove();
       if (exercise?.id === item.id) selectExercise(null);
-      message('Übung deaktiviert. Die QR-Zugänge sind geschlossen.');
       await refreshManagement();
-    });
+      message('Übung deaktiviert. Die QR-Zugänge sind geschlossen.', 'managementFeedback');
+    }, el('managementView').hidden ? 'exerciseFeedback' : 'managementFeedback');
   }
 
   el('showManagement').addEventListener('click', () => {
     showView('management');
-    void run(refreshManagement);
+    void run(refreshManagement, 'managementFeedback');
   });
-  el('refreshManagement').addEventListener('click', () => void run(refreshManagement));
+  el('refreshManagement').addEventListener('click', () => void run(refreshManagement, 'managementFeedback'));
 
   function shareRequest(work) {
     void run(async () => {
@@ -1218,6 +1321,7 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = 'Freigabe widerrufen';
+      button.className = 'action-danger';
       button.setAttribute('aria-label', 'Freigabe für ' + email + ' widerrufen');
       button.addEventListener('click', () => {
         if (busy || !confirm('Freigabe für ' + email + ' widerrufen?')) return;
@@ -1339,8 +1443,9 @@
     renderTemplateOptions(await rpc({ p_action: 'list_templates' }));
   }
 
-  async function run(work) {
+  async function run(work, region) {
     if (busy) return;
+    if (region) message('', region);
     busy = true;
     actionVersion++;
     const controls = document.querySelectorAll('form button, #logout, #exercise, #editExerciseTitle, #createCustom, #startBus, #attachBus, #editCar, #editTruck, #editObject, #triageMode, #showManagement, #refreshManagement, [data-management-action]');
@@ -1350,7 +1455,7 @@
       await work();
     } catch (error) {
       if (el('workspace').hidden) el('login').hidden = false;
-      handleError(error);
+      handleError(error, region);
     } finally {
       busy = false;
       for (const control of controls) control.disabled = false;
@@ -1402,8 +1507,8 @@
       const next = await rpc({ p_action: 'rename_exercise', p_session: session, p_title: title });
       renderExercise(next);
       setExerciseTitleEditing(false);
-      message('Übung umbenannt.');
-    });
+      message('Übung umbenannt.', 'exerciseNameFeedback');
+    }, 'exerciseNameFeedback');
     if (exercise?.id === session && el('renameExerciseForm').hidden) el('editExerciseTitle').focus();
   });
 
@@ -1415,8 +1520,8 @@
       const next = await rpc({ p_action: 'set_triage_mode', p_session: exercise.id, p_title: mode });
       renderExercise(next);
       el('triageMode').value = next.triage_mode ?? 'automatic';
-      message('Sichtungseinstellung gespeichert.');
-    });
+      message('Sichtungseinstellung gespeichert.', 'triageSettingsFeedback');
+    }, 'triageSettingsFeedback');
   });
 
   el('login').addEventListener('submit', (event) => {
@@ -1497,8 +1602,8 @@
       el('startTemplateForm').hidden = false;
       el('noTemplates').hidden = true;
       el('templateTitle').value = '';
-      message('Übungsvorlage gespeichert.');
-    });
+      message('Übungsvorlage gespeichert.', 'templateFeedback');
+    }, 'templateFeedback');
   });
 
   el('exerciseTemplate').addEventListener('change', () => {
@@ -1509,15 +1614,15 @@
   el('updateTemplate').addEventListener('click', () => {
     const select = el('exerciseTemplate');
     if (!exercise || !select.value) {
-      message('Wähle zuerst eine Vorlage aus.');
+      message('Wähle zuerst eine Vorlage aus.', 'templateFeedback');
       return;
     }
     if (!confirm('Vorlage „' + select.selectedOptions[0].textContent + '“ mit der Besetzung aus „' + exercise.title + '“ aktualisieren?')) return;
     void run(async () => {
       if (!await confirmCarChanges()) return;
       await rpc({ p_action: 'update_template', p_session: exercise.id, p_patient: select.value });
-      message('Übungsvorlage aktualisiert.');
-    });
+      message('Übungsvorlage aktualisiert.', 'templateFeedback');
+    }, 'templateFeedback');
   });
 
   el('startTemplateForm').addEventListener('submit', (event) => {
@@ -1526,22 +1631,22 @@
     if (!id) return;
     void run(async () => {
       if (!await confirmCarChanges()) return;
-      openCreatedExercise(await rpc({ p_action: 'start_template', p_session: id, p_title: el('templateRunTitle').value }));
+      openCreatedExercise(await rpc({ p_action: 'start_template', p_session: id, p_title: el('templateRunTitle').value }), 'exerciseFeedback');
       showView('exercise');
-    });
+    }, 'templateFeedback');
   });
   el('create').addEventListener('submit', (event) => {
     event.preventDefault();
     void run(async () => {
       if (!await confirmCarChanges()) return;
       const created = await rpc({ p_action: 'create', p_title: el('exerciseTitle').value });
-      openCreatedExercise(created);
+      openCreatedExercise(created, 'createFeedback');
       el('exerciseTitle').value = '';
-    });
+    }, 'createFeedback');
   });
-  function openCreatedExercise(created) {
+  function openCreatedExercise(created, region) {
     selectExercise(created);
-    message('Übung angelegt. Ergänze weitere Stationen oder öffne die Übungsansicht.');
+    message('Übung „' + created.title + '“ angelegt.', region);
   }
 
   el('createCustom').addEventListener('click', () => {
@@ -1563,9 +1668,9 @@
         return;
       }
       if (!await confirmCarChanges()) return;
-      openCreatedExercise(await rpc(draft, api.createCustom));
+      openCreatedExercise(await rpc(draft, api.createCustom), 'customFeedback');
       input.value = '';
-    });
+    }, 'customFeedback');
   });
   for (const [button, attach] of [['startBus', false], ['attachBus', true]]) {
     el(button).addEventListener('click', () => {
@@ -1576,11 +1681,11 @@
         const next = await rpc(params, api.bookBus);
         if (attach) {
           renderExercise(next);
-          message('Bus mit ' + capacity + ' Personen hinzugefügt.');
+          message('Bus mit ' + capacity + ' Personen hinzugefügt.', 'busFeedback');
         } else {
-          openCreatedExercise(next);
+          openCreatedExercise(next, 'busFeedback');
         }
-      });
+      }, 'busFeedback');
     });
   }
   const objectTypeLabels = {
@@ -1870,6 +1975,7 @@
       const editing = patients.length > 0;
       const started = patients.some((patient) => patient.status !== 'ready');
       form.start.hidden = editing || Boolean(form.draftBound);
+      form.start.classList.toggle('action-secondary', Boolean(exercise));
       form.attach.hidden = !exercise || editing;
       form.save.hidden = !editing;
       form.save.disabled = busy || started;
@@ -1994,7 +2100,7 @@
     showView('configuration');
     form.card.open = true;
     form.location.focus();
-    message('Stationsentwurf wiederhergestellt. Speichere ihn bei Bedarf in dieser Übung.');
+    message('Stationsentwurf wiederhergestellt. Speichere ihn bei Bedarf in dieser Übung.', form.kind + 'Feedback');
   }
 
   function renderStationDrafts() {
@@ -2014,7 +2120,8 @@
       restore.addEventListener('click', () => restoreStationDraft(form, draft.raw));
       const discard = document.createElement('button');
       discard.type = 'button';
-      discard.textContent = 'Entwurf verwerfen';
+        discard.textContent = 'Entwurf verwerfen';
+        discard.className = 'action-danger';
       discard.addEventListener('click', () => {
         if (busy || !confirm('Diesen lokalen Stationsentwurf verwerfen?')) return;
         clearStationDraft(form, draft.raw);
@@ -2129,7 +2236,7 @@
       event.preventDefault();
       const attach = event.submitter === form.attach;
       if (form.loadedNumber && form.save.disabled) return;
-      void run(() => saveCar(form, attach));
+      void run(() => saveCar(form, attach), form.kind + 'Feedback');
     });
   }
 
@@ -2150,7 +2257,7 @@
       resetPreview();
       loadCarForm(form);
       message(form.kind === 'object' ? 'Änderungen an der Klemmstelle gespeichert.'
-        : 'Änderungen am ' + form.title + ' gespeichert.');
+        : 'Änderungen am ' + form.title + ' gespeichert.', form.kind + 'Feedback');
       return;
     }
     if (attach) {
@@ -2162,9 +2269,9 @@
       renderOverview();
       renderPatient();
       resetPreview();
-      message(form.title + ' ' + String(number).padStart(2, '0') + ' hinzugefügt.');
+      message(form.title + ' ' + String(number).padStart(2, '0') + ' hinzugefügt.', form.kind + 'Feedback');
     } else {
-      openCreatedExercise(next);
+      openCreatedExercise(next, form.kind + 'Feedback');
     }
     loadCarForm(form);
   }
@@ -2181,32 +2288,40 @@
         requestDeactivation(exercise);
         return;
       }
+      const region = isExerciseAction(action) ? 'exerciseFeedback' : 'patientFeedback';
       const patient = isExerciseAction(action) ? null : selectedPatient();
       if (action.startsWith('reset') && !confirm(action === 'reset_all'
-        ? 'Alle Patienten der Übung „' + exercise.title + '“ zurücksetzen?' : patientName(patient.id) + ' zurücksetzen?')) return;
+        ? 'Übung „' + exercise.title + '“ zurücksetzen? Alle Patientenverläufe, die Eintreffzeit und die erfassten Sichtungszeiten werden zurückgesetzt.'
+        : patientName(patient.id) + ' zurücksetzen? Verlauf und erfasste Sichtungszeit werden zurückgesetzt.')) return;
       if (action === 'clear_arrival' && !confirm('Zeitmessung und alle erfassten Sichtungszeiten zurücksetzen? Die Patientenverläufe laufen weiter.')) return;
       void run(async () => {
         const next = await rpc({ p_action: action, p_session: exercise.id, p_patient: patient?.id });
         renderExercise(next);
-        if (action.startsWith('reset')) message('Zurückgesetzt.');
-        if (action === 'start_arrival') message('Eintreffen erfasst.');
-        if (action === 'clear_arrival') message('Zeitmessung und Sichtungszeiten zurückgesetzt.');
-        if (action === 'mark_triage') message('Sichtung erfasst.');
-      });
+        const feedback = {
+          reset: 'Patientenverlauf und Sichtungszeit zurückgesetzt.',
+          reset_all: 'Patientenverläufe, Eintreffzeit und Sichtungszeiten zurückgesetzt.',
+          start_arrival: 'Eintreffen erfasst.',
+          clear_arrival: 'Eintreffzeit und Sichtungszeiten zurückgesetzt.',
+          mark_triage: 'Sichtung erfasst.',
+          pause: 'Patientenverlauf pausiert.',
+          resume: 'Patientenverlauf fortgesetzt.'
+        };
+        message(feedback[action], region);
+      }, region);
     });
   }
 
-  for (const [button, field] of [['copyLink', 'patientLink'], ['copyJoin', 'joinLink']]) {
+  for (const [button, field, region] of [['copyLink', 'patientLink', 'patientLinkFeedback'], ['copyJoin', 'joinLink', 'joinFeedback']]) {
     el(button).addEventListener('click', async () => {
       const input = el(field);
       try {
         await navigator.clipboard.writeText(input.value);
-        message('Kopiert.');
+        message('Link kopiert.', region);
       } catch {
         input.hidden = false;
         input.focus();
         input.select();
-        message('Der Text ist markiert und kann kopiert werden.');
+        message('Der Link ist markiert und kann kopiert werden.', region);
       }
     });
   }
