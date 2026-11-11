@@ -226,7 +226,7 @@
     details.textContent = [api.identityDetails(identity), identity ? stationName : ''].filter(Boolean).join(' · ');
     details.hidden = !details.textContent;
     const source = el('patientIdentitySource');
-    source.textContent = identity ? 'Namensbezug · ' + identity.name_source : '';
+    source.textContent = api.identitySource(identity);
     source.hidden = !identity;
     el('intro').textContent = brief?.intro ?? '';
     const story = brief?.story ?? '';

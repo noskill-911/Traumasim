@@ -748,7 +748,7 @@
     details.textContent = identity ? api.identityDetails(identity) + ' · ' + stationName : '';
     details.hidden = !identity;
     const source = el('patientIdentitySource');
-    source.textContent = identity ? 'Namensbezug · ' + identity.name_source : '';
+    source.textContent = api.identitySource(identity);
     source.hidden = !identity;
     const station = stationUrl(patient).href;
     const link = patientLink(station, patient);

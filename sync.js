@@ -51,6 +51,9 @@
     refresh: (refresh_token) => request('/auth/v1/token?grant_type=refresh_token', { refresh_token }),
     signOut: (token) => request('/auth/v1/logout?scope=local', {}, token),
     identityDetails: (identity) => identity ? identity.age + ' Jahre · ' + identity.gender : '',
+    identitySource: (identity) => identity
+      ? ['Namensbezug', identity.name_source, identity.name_locality, identity.name_background].filter(Boolean).join(' · ')
+      : '',
     clock: (seconds) => {
       const minutes = Math.floor(seconds / 60);
       const remainder = Math.floor(seconds % 60);

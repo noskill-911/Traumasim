@@ -85,114 +85,119 @@ alter table traumasim_private.trainers enable row level security;
 alter table traumasim_private.models enable row level security;
 revoke all on all tables in schema traumasim_private from public, anon, authenticated;
 
+create or replace function traumasim_private.patient_name_catalog()
+returns table(full_name text, gender text, street text, locality text, background text)
+language sql immutable set search_path = '' as $$
+ -- Hamburg's Landeszentrale für politische Bildung and the Lexikon der Feuerwehr Hamburg.
+ values
+   ('Abelke Bleken', 'weiblich', 'Abelke-Bleken-Ring', 'Ochsenwerder, Bezirk Bergedorf', 'Führte einen Hof in Ochsenwerder und wurde 1583 nach einem Hexenprozess hingerichtet.'), -- https://hamburg-strassennamen.de/item/23--abelke-bleken-ring
+   ('Agathe Lasch', 'weiblich', 'Agathe-Lasch-Weg', 'Othmarschen, Bezirk Altona', 'Germanistin und erste Professorin an der Universität Hamburg.'), -- https://hamburg-strassennamen.de/item/16--agathe-lasch-weg
+   ('Agnes Gierck', 'weiblich', 'Agnes-Gierck-Weg', 'Langenhorn, Bezirk Hamburg-Nord', 'Engagierte sich in Langenhorn im Widerstand gegen den Nationalsozialismus.'), -- https://hamburg-strassennamen.de/item/18--agnes-gierck-weg
+   ('Agnes Wolffson', 'weiblich', 'Agnes-Wolffson-Straße', 'Neuallermöhe, Bezirk Bergedorf', 'Förderte als Stifterin die Ausbildung von Mädchen und gründete Haushaltungsschulen.'), -- https://hamburg-strassennamen.de/item/20--agnes-wolffson-strasse
+   ('Albert Ballin', 'männlich', 'Am Ballinkai', 'Altenwerder, Bezirk Harburg', 'Hamburger Reeder und Generaldirektor der HAPAG.'), -- https://hamburg-strassennamen.de/item/58--am-ballinkai
+   ('Albertine Assor', 'weiblich', 'Albertine-Assor-Straße', 'Schnelsen, Bezirk Eimsbüttel', 'Baute in Schnelsen eine evangelische Diakonisseneinrichtung auf und leitete sie als Oberin.'), -- https://hamburg-strassennamen.de/item/30--albertine-assor-strasse
+   ('Alexander Conze', 'männlich', 'Conzestraße', 'Nienstedten, Bezirk Altona', 'Archäologe und Hochschullehrer.'), -- https://hamburg-strassennamen.de/item/479--conzestrasse
+   ('Alma Ohlmann', 'weiblich', 'Alma-Ohlmann-Weg', 'Lokstedt, Bezirk Eimsbüttel', 'Leitete jahrzehntelang Gymnastikgruppen und betreute einen Seniorenkreis.'), -- https://hamburg-strassennamen.de/item/2542--alma-ohlmann-weg
+   ('Alma Wartenberg', 'weiblich', 'Alma-Wartenberg-Platz', 'Ottensen, Bezirk Altona', 'Setzte sich in Ottensen als Sozialdemokratin für Frauenrechte ein.'), -- https://hamburg-strassennamen.de/item/51--alma-wartenberg-platz
+   ('Alwin Lippert', 'männlich', 'Alwin-Lippert-Weg', 'Niendorf, Bezirk Eimsbüttel', 'Besaß den Hof, an dessen Gelände der Weg liegt.'), -- https://hamburg-strassennamen.de/item/56--alwin-lippert-weg
+   ('Amalie Dietrich', 'weiblich', 'Amalie-Dietrich-Stieg', 'Barmbek-Nord, Bezirk Hamburg-Nord', 'Botanikerin und Forschungsreisende, später Kustodin eines Hamburger Museums.'), -- https://hamburg-strassennamen.de/item/77--amalie-dietrich-stieg
+   ('Amalie Sieveking', 'weiblich', 'Amalie-Sieveking-Weg und Sievekingdamm', 'Volksdorf (Bezirk Wandsbek) und Hamm (Bezirk Hamburg-Mitte)', 'Gründete 1832 einen Frauenverein für Armen- und Krankenpflege.'), -- https://hamburg-strassennamen.de/item/2833--sievekingdamm
+   ('Amália Rodrigues', 'weiblich', 'Amalia-Rodrigues-Weg', 'Bahrenfeld, Bezirk Altona', 'Portugiesische Sängerin, die den Fado international bekannt machte.'), -- https://hamburg-strassennamen.de/item/76--amalia-rodrigues-weg
+   ('Annie Kienast', 'weiblich', 'Annie-Kienast-Straße', 'Langenhorn, Bezirk Hamburg-Nord', 'Verkäuferin und Gewerkschafterin, nach dem Krieg Mitglied der Hamburgischen Bürgerschaft.'), -- https://hamburg-strassennamen.de/item/111--annie-kienast-strasse
+   ('Anny Ahlers', 'weiblich', 'Anny-Ahlers-Weg', 'St. Pauli, Bezirk Hamburg-Mitte', 'Trat als Tänzerin, Schauspielerin und Operettensängerin an der Hamburger Volksoper auf.'), -- https://hamburg-strassennamen.de/item/2620--anny-ahlers-weg
+   ('Anny Tollens', 'weiblich', 'Anny-Tollens-Weg', 'Rahlstedt, Bezirk Wandsbek', 'Leitete die Kinderstube Rahlstedt und engagierte sich in der Kommunalpolitik.'), -- https://hamburg-strassennamen.de/item/112--anny-tollens-weg
+   ('August Böhme', 'männlich', 'Böhmestraße', 'Wandsbek, Bezirk Wandsbek', 'Tischlermeister und letzter Wehrführer der Freiwilligen Feuerwehr Wandsbek.'), -- https://epub.sub.uni-hamburg.de/epub/volltexte/2013/25292/pdf/Lexikon_der_Hamburger_Feuerwehr.pdf
+   ('Auguste Caecilie Baur', 'weiblich', 'Auguste-Baur-Straße', 'Blankenese, Bezirk Altona', 'Unterstützte als Stifterin wohltätige Zwecke.'), -- https://hamburg-strassennamen.de/item/159--auguste-baur-strasse
+   ('Auguste Schmidt', 'weiblich', 'Auguste-Schmidt-Weg', 'Neuallermöhe, Bezirk Bergedorf', 'Mitbegründerin des Allgemeinen Deutschen Frauenvereins.'), -- https://hamburg-strassennamen.de/item/162--auguste-schmidt-weg
+   ('Carl von Ossietzky', 'männlich', 'Ossietzkystraße', 'Jenfeld, Bezirk Wandsbek', 'Publizist und Friedensnobelpreisträger, der vom NS-Regime verfolgt wurde.'), -- https://www.hamburg.de/521446
+   ('Catharina Fellendorf', 'weiblich', 'Catharina-Fellendorf-Straße', 'Neuallermöhe, Bezirk Bergedorf', 'Leistete Widerstand gegen die NS-Diktatur und wurde 1944 in Plötzensee hingerichtet.'), -- https://hamburg-strassennamen.de/item/446--catharina-fellendorf-strasse
+   ('Charlotte Mügge', 'weiblich', 'Charlotte-Mügge-Weg', 'Jenfeld, Bezirk Wandsbek', 'Half Deserteuren während der NS-Diktatur und wurde dafür inhaftiert.'), -- https://hamburg-strassennamen.de/item/453--charlotte-muegge-weg
+   ('Charlotte Niese', 'weiblich', 'Charlotte-Niese-Straße', 'Osdorf, Bezirk Altona', 'Schrieb Erzählungen über das Leben in Norddeutschland.'), -- https://hamburg-strassennamen.de/item/454--charlotte-niese-strasse
+   ('Christoph Probst', 'männlich', 'Christoph-Probst-Weg', 'Eppendorf, Bezirk Hamburg-Nord', 'Student und Mitglied der Widerstandsgruppe Weiße Rose.'), -- https://hamburg-strassennamen.de/item/466--christoph-probst-weg
+   ('Christopher Johann Hennig Harms', 'männlich', 'Christopher-Harms-Weg', 'Kirchwerder, Bezirk Bergedorf', 'Schuhmachermeister, dessen Testament eine Stiftung für benachteiligte Kinder vorsah.'), -- https://hamburg-strassennamen.de/item/465--christopher-harms-weg
+   ('Clemens Schultz', 'männlich', 'Clemens-Schultz-Straße', 'St. Pauli, Bezirk Hamburg-Mitte', 'Wirkte als Pastor in St. Pauli.'), -- https://hamburg-strassennamen.de/item/475--clemens-schultz-strasse
+   ('Cord Dreyer', 'männlich', 'Cord-Dreyer-Weg', 'Niendorf, Bezirk Eimsbüttel', 'Stellmachermeister und von 1881 bis 1899 Gemeindevorsteher in Niendorf.'), -- https://hamburg-strassennamen.de/item/480--cord-dreyer-weg
+   ('Edvard Grieg', 'männlich', 'Griegstraße', 'Ottensen, Bezirk Altona', 'Norwegischer Komponist, bekannt unter anderem für die Musik zu „Peer Gynt“.'), -- https://hamburg-strassennamen.de/item/963--griegstrasse
+   ('Elfriede Land', 'weiblich', 'Elfriede-Land-Weg', 'Altona-Nord, Bezirk Altona', 'Fuhr für die Hamburger Hochbahn Straßenbahn und gehörte zu den ersten Busfahrerinnen Deutschlands.'), -- https://hamburg-strassennamen.de/item/635--elfriede-land-weg
+   ('Elfriede Lohse-Wächtler', 'weiblich', 'Elfriede-Lohse-Wächtler-Weg', 'Barmbek-Süd, Bezirk Hamburg-Nord', 'Malerin, die 1940 im Rahmen der NS-Krankenmorde getötet wurde.'), -- https://hamburg-strassennamen.de/item/636--elfriede-lohse-waechtler-weg
+   ('Elisabeth Flügge', 'weiblich', 'Elisabeth-Flügge-Straße', 'Alsterdorf, Bezirk Hamburg-Nord', 'Hamburger Schulleiterin, die Verfolgten des NS-Regimes half.'), -- https://hamburg-strassennamen.de/item/640--elisabeth-fluegge-strasse
+   ('Elisabeth Lange', 'weiblich', 'Elisabeth-Lange-Weg', 'Langenbek, Bezirk Harburg', 'Gegnerin der NS-Diktatur, die 1944 im KZ Fuhlsbüttel starb.'), -- https://hamburg-strassennamen.de/item/641--elisabeth-lange-weg
+   ('Elisabeth Thomann', 'weiblich', 'Elisabeth-Thomann-Weg', 'Bergedorf, Bezirk Bergedorf', 'Verfasste literarische Texte über ihre Heimat Bergedorf.'), -- https://hamburg-strassennamen.de/item/643--elisabeth-thomann-weg
+   ('Elisabeth Will', 'weiblich', 'Elisabeth-Will-Straße', 'Ottensen, Bezirk Altona', 'Engagierte sich in der Altonaer Bezirksversammlung für Bildung und Kultur.'), -- https://hamburg-strassennamen.de/item/3234--elisabeth-will-strasse
+   ('Elise Averdieck', 'weiblich', 'Elise-Averdieck-Straße', 'Borgfelde, Bezirk Hamburg-Mitte', 'Leitete das Diakonissenhaus Bethesda und schrieb Kinderbücher.'), -- https://hamburg-strassennamen.de/item/645--elise-averdieck-strasse
+   ('Elly Heuss-Knapp', 'weiblich', 'Elly-Heuss-Knapp-Ring', 'Neuallermöhe, Bezirk Bergedorf', 'Sozialpolitikerin und Gründerin des Müttergenesungswerks.'), -- https://hamburg-strassennamen.de/item/650--elly-heuss-knapp-ring
+   ('Elly See', 'weiblich', 'Elly-See-Straße', 'Lurup, Bezirk Altona', 'Engagierte sich im SV Lurup und gründete den Zusammenschluss der Altonaer Sportvereine mit.'), -- https://hamburg-strassennamen.de/item/651--elly-see-strasse
+   ('Elsa Bauer', 'weiblich', 'Elsa-Bauer-Weg', 'Alsterdorf, Bezirk Hamburg-Nord', 'Hamburger Lehrerin, die als Jüdin vom NS-Regime verfolgt wurde.'), -- https://hamburg-strassennamen.de/item/654--elsa-bauer-weg
+   ('Ernst Cordua', 'männlich', 'Corduaweg', 'Heimfeld, Bezirk Harburg', 'Arbeitete als Arzt in Harburg.'), -- https://hamburg-strassennamen.de/item/482--corduaweg
+   ('Eva Rühmkorf', 'weiblich', 'Eva-Rühmkorf-Straße', 'Altona-Nord, Bezirk Altona', 'Psychologin, die sich in der Hamburger Justizbehörde mit dem Strafvollzug befasste.'), -- https://hamburg-strassennamen.de/item/728--eva-ruehmkorf-strasse
+   ('Fanny David', 'weiblich', 'Fanny-David-Weg', 'Lohbrügge, Bezirk Bergedorf', 'Leitete die Wohlfahrtsstelle Barmbek und arbeitete später in der jüdischen Fürsorge.'), -- https://hamburg-strassennamen.de/item/738--fanny-david-weg
+   ('Fanny Hensel', 'weiblich', 'Fanny-Mendelssohn-Platz', 'Eimsbüttel, Bezirk Eimsbüttel', 'Hamburger Komponistin und Pianistin, geboren als Fanny Mendelssohn Bartholdy.'), -- https://hamburg-strassennamen.de/item/741--fanny-mendelssohn-platz
+   ('Fanny Lewald', 'weiblich', 'Fanny-Lewald-Ring', 'Neuallermöhe, Bezirk Bergedorf', 'Schriftstellerin, die in ihren Romanen unter anderem die Stellung von Frauen behandelte.'), -- https://hamburg-strassennamen.de/item/740--fanny-lewald-ring
+   ('Felicitas Kukuck', 'weiblich', 'Felicitas-Kukuck-Straße', 'Altona-Nord, Bezirk Altona', 'Hamburger Komponistin, die nach 1945 in Blankenese ein umfangreiches Werk schuf.'), -- https://hamburg-strassennamen.de/item/751--felicitas-kukuck-strasse
+   ('Ferdinand Laeisz', 'männlich', 'Laeiszstraße', 'St. Pauli, Bezirk Hamburg-Mitte', 'Hamburger Reeder und Gründer des Ferdinand-Laeisz-Stifts.'), -- https://hamburg-strassennamen.de/item/1649--laeiszstrasse
+   ('Flora Neumann', 'weiblich', 'Flora-Neumann-Straße', 'St. Pauli, Bezirk Hamburg-Mitte', 'Jüdische Widerstandskämpferin, die später an Hamburger Schulen als Zeitzeugin berichtete.'), -- https://hamburg-strassennamen.de/item/775--flora-neumann-strasse
+   ('Franz Carl Friedrich Chrysander', 'männlich', 'Chrysanderstraße', 'Bergedorf, Bezirk Bergedorf', 'Erforschte das Werk des Komponisten Georg Friedrich Händel.'), -- https://hamburg-strassennamen.de/item/467--chrysanderstrasse
+   ('Frieda Hertha Martha Wieking', 'weiblich', 'Frieda-Wieking-Stieg', 'Uhlenhorst, Bezirk Hamburg-Nord', 'Krankenschwester und Gewerkschafterin, die sich als Betriebsrätin engagierte.'), -- https://hamburg-strassennamen.de/item/798--frieda-wieking-stieg
+   ('Friedrich von Esmarch', 'männlich', 'Esmarchstraße', 'Altona-Altstadt, Bezirk Altona', 'Arzt, der das Lazarettwesen verbesserte und das zivile Samariterwesen aufbaute.'), -- https://hamburg-strassennamen.de/item/722--esmarchstrasse
+   ('Gerhard Mercator', 'männlich', 'Merkatorweg', 'Billstedt, Bezirk Hamburg-Mitte', 'Kartograf, der die Mercatorprojektion entwickelte.'), -- https://hamburg-strassennamen.de/item/1903--merkatorweg
+   ('Giacomo Meyerbeer', 'männlich', 'Meyerbeerstraße', 'Rahlstedt, Bezirk Wandsbek', 'Komponierte Opern.'), -- https://hamburg-strassennamen.de/item/1913--meyerbeerstrasse
+   ('Hans Scholl', 'männlich', 'Geschwister-Scholl-Straße', 'Eppendorf, Bezirk Hamburg-Nord', 'Medizinstudent und Mitgründer der Widerstandsgruppe Weiße Rose.'), -- https://geschichtswerkstatt-eppendorf.de/denkmaeler/verhoerzelle/
+   ('Helene Lange', 'weiblich', 'Helene-Lange-Straße', 'Harvestehude, Bezirk Eimsbüttel', 'Pädagogin und Frauenrechtlerin, die sich für bessere Bildungschancen von Mädchen einsetzte.'), -- https://hamburg-strassennamen.de/item/1195--helene-lange-strasse
+   ('Helga Feddersen', 'weiblich', 'Helga-Feddersen-Twiete', 'Altona-Nord, Bezirk Altona', 'Hamburger Schauspielerin, Autorin und Gründerin des Theaters am Holstenwall.'), -- https://hamburg-strassennamen.de/item/1154--helga-feddersen-twiete
+   ('Helma Steinbach', 'weiblich', 'Helma-Steinbach-Weg', 'Horn, Bezirk Hamburg-Mitte', 'Gründete die Hamburger Konsumgenossenschaft „Produktion“ mit.'), -- https://hamburg-strassennamen.de/item/1203--helma-steinbach-weg
+   ('Henry Bengelsdorf', 'männlich', 'Bengelsdorfstieg', 'Bramfeld, Bezirk Wandsbek', 'Arbeitete in Hamburg als Inspektor bei der AOK.'), -- https://hamburg-strassennamen.de/item/258--bengelsdorfstieg
+   ('Herbert Pardo', 'männlich', 'Herbert-Pardo-Weg', 'Neuallermöhe, Bezirk Bergedorf', 'Hamburger Rechtsanwalt, Bürgerschaftsmitglied und Vorsitzender der portugiesisch-jüdischen Gemeinde.'), -- https://hamburg-strassennamen.de/item/1219--herbert-pardo-weg
+   ('Hermann Blohm', 'männlich', 'Hermann-Blohm-Straße', 'Steinwerder, Bezirk Hamburg-Mitte', 'Schiffbauingenieur und Mitgründer der Werft Blohm & Voss.'), -- https://hamburg-strassennamen.de/item/1231--hermann-blohm-strasse
+   ('Hermann Krüger', 'männlich', 'Hermann-Krüger-Platz', 'Harburg, Bezirk Harburg', 'Lehrer und Schulleiter, der das Harburger Löwenhaus für Kinder gründete.'), -- https://hamburg-strassennamen.de/item/2982--hermann-krueger-platz
+   ('Hugo Groothoff', 'männlich', 'Groothoffgasse', 'Winterhude, Bezirk Hamburg-Nord', 'Hamburger Architekt.'), -- https://hamburg-strassennamen.de/item/970--groothoffgasse
+   ('Ida Ehre', 'weiblich', 'Ida-Ehre-Platz', 'Hamburg-Altstadt, Bezirk Hamburg-Mitte', 'Schauspielerin, Regisseurin und langjährige Leiterin der Hamburger Kammerspiele.'), -- https://filmmuseum-hamburg.de/personen/d-g/ida-ehre.html
+   ('Jens Jacob Eschels', 'männlich', 'Eschelsweg', 'Altona-Altstadt, Bezirk Altona', 'Kapitän, der zur See nach Grönland fuhr.'), -- https://hamburg-strassennamen.de/item/721--eschelsweg
+   ('Joachim Jungius', 'männlich', 'Jungiusstraße', 'Neustadt, Bezirk Hamburg-Mitte', 'Mathematiker und Physiker, der das Hamburger Akademische Gymnasium leitete.'), -- https://hamburg-strassennamen.de/item/1436--jungiusstrasse
+   ('Johann Amos Comenius', 'männlich', 'Comeniusplatz', 'Hohenfelde, Bezirk Hamburg-Nord', 'Pädagoge, der sich für die Ausbildung von Lehrkräften einsetzte.'), -- https://hamburg-strassennamen.de/item/476--comeniusplatz
+   ('Johann Ehlert Bieber', 'männlich', 'Bieberstraße', 'Rotherbaum, Bezirk Eimsbüttel', 'Oberspritzenmeister und Leiter der Löschmannschaften beim Großen Brand von 1842.'), -- https://epub.sub.uni-hamburg.de/epub/volltexte/2013/25292/pdf/Lexikon_der_Hamburger_Feuerwehr.pdf
+   ('Johann Georg Repsold', 'männlich', 'Repsoldstraße', 'St. Georg und Hammerbrook, Bezirk Hamburg-Mitte', 'Oberspritzenmeister und Gründer der Hamburger Sternwarte.'), -- https://epub.sub.uni-hamburg.de/epub/volltexte/2013/25292/pdf/Lexikon_der_Hamburger_Feuerwehr.pdf
+   ('Johannes Classen', 'männlich', 'Classenstieg', 'Wellingsbüttel, Bezirk Wandsbek', 'Leitete das Hamburger Johanneum von 1864 bis 1874.'), -- https://hamburg-strassennamen.de/item/470--classenstieg
+   ('Julius Vosseler', 'männlich', 'Julius-Vosseler-Straße', 'Lokstedt, Bezirk Eimsbüttel', 'Leitete den Zoologischen Garten in Hamburg.'), -- https://hamburg-strassennamen.de/item/1429--julius-vosseler-strasse
+   ('Justus Brinckmann', 'männlich', 'Justus-Brinckmann-Straße', 'Bergedorf, Bezirk Bergedorf', 'Gründete und leitete das Hamburger Museum für Kunst und Gewerbe.'), -- https://hamburg-strassennamen.de/item/1441--justus-brinckmann-strasse
+   ('Jürgen Fehling', 'männlich', 'Fehlinghöhe', 'Steilshoop, Bezirk Wandsbek', 'Theaterregisseur und früherer Eigentümer des Geländes.'), -- https://hamburg-strassennamen.de/item/745--fehlinghoehe
+   ('Jürgen Töpfer', 'männlich', 'Jürgen-Töpfer-Straße', 'Othmarschen, Bezirk Altona', 'Mitglied der Hamburgischen Bürgerschaft und CDU-Fraktionsvorsitzender in der Bezirksversammlung Altona.'), -- https://hamburg-strassennamen.de/item/1415--juergen-toepfer-strasse
+   ('Katharina Jacob', 'weiblich', 'Katharina-Jacob-Weg', 'Groß Borstel, Bezirk Hamburg-Nord', 'Lehrerin und Mitglied der Widerstandsgruppe Bästlein-Jacob-Abshagen.'), -- https://hamburg-strassennamen.de/item/1495--katharina-jacob-weg
+   ('Kurt Emmerich', 'männlich', 'Kurt-Emmerich-Platz', 'Wilhelmsburg, Bezirk Hamburg-Mitte', 'Berichtete als Sportreporter im NDR-Radio.'), -- https://hamburg-strassennamen.de/item/1638--kurt-emmerich-platz
+   ('Kurt-Adolf Körber', 'männlich', 'Kurt-A.-Körber-Chaussee', 'Bergedorf, Bezirk Bergedorf', 'Gründete die Hauni-Werke und wurde Hamburger Ehrenbürger.'), -- https://hamburg-strassennamen.de/item/1635--kurt-a-koerber-chaussee
+   ('Käte Latzke', 'weiblich', 'Käte-Latzke-Weg', 'Neuallermöhe, Bezirk Bergedorf', 'Stenotypistin und Widerstandskämpferin, die im KZ Ravensbrück starb.'), -- https://hamburg-strassennamen.de/item/1449--kaete-latzke-weg
+   ('Lazarus Ludwig Zamenhof', 'männlich', 'Zamenhofweg', 'Farmsen-Berne, Bezirk Wandsbek', 'Entwickelte die Plansprache Esperanto.'), -- https://hamburg-strassennamen.de/item/2248--zamenhofweg
+   ('Leo Fall', 'männlich', 'Fallstraße', 'Rahlstedt, Bezirk Wandsbek', 'Operettenkomponist, der auch als Kapellmeister in Hamburg arbeitete.'), -- https://hamburg-strassennamen.de/item/737--fallstrasse
+   ('Leonhard Euler', 'männlich', 'Eulerweg', 'Rahlstedt, Bezirk Wandsbek', 'Schweizer Mathematiker, der unter anderem in Sankt Petersburg arbeitete.'), -- https://hamburg-strassennamen.de/item/724--eulerweg
+   ('Lovis Corinth', 'männlich', 'Corinthstraße', 'Othmarschen, Bezirk Altona', 'Maler und Grafiker.'), -- https://hamburg-strassennamen.de/item/483--corinthstrasse
+   ('Margaretha Rothe', 'weiblich', 'Margaretha-Rothe-Weg', 'Niendorf, Bezirk Eimsbüttel', 'Hamburger Medizinstudentin und Mitglied der Weißen Rose Hamburg.'), -- https://hamburg-strassennamen.de/item/1815--margaretha-rothe-weg
+   ('Margaretha Treuge', 'weiblich', 'Margaretha-Treuge-Weg', 'Ohlsdorf, Bezirk Hamburg-Nord', 'Leitete die Soziale Frauenschule in Hamburg und gründete den Hamburger Frauenring mit.'), -- https://hamburg-strassennamen.de/item/1816--margaretha-treuge-weg
+   ('Marianne Timm', 'weiblich', 'Marianne-Timm-Weg', 'Rothenburgsort, Bezirk Hamburg-Mitte', 'Theologin und erste Hamburger Pastorin, die von der Kanzel predigen durfte.'), -- https://hamburg-strassennamen.de/item/1823--marianne-timm-weg
+   ('Marie Bautz', 'weiblich', 'Marie-Bautz-Weg', 'Farmsen-Berne, Bezirk Wandsbek', 'Arbeitete in einer Fabrik und vertrat später die SPD in der Hamburgischen Bürgerschaft.'), -- https://hamburg-strassennamen.de/item/2289--marie-bautz-weg
+   ('Marie-Anna Jonas', 'weiblich', 'Marie-Jonas-Platz', 'Eppendorf, Bezirk Hamburg-Nord', 'Hamburger Ärztin, die als Jüdin deportiert und in Auschwitz ermordet wurde.'), -- https://hamburg-strassennamen.de/item/1827--marie-jonas-platz
+   ('Matthias Claudius', 'männlich', 'Claudiusstraße', 'Marienthal, Bezirk Wandsbek', 'Dichter und Verfasser des Abendlieds „Der Mond ist aufgegangen“.'), -- https://hamburg-strassennamen.de/item/473--claudiusstrasse
+   ('Maud Hester von Ossietzky', 'weiblich', 'Ossietzkystraße', 'Jenfeld, Bezirk Wandsbek', 'Frauenrechtlerin, die die Zeitschrift „Die Weltbühne“ nach dem Krieg wiederbegründete.'), -- https://www.hamburg.de/521446
+   ('Nikolaus Falck', 'männlich', 'Falckweg', 'Othmarschen, Bezirk Altona', 'Jurist und Erforscher der schleswig-holsteinischen Rechtsgeschichte.'), -- https://hamburg-strassennamen.de/item/735--falckweg
+   ('Ottmar Mergenthaler', 'männlich', 'Mergenthalerweg', 'Eidelstedt, Bezirk Eimsbüttel', 'Entwickelte die Linotype-Setzmaschine für den Druck.'), -- https://hamburg-strassennamen.de/item/1902--mergenthalerweg
+   ('Otto Meyerhof', 'männlich', 'Meyerhofstraße', 'Osdorf, Bezirk Altona', 'Biochemiker und Träger des Nobelpreises für Medizin.'), -- https://hamburg-strassennamen.de/item/1915--meyerhofstrasse
+   ('Peter Schulz', 'männlich', 'Peter-Schulz-Platz', 'Hamburg-Altstadt, Bezirk Hamburg-Mitte', 'Jurist, Hamburger Bürgermeister und Präsident der Bürgerschaft.'), -- https://hamburg-strassennamen.de/item/3366--peter-schulz-platz
+   ('Philipp Otto Runge', 'männlich', 'Rungestieg', 'Barmbek-Nord, Bezirk Hamburg-Nord', 'Maler der Romantik.'), -- https://hamburg-strassennamen.de/item/2527--rungestieg
+   ('Ralph Benatzky', 'männlich', 'Benatzkyweg', 'Rahlstedt, Bezirk Wandsbek', 'Komponierte Operetten, darunter „Im weißen Rössl“.'), -- https://hamburg-strassennamen.de/item/256--benatzkyweg
+   ('Ricarda Huch', 'weiblich', 'Ricarda-Huch-Ring', 'Neuallermöhe, Bezirk Bergedorf', 'Schriftstellerin und Historikerin, die auch Gedichte und Erzählungen veröffentlichte.'), -- https://hamburg-strassennamen.de/item/2435--ricarda-huch-ring
+   ('Salomon Heine', 'männlich', 'Salomon-Heine-Weg', 'Eppendorf, Bezirk Hamburg-Nord', 'Hamburger Bankier und Onkel des Dichters Heinrich Heine.'), -- https://hamburg-strassennamen.de/item/2691--salomon-heine-weg
+   ('Siegfried Detlev Bendixen', 'männlich', 'Bendixensweg', 'Barmbek-Nord, Bezirk Hamburg-Nord', 'Maler, der unter anderem in Hamburg und London arbeitete.'), -- https://hamburg-strassennamen.de/item/257--bendixensweg
+   ('Sophie Scholl', 'weiblich', 'Geschwister-Scholl-Straße', 'Eppendorf, Bezirk Hamburg-Nord', 'Studentin und Mitglied der Widerstandsgruppe Weiße Rose.'), -- https://geschichtswerkstatt-eppendorf.de/denkmaeler/verhoerzelle/
+   ('Stefan Zweig', 'männlich', 'Stefan-Zweig-Straße', 'Bramfeld, Bezirk Wandsbek', 'Österreichischer Schriftsteller und Verfasser der „Schachnovelle“.'), -- https://hamburg-strassennamen.de/item/2905--stefan-zweig-strasse
+   ('Thomas Herbst', 'männlich', 'Herbstsweg', 'Barmbek-Nord, Bezirk Hamburg-Nord', 'Hamburger Maler.'), -- https://hamburg-strassennamen.de/item/1225--herbstsweg
+   ('Traute Lafrenz', 'weiblich', 'Traute-Lafrenz-Straße', 'Groß Borstel und Alsterdorf, Bezirk Hamburg-Nord', 'Ärztin und Mitglied der Widerstandsgruppe Weiße Rose.'), -- https://hamburg-strassennamen.de/item/3569--traute-lafrenz-strasse
+   ('Walter Bärsch', 'männlich', 'Walter-Bärsch-Weg', 'Groß Borstel, Bezirk Hamburg-Nord', 'Leitete den Hamburger schulpsychologischen Dienst und war Präsident des Deutschen Kinderschutzbundes.') -- https://hamburg-strassennamen.de/item/2569--walter-baersch-weg
+$$;
+
 create or replace function traumasim_private.draw_patient_identity(p_session uuid)
 returns jsonb language sql volatile set search_path = '' as $$
- -- Hamburg's Landeszentrale für politische Bildung and the Lexikon der Feuerwehr Hamburg.
- with names(full_name, gender, street) as (values
-   ('Abelke Bleken', 'weiblich', 'Abelke-Bleken-Ring'), -- https://hamburg-strassennamen.de/item/23--abelke-bleken-ring
-   ('Agathe Lasch', 'weiblich', 'Agathe-Lasch-Weg'), -- https://hamburg-strassennamen.de/item/16--agathe-lasch-weg
-   ('Agnes Gierck', 'weiblich', 'Agnes-Gierck-Weg'), -- https://hamburg-strassennamen.de/item/18--agnes-gierck-weg
-   ('Agnes Wolffson', 'weiblich', 'Agnes-Wolffson-Straße'), -- https://hamburg-strassennamen.de/item/20--agnes-wolffson-strasse
-   ('Albert Ballin', 'männlich', 'Am Ballinkai'), -- https://hamburg-strassennamen.de/item/58--am-ballinkai
-   ('Albertine Assor', 'weiblich', 'Albertine-Assor-Straße'), -- https://hamburg-strassennamen.de/item/30--albertine-assor-strasse
-   ('Alexander Conze', 'männlich', 'Conzestraße'), -- https://hamburg-strassennamen.de/item/479--conzestrasse
-   ('Alma Ohlmann', 'weiblich', 'Alma-Ohlmann-Weg'), -- https://hamburg-strassennamen.de/item/2542--alma-ohlmann-weg
-   ('Alma Wartenberg', 'weiblich', 'Alma-Wartenberg-Platz'), -- https://hamburg-strassennamen.de/item/51--alma-wartenberg-platz
-   ('Alwin Lippert', 'männlich', 'Alwin-Lippert-Weg'), -- https://hamburg-strassennamen.de/item/56--alwin-lippert-weg
-   ('Amalie Dietrich', 'weiblich', 'Amalie-Dietrich-Stieg'), -- https://hamburg-strassennamen.de/item/77--amalie-dietrich-stieg
-   ('Amalie Sieveking', 'weiblich', 'Amalie-Sieveking-Weg und Sievekingdamm'), -- https://hamburg-strassennamen.de/item/2833--sievekingdamm
-   ('Amália Rodrigues', 'weiblich', 'Amalia-Rodrigues-Weg'), -- https://hamburg-strassennamen.de/item/76--amalia-rodrigues-weg
-   ('Annie Kienast', 'weiblich', 'Annie-Kienast-Straße'), -- https://hamburg-strassennamen.de/item/111--annie-kienast-strasse
-   ('Anny Ahlers', 'weiblich', 'Anny-Ahlers-Weg'), -- https://hamburg-strassennamen.de/item/2620--anny-ahlers-weg
-   ('Anny Tollens', 'weiblich', 'Anny-Tollens-Weg'), -- https://hamburg-strassennamen.de/item/112--anny-tollens-weg
-   ('August Böhme', 'männlich', 'Böhmestraße'), -- https://epub.sub.uni-hamburg.de/epub/volltexte/2013/25292/pdf/Lexikon_der_Hamburger_Feuerwehr.pdf
-   ('Auguste Caecilie Baur', 'weiblich', 'Auguste-Baur-Straße'), -- https://hamburg-strassennamen.de/item/159--auguste-baur-strasse
-   ('Auguste Schmidt', 'weiblich', 'Auguste-Schmidt-Weg'), -- https://hamburg-strassennamen.de/item/162--auguste-schmidt-weg
-   ('Carl von Ossietzky', 'männlich', 'Ossietzkystraße'), -- https://www.hamburg.de/521446
-   ('Catharina Fellendorf', 'weiblich', 'Catharina-Fellendorf-Straße'), -- https://hamburg-strassennamen.de/item/446--catharina-fellendorf-strasse
-   ('Charlotte Mügge', 'weiblich', 'Charlotte-Mügge-Weg'), -- https://hamburg-strassennamen.de/item/453--charlotte-muegge-weg
-   ('Charlotte Niese', 'weiblich', 'Charlotte-Niese-Straße'), -- https://hamburg-strassennamen.de/item/454--charlotte-niese-strasse
-   ('Christoph Probst', 'männlich', 'Christoph-Probst-Weg'), -- https://hamburg-strassennamen.de/item/466--christoph-probst-weg
-   ('Christopher Johann Hennig Harms', 'männlich', 'Christopher-Harms-Weg'), -- https://hamburg-strassennamen.de/item/465--christopher-harms-weg
-   ('Clemens Schultz', 'männlich', 'Clemens-Schultz-Straße'), -- https://hamburg-strassennamen.de/item/475--clemens-schultz-strasse
-   ('Cord Dreyer', 'männlich', 'Cord-Dreyer-Weg'), -- https://hamburg-strassennamen.de/item/480--cord-dreyer-weg
-   ('Edvard Grieg', 'männlich', 'Griegstraße'), -- https://hamburg-strassennamen.de/item/963--griegstrasse
-   ('Elfriede Land', 'weiblich', 'Elfriede-Land-Weg'), -- https://hamburg-strassennamen.de/item/635--elfriede-land-weg
-   ('Elfriede Lohse-Wächtler', 'weiblich', 'Elfriede-Lohse-Wächtler-Weg'), -- https://hamburg-strassennamen.de/item/636--elfriede-lohse-waechtler-weg
-   ('Elisabeth Flügge', 'weiblich', 'Elisabeth-Flügge-Straße'), -- https://hamburg-strassennamen.de/item/640--elisabeth-fluegge-strasse
-   ('Elisabeth Lange', 'weiblich', 'Elisabeth-Lange-Weg'), -- https://hamburg-strassennamen.de/item/641--elisabeth-lange-weg
-   ('Elisabeth Thomann', 'weiblich', 'Elisabeth-Thomann-Weg'), -- https://hamburg-strassennamen.de/item/643--elisabeth-thomann-weg
-   ('Elisabeth Will', 'weiblich', 'Elisabeth-Will-Straße'), -- https://hamburg-strassennamen.de/item/3234--elisabeth-will-strasse
-   ('Elise Averdieck', 'weiblich', 'Elise-Averdieck-Straße'), -- https://hamburg-strassennamen.de/item/645--elise-averdieck-strasse
-   ('Elly Heuss-Knapp', 'weiblich', 'Elly-Heuss-Knapp-Ring'), -- https://hamburg-strassennamen.de/item/650--elly-heuss-knapp-ring
-   ('Elly See', 'weiblich', 'Elly-See-Straße'), -- https://hamburg-strassennamen.de/item/651--elly-see-strasse
-   ('Elsa Bauer', 'weiblich', 'Elsa-Bauer-Weg'), -- https://hamburg-strassennamen.de/item/654--elsa-bauer-weg
-   ('Ernst Cordua', 'männlich', 'Corduaweg'), -- https://hamburg-strassennamen.de/item/482--corduaweg
-   ('Eva Rühmkorf', 'weiblich', 'Eva-Rühmkorf-Straße'), -- https://hamburg-strassennamen.de/item/728--eva-ruehmkorf-strasse
-   ('Fanny David', 'weiblich', 'Fanny-David-Weg'), -- https://hamburg-strassennamen.de/item/738--fanny-david-weg
-   ('Fanny Hensel', 'weiblich', 'Fanny-Mendelssohn-Platz'), -- https://hamburg-strassennamen.de/item/741--fanny-mendelssohn-platz
-   ('Fanny Lewald', 'weiblich', 'Fanny-Lewald-Ring'), -- https://hamburg-strassennamen.de/item/740--fanny-lewald-ring
-   ('Felicitas Kukuck', 'weiblich', 'Felicitas-Kukuck-Straße'), -- https://hamburg-strassennamen.de/item/751--felicitas-kukuck-strasse
-   ('Ferdinand Laeisz', 'männlich', 'Laeiszstraße'), -- https://hamburg-strassennamen.de/item/1649--laeiszstrasse
-   ('Flora Neumann', 'weiblich', 'Flora-Neumann-Straße'), -- https://hamburg-strassennamen.de/item/775--flora-neumann-strasse
-   ('Franz Carl Friedrich Chrysander', 'männlich', 'Chrysanderstraße'), -- https://hamburg-strassennamen.de/item/467--chrysanderstrasse
-   ('Frieda Hertha Martha Wieking', 'weiblich', 'Frieda-Wieking-Stieg'), -- https://hamburg-strassennamen.de/item/798--frieda-wieking-stieg
-   ('Friedrich von Esmarch', 'männlich', 'Esmarchstraße'), -- https://hamburg-strassennamen.de/item/722--esmarchstrasse
-   ('Gerhard Mercator', 'männlich', 'Merkatorweg'), -- https://hamburg-strassennamen.de/item/1903--merkatorweg
-   ('Giacomo Meyerbeer', 'männlich', 'Meyerbeerstraße'), -- https://hamburg-strassennamen.de/item/1913--meyerbeerstrasse
-   ('Hans Scholl', 'männlich', 'Geschwister-Scholl-Straße'), -- https://geschichtswerkstatt-eppendorf.de/denkmaeler/verhoerzelle/
-   ('Helene Lange', 'weiblich', 'Helene-Lange-Straße'), -- https://hamburg-strassennamen.de/item/1195--helene-lange-strasse
-   ('Helga Feddersen', 'weiblich', 'Helga-Feddersen-Twiete'), -- https://hamburg-strassennamen.de/item/1154--helga-feddersen-twiete
-   ('Helma Steinbach', 'weiblich', 'Helma-Steinbach-Weg'), -- https://hamburg-strassennamen.de/item/1203--helma-steinbach-weg
-   ('Henry Bengelsdorf', 'männlich', 'Bengelsdorfstieg'), -- https://hamburg-strassennamen.de/item/258--bengelsdorfstieg
-   ('Herbert Pardo', 'männlich', 'Herbert-Pardo-Weg'), -- https://hamburg-strassennamen.de/item/1219--herbert-pardo-weg
-   ('Hermann Blohm', 'männlich', 'Hermann-Blohm-Straße'), -- https://hamburg-strassennamen.de/item/1231--hermann-blohm-strasse
-   ('Hermann Krüger', 'männlich', 'Hermann-Krüger-Platz'), -- https://hamburg-strassennamen.de/item/2982--hermann-krueger-platz
-   ('Hugo Groothoff', 'männlich', 'Groothoffgasse'), -- https://hamburg-strassennamen.de/item/970--groothoffgasse
-   ('Ida Ehre', 'weiblich', 'Ida-Ehre-Platz'), -- https://filmmuseum-hamburg.de/personen/d-g/ida-ehre.html
-   ('Jens Jacob Eschels', 'männlich', 'Eschelsweg'), -- https://hamburg-strassennamen.de/item/721--eschelsweg
-   ('Joachim Jungius', 'männlich', 'Jungiusstraße'), -- https://hamburg-strassennamen.de/item/1436--jungiusstrasse
-   ('Johann Amos Comenius', 'männlich', 'Comeniusplatz'), -- https://hamburg-strassennamen.de/item/476--comeniusplatz
-   ('Johann Ehlert Bieber', 'männlich', 'Bieberstraße'), -- https://epub.sub.uni-hamburg.de/epub/volltexte/2013/25292/pdf/Lexikon_der_Hamburger_Feuerwehr.pdf
-   ('Johann Georg Repsold', 'männlich', 'Repsoldstraße'), -- https://epub.sub.uni-hamburg.de/epub/volltexte/2013/25292/pdf/Lexikon_der_Hamburger_Feuerwehr.pdf
-   ('Johannes Classen', 'männlich', 'Classenstieg'), -- https://hamburg-strassennamen.de/item/470--classenstieg
-   ('Julius Vosseler', 'männlich', 'Julius-Vosseler-Straße'), -- https://hamburg-strassennamen.de/item/1429--julius-vosseler-strasse
-   ('Justus Brinckmann', 'männlich', 'Justus-Brinckmann-Straße'), -- https://hamburg-strassennamen.de/item/1441--justus-brinckmann-strasse
-   ('Jürgen Fehling', 'männlich', 'Fehlinghöhe'), -- https://hamburg-strassennamen.de/item/745--fehlinghoehe
-   ('Jürgen Töpfer', 'männlich', 'Jürgen-Töpfer-Straße'), -- https://hamburg-strassennamen.de/item/1415--juergen-toepfer-strasse
-   ('Katharina Jacob', 'weiblich', 'Katharina-Jacob-Weg'), -- https://hamburg-strassennamen.de/item/1495--katharina-jacob-weg
-   ('Kurt Emmerich', 'männlich', 'Kurt-Emmerich-Platz'), -- https://hamburg-strassennamen.de/item/1638--kurt-emmerich-platz
-   ('Kurt-Adolf Körber', 'männlich', 'Kurt-A.-Körber-Chaussee'), -- https://hamburg-strassennamen.de/item/1635--kurt-a-koerber-chaussee
-   ('Käte Latzke', 'weiblich', 'Käte-Latzke-Weg'), -- https://hamburg-strassennamen.de/item/1449--kaete-latzke-weg
-   ('Lazarus Ludwig Zamenhof', 'männlich', 'Zamenhofweg'), -- https://hamburg-strassennamen.de/item/2248--zamenhofweg
-   ('Leo Fall', 'männlich', 'Fallstraße'), -- https://hamburg-strassennamen.de/item/737--fallstrasse
-   ('Leonhard Euler', 'männlich', 'Eulerweg'), -- https://hamburg-strassennamen.de/item/724--eulerweg
-   ('Lovis Corinth', 'männlich', 'Corinthstraße'), -- https://hamburg-strassennamen.de/item/483--corinthstrasse
-   ('Margaretha Rothe', 'weiblich', 'Margaretha-Rothe-Weg'), -- https://hamburg-strassennamen.de/item/1815--margaretha-rothe-weg
-   ('Margaretha Treuge', 'weiblich', 'Margaretha-Treuge-Weg'), -- https://hamburg-strassennamen.de/item/1816--margaretha-treuge-weg
-   ('Marianne Timm', 'weiblich', 'Marianne-Timm-Weg'), -- https://hamburg-strassennamen.de/item/1823--marianne-timm-weg
-   ('Marie Bautz', 'weiblich', 'Marie-Bautz-Weg'), -- https://hamburg-strassennamen.de/item/2289--marie-bautz-weg
-   ('Marie-Anna Jonas', 'weiblich', 'Marie-Jonas-Platz'), -- https://hamburg-strassennamen.de/item/1827--marie-jonas-platz
-   ('Matthias Claudius', 'männlich', 'Claudiusstraße'), -- https://hamburg-strassennamen.de/item/473--claudiusstrasse
-   ('Maud Hester von Ossietzky', 'weiblich', 'Ossietzkystraße'), -- https://www.hamburg.de/521446
-   ('Nikolaus Falck', 'männlich', 'Falckweg'), -- https://hamburg-strassennamen.de/item/735--falckweg
-   ('Ottmar Mergenthaler', 'männlich', 'Mergenthalerweg'), -- https://hamburg-strassennamen.de/item/1902--mergenthalerweg
-   ('Otto Meyerhof', 'männlich', 'Meyerhofstraße'), -- https://hamburg-strassennamen.de/item/1915--meyerhofstrasse
-   ('Peter Schulz', 'männlich', 'Peter-Schulz-Platz'), -- https://hamburg-strassennamen.de/item/3366--peter-schulz-platz
-   ('Philipp Otto Runge', 'männlich', 'Rungestieg'), -- https://hamburg-strassennamen.de/item/2527--rungestieg
-   ('Ralph Benatzky', 'männlich', 'Benatzkyweg'), -- https://hamburg-strassennamen.de/item/256--benatzkyweg
-   ('Ricarda Huch', 'weiblich', 'Ricarda-Huch-Ring'), -- https://hamburg-strassennamen.de/item/2435--ricarda-huch-ring
-   ('Salomon Heine', 'männlich', 'Salomon-Heine-Weg'), -- https://hamburg-strassennamen.de/item/2691--salomon-heine-weg
-   ('Siegfried Detlev Bendixen', 'männlich', 'Bendixensweg'), -- https://hamburg-strassennamen.de/item/257--bendixensweg
-   ('Sophie Scholl', 'weiblich', 'Geschwister-Scholl-Straße'), -- https://geschichtswerkstatt-eppendorf.de/denkmaeler/verhoerzelle/
-   ('Stefan Zweig', 'männlich', 'Stefan-Zweig-Straße'), -- https://hamburg-strassennamen.de/item/2905--stefan-zweig-strasse
-   ('Thomas Herbst', 'männlich', 'Herbstsweg'), -- https://hamburg-strassennamen.de/item/1225--herbstsweg
-   ('Traute Lafrenz', 'weiblich', 'Traute-Lafrenz-Straße'), -- https://hamburg-strassennamen.de/item/3569--traute-lafrenz-strasse
-   ('Walter Bärsch', 'männlich', 'Walter-Bärsch-Weg') -- https://hamburg-strassennamen.de/item/2569--walter-baersch-weg
- )
  select jsonb_build_object('name', candidate.full_name, 'gender', candidate.gender,
-   'age', 16 + floor(random() * 57)::integer, 'name_source', candidate.street)
- from names candidate
+   'age', 16 + floor(random() * 57)::integer, 'name_source', candidate.street,
+   'name_locality', candidate.locality, 'name_background', candidate.background)
+ from traumasim_private.patient_name_catalog() candidate
  order by exists (
    select 1 from public.traumasim_patients p
    where p.session_id = p_session and p.identity_profile->>'name' = candidate.full_name
@@ -227,6 +232,16 @@ begin
 end;
 $backfill$;
 alter table public.traumasim_patients alter column identity_profile set not null;
+
+-- Add street context to previously assigned profiles without drawing names or ages again.
+update public.traumasim_patients p
+set identity_profile = p.identity_profile || jsonb_build_object(
+ 'name_locality', n.locality, 'name_background', n.background)
+from traumasim_private.patient_name_catalog() n
+where p.identity_profile->>'name' = n.full_name
+ and (p.identity_profile->>'name_locality' is distinct from n.locality
+   or p.identity_profile->>'name_background' is distinct from n.background);
+
 
 insert into traumasim_private.models values ('vu-baum', 'fahrer', $model${"nibpFastCycle":true,"secret":"Verdacht auf Becken- und Oberschenkelverletzung mit innerer Blutung.","points":[{"t":0,"s":125,"d":80,"h":95,"r":20,"o":98,"g":15},{"t":5,"s":120,"d":75,"h":105,"r":23,"o":97,"g":15},{"t":10,"s":105,"d":65,"h":118,"r":26,"o":97,"g":15},{"t":15,"s":90,"d":55,"h":130,"r":29,"o":96,"g":14},{"t":20,"s":75,"d":45,"h":145,"r":32,"o":95,"g":12},{"t":25,"s":65,"d":40,"h":152,"r":34,"o":93,"g":9}],"condition":["Wach, orientiert, starke Schmerzen im Bein.","Blass, unruhig, Schwindel und Durst.","Kaltschweißig, schwacher Radialispuls, zunehmend verwirrt.","Bewusstseinsgetrübt, kaum adäquate Antworten."]}$model$)
 on conflict (case_key, patient_key) do update set model = excluded.model;
