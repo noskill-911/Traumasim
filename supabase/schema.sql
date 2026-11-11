@@ -29,10 +29,12 @@ alter table public.traumasim_sessions
  add column if not exists trainer_id uuid references auth.users(id) on delete cascade,
  add column if not exists case_key text not null default 'vu-baum',
  add column if not exists signing_key uuid not null default gen_random_uuid(),
- add column if not exists triage_mode text not null default 'automatic' check (triage_mode in ('automatic', 'choose'));
+ add column if not exists triage_mode text not null default 'automatic' check (triage_mode in ('automatic', 'choose')),
+ add column if not exists arrived_at timestamptz;
 alter table public.traumasim_patients
  add column if not exists revision integer not null default 0,
- add column if not exists scenario_model jsonb;
+ add column if not exists scenario_model jsonb,
+ add column if not exists first_triage_at timestamptz;
 create index if not exists traumasim_sessions_trainer on public.traumasim_sessions (trainer_id, created_at desc);
 
 alter table public.traumasim_sessions enable row level security;
@@ -405,6 +407,35 @@ create or replace function traumasim_private.student_assess(
  select traumasim_private.student_snapshot(p_case, p_patient, p_code, null, p_selection, p_seen_revision);
 $$;
 
+create or replace function traumasim_private.student_mark_triage(
+ p_case text, p_patient text, p_code text, p_seen_revision integer
+) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+ marked_at timestamptz := clock_timestamp();
+ snapshot jsonb;
+ exercise public.traumasim_sessions%rowtype;
+begin
+ snapshot := traumasim_private.student_snapshot(p_case, p_patient, p_code, null, null, null);
+ if split_part(p_code, '.', 2) like 'p%'
+    or snapshot->'triage_selectable' is distinct from 'true'::jsonb
+    or (snapshot->>'revision')::integer is distinct from p_seen_revision then
+   return jsonb_build_object('recorded', false);
+ end if;
+
+ -- Recheck the timing reference, mode and patient revision while serialized with trainer actions.
+ select s.* into exercise from public.traumasim_sessions s
+ where s.id = (snapshot->>'exercise_id')::uuid and s.expires_at > clock_timestamp() for update;
+ if not found or exercise.triage_mode <> 'choose' or exercise.arrived_at is null
+    or exercise.arrived_at > marked_at or exercise.expires_at <= clock_timestamp() then
+   return jsonb_build_object('recorded', false);
+ end if;
+ update public.traumasim_patients p
+ set first_triage_at = least(p.first_triage_at, marked_at)
+ where p.session_id = exercise.id and p.patient_key = p_patient and p.revision = p_seen_revision;
+ return jsonb_build_object('recorded', found);
+end;
+$$;
+
 create or replace function traumasim_private.require_trainer()
 returns uuid language plpgsql stable set search_path = '' as $$
 declare
@@ -483,7 +514,7 @@ begin
      raise exception using errcode = '42501', message = 'Übung nicht verfügbar oder abgelaufen';
    end if;
 
-   if p_action in ('reset', 'pause', 'resume') and not exists (
+   if p_action in ('reset', 'pause', 'resume', 'mark_triage') and not exists (
      select 1 from public.traumasim_patients p where p.session_id = exercise.id and p.patient_key = p_patient
    ) then
      raise exception using errcode = '22023', message = 'Patient gehört nicht zu dieser Übung';
@@ -491,6 +522,22 @@ begin
    snapshot_time := clock_timestamp();
    case p_action
      when 'status' then null;
+     when 'start_arrival' then
+       if exercise.arrived_at is null then
+         update public.traumasim_sessions s set arrived_at = snapshot_time where s.id = exercise.id
+         returning s.* into exercise;
+       end if;
+     when 'clear_arrival' then
+       update public.traumasim_sessions s set arrived_at = null where s.id = exercise.id
+       returning s.* into exercise;
+       update public.traumasim_patients p set first_triage_at = null
+       where p.session_id = exercise.id and p.first_triage_at is not null;
+     when 'mark_triage' then
+       if exercise.arrived_at is null then
+         raise exception using errcode = '22023', message = 'Erfasse zuerst die Ankunft am Einsatzort.';
+       end if;
+       update public.traumasim_patients p set first_triage_at = snapshot_time
+       where p.session_id = exercise.id and p.patient_key = p_patient and p.first_triage_at is null;
      when 'set_triage_mode' then
        if p_title is null or p_title not in ('automatic', 'choose') then
          raise exception using errcode = '22023', message = 'Ungültige Einstellung für die Sichtung.';
@@ -532,8 +579,12 @@ begin
      when 'reset', 'reset_all' then
        update public.traumasim_patients
        set started_at = null, paused_at = null, accumulated_pause_seconds = 0,
-           state = '{}'::jsonb, updated_at = snapshot_time, revision = revision + 1
+           state = '{}'::jsonb, updated_at = snapshot_time, revision = revision + 1, first_triage_at = null
        where session_id = exercise.id and (p_action = 'reset_all' or patient_key = p_patient);
+       if p_action = 'reset_all' then
+         update public.traumasim_sessions s set arrived_at = null where s.id = exercise.id
+         returning s.* into exercise;
+       end if;
      when 'pause' then
        update public.traumasim_patients
        set paused_at = snapshot_time, updated_at = snapshot_time
@@ -563,6 +614,7 @@ begin
    'model', patient_model.model,
    'custom', p.scenario_model is not null,
    'elapsed', floor(t.seconds),
+   'first_triage_seconds', floor(extract(epoch from (p.first_triage_at - exercise.arrived_at))),
    'category', case when p.started_at is not null then traumasim_private.patient_category(
      patient_model.model, p.patient_key, p.scenario_model is not null, t.seconds,
      traumasim_private.vitals(patient_model.model, t.seconds)) end,
@@ -578,6 +630,7 @@ begin
  where p.session_id = exercise.id;
  return jsonb_build_object('id', exercise.id, 'title', exercise.title, 'case', exercise.case_key,
    'expires_at', exercise.expires_at, 'patients', result, 'triage_mode', exercise.triage_mode,
+   'arrived_at', exercise.arrived_at, 'server_time', snapshot_time,
    'join_code', traumasim_private.exercise_code(exercise.id, exercise.case_key, exercise.signing_key));
 end;
 $$;
@@ -1026,6 +1079,12 @@ create or replace function public.traumasim_student_assess(
  select traumasim_private.student_assess(p_case, p_patient, p_code, p_selection, p_seen_revision);
 $$;
 
+create or replace function public.traumasim_student_mark_triage(
+ p_case text, p_patient text, p_code text, p_seen_revision integer
+) returns jsonb language sql security invoker set search_path = '' as $$
+ select traumasim_private.student_mark_triage(p_case, p_patient, p_code, p_seen_revision);
+$$;
+
 create or replace function public.traumasim_trainer(
  p_action text default 'list', p_session uuid default null, p_patient text default null, p_title text default null
 ) returns jsonb language sql security invoker set search_path = '' as $$
@@ -1054,6 +1113,7 @@ revoke all on function public.traumasim_create_custom(jsonb) from public, anon, 
 revoke all on function public.traumasim_join(text) from public, anon, authenticated;
 revoke all on function public.traumasim_student(text, text, text, integer) from public, anon, authenticated;
 revoke all on function public.traumasim_student_assess(text, text, text, text, integer) from public, anon, authenticated;
+revoke all on function public.traumasim_student_mark_triage(text, text, text, integer) from public, anon, authenticated;
 revoke all on function public.traumasim_trainer(text, uuid, text, text) from public, anon, authenticated;
 grant usage on schema traumasim_private to anon, authenticated;
 grant execute on function traumasim_private.join_exercise(text) to anon, authenticated;
@@ -1063,6 +1123,8 @@ grant execute on function traumasim_private.trainer(text, uuid, text, text) to a
 grant execute on function public.traumasim_student(text, text, text, integer) to anon, authenticated;
 grant execute on function traumasim_private.student_assess(text, text, text, text, integer),
  public.traumasim_student_assess(text, text, text, text, integer) to anon, authenticated;
+grant execute on function traumasim_private.student_mark_triage(text, text, text, integer),
+ public.traumasim_student_mark_triage(text, text, text, integer) to anon, authenticated;
 grant execute on function traumasim_private.create_custom(jsonb) to authenticated;
 grant execute on function traumasim_private.book_bus(integer, uuid), public.traumasim_book_bus(integer, uuid) to authenticated;
 grant execute on function traumasim_private.book_car(jsonb, uuid), public.traumasim_book_car(jsonb, uuid) to authenticated;

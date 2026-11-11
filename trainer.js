@@ -36,6 +36,7 @@
   });
   let previewTime = 0;
   let previewTick = null;
+  let arrivalClock = null;
 
   if (new URLSearchParams(location.hash.slice(1)).has('access_token')) {
     history.replaceState(null, '', location.pathname + location.search);
@@ -177,6 +178,7 @@
     const triageMode = next?.triage_mode ?? 'automatic';
     if (changed || (exercise?.triage_mode ?? 'automatic') !== triageMode) el('triageMode').value = triageMode;
     exercise = next;
+    syncArrivalClock(next, changed);
     el('triageSettings').hidden = !next;
     el('activeExerciseTitle').textContent = next?.title ?? 'Keine Übung ausgewählt';
     lastOverviewUpdate = next ? Date.now() : 0;
@@ -207,6 +209,7 @@
       el('previewPatientLink').hidden = true;
       renderStation(null);
       resetPreview();
+      renderActions();
       return;
     }
     const choose = el('choose');
@@ -222,6 +225,32 @@
     el('expiry').textContent = 'Zugang gültig bis ' + new Date(next.expires_at).toLocaleString('de-DE');
     renderOverview(rebuild, changed);
     renderPatient();
+  }
+
+  function syncArrivalClock(next, exerciseChanged) {
+    const elapsed = Date.parse(next?.server_time) - Date.parse(next?.arrived_at);
+    if (Number.isFinite(elapsed)) {
+      const receivedAt = performance.now();
+      const sameArrival = !exerciseChanged && arrivalClock?.arrivedAt === next.arrived_at;
+      const previousElapsed = sameArrival ? arrivalClock.elapsed + receivedAt - arrivalClock.receivedAt : 0;
+      arrivalClock = { arrivedAt: next.arrived_at, elapsed: Math.max(elapsed, previousElapsed), receivedAt };
+    } else {
+      arrivalClock = null;
+    }
+    renderArrivalClock();
+  }
+
+  function renderArrivalClock() {
+    const field = el('arrivalClock');
+    const text = arrivalClock
+      ? api.clock(Math.max(0, arrivalClock.elapsed + performance.now() - arrivalClock.receivedAt) / 1000)
+      : '–';
+    if (field.textContent !== text) field.textContent = text;
+  }
+
+  function firstTriageLabel(patient) {
+    return patient.first_triage_seconds == null
+      ? '' : 'Erste Sichtung · ' + api.clock(patient.first_triage_seconds) + ' nach Eintreffen';
   }
 
   function renderOverviewSync(problem = '') {
@@ -548,7 +577,9 @@
       status.className = 'patient-runtime';
       const forecast = document.createElement('span');
       forecast.className = 'patient-forecast muted';
-      button.append(name, category, status, forecast);
+      const firstTriage = document.createElement('span');
+      firstTriage.className = 'patient-first-triage';
+      button.append(name, category, status, forecast, firstTriage);
       button.addEventListener('click', () => {
         el('choose').value = patient.id;
         el('choose').dispatchEvent(new Event('change'));
@@ -588,7 +619,7 @@
         if (!row.hidden) groupVisible++;
         if (patient.id === focusedId) focusedRow = row;
         const button = row.firstElementChild;
-        const [, category, status, forecast] = button.children;
+        const [, category, status, forecast, firstTriage] = button.children;
         const label = categoryLabels[patient.category];
         button.setAttribute('aria-pressed', String(patient.id === selected));
         category.className = label ? 'triage patient-category ' + patient.category : 'patient-category muted';
@@ -596,6 +627,8 @@
         status.textContent = api.labels[patient.status] + ' · ' + api.clock(patient.elapsed);
         forecast.textContent = forecastLabel(patient);
         forecast.hidden = !forecast.textContent;
+        firstTriage.textContent = firstTriageLabel(patient);
+        firstTriage.hidden = !firstTriage.textContent;
       }
       const groupCount = section.firstElementChild.lastElementChild;
       const text = (groupVisible === rows.length ? groupVisible : groupVisible + ' von ' + rows.length)
@@ -613,6 +646,7 @@
 
   function renderPatient() {
     const patient = selectedPatient();
+    renderActions(patient);
     if (!patient) return;
     const station = stationUrl(patient).href;
     const link = patientLink(station, patient);
@@ -640,10 +674,23 @@
     }
     el('patientStatus').textContent = [categoryLabels[patient.category], api.labels[patient.status],
       api.clock(patient.elapsed)].filter(Boolean).join(' · ');
+    el('patientTriageTime').textContent = firstTriageLabel(patient) || (exercise.arrived_at
+      ? 'Erste Sichtung noch offen.' : 'Erfasse zuerst das Eintreffen in der Übungssteuerung.');
+  }
+
+  function isExerciseAction(action) {
+    return ['reset_all', 'close', 'start_arrival', 'clear_arrival'].includes(action);
+  }
+
+  function renderActions(patient) {
     for (const button of actions) {
       const action = button.dataset.action;
-      button.disabled = busy || (action === 'pause' && patient.status !== 'running')
-        || (action === 'resume' && patient.status !== 'paused');
+      button.disabled = busy || !exercise || (!patient && !isExerciseAction(action))
+        || (action === 'pause' && patient?.status !== 'running')
+        || (action === 'resume' && patient?.status !== 'paused')
+        || (action === 'start_arrival' && Boolean(exercise.arrived_at))
+        || (action === 'clear_arrival' && !exercise.arrived_at)
+        || (action === 'mark_triage' && (!exercise.arrived_at || patient?.first_triage_seconds != null));
     }
   }
 
@@ -1405,14 +1452,15 @@
   for (const button of actions) {
     button.addEventListener('click', () => {
       const action = button.dataset.action;
-      const patient = selectedPatient();
-      if (!exercise || !patient || busy) return;
+      const patient = isExerciseAction(action) ? null : selectedPatient();
+      if (!exercise || busy || button.disabled) return;
       if (action.startsWith('reset') && !confirm(action === 'reset_all'
         ? 'Alle Patienten der Übung „' + exercise.title + '“ zurücksetzen?' : patientName(patient.id) + ' zurücksetzen?')) return;
       if (action === 'close' && !confirm('Übung „' + exercise.title + '“ beenden und alle Zugänge schließen?')) return;
+      if (action === 'clear_arrival' && !confirm('Zeitmessung und alle erfassten Sichtungszeiten zurücksetzen? Die Patientenverläufe laufen weiter.')) return;
       void run(async () => {
         if (action === 'close' && !await confirmCarChanges()) return;
-        const next = await rpc({ p_action: action, p_session: exercise.id, p_patient: patient.id });
+        const next = await rpc({ p_action: action, p_session: exercise.id, p_patient: patient?.id });
         if (next.closed) {
           const select = el('exercise');
           Array.from(select.options).find((option) => option.value === next.id)?.remove();
@@ -1423,6 +1471,9 @@
         }
         renderExercise(next);
         if (action.startsWith('reset')) message('Zurückgesetzt.');
+        if (action === 'start_arrival') message('Eintreffen erfasst.');
+        if (action === 'clear_arrival') message('Zeitmessung und Sichtungszeiten zurückgesetzt.');
+        if (action === 'mark_triage') message('Sichtung erfasst.');
       });
     });
   }
@@ -1454,6 +1505,7 @@
     drawPreview();
   });
   setInterval(() => {
+    if (arrivalClock) renderArrivalClock();
     if (previewTick === null) return;
     const now = performance.now();
     previewTime = Math.min(previewDuration, previewTime + (now - previewTick) / 1000 * Number(el('speed').value));

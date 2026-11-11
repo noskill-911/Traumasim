@@ -339,7 +339,15 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     if (snapshot?.triage_mode !== 'choose' || !snapshot.triage_selectable
       || (choice && !changingChoice) || !Object.hasOwn(triageLabels, selection)) return;
     restoreChoice();
-    if (!choice || changingChoice) saveChoice(selection);
+    if (!choice || changingChoice) {
+      if (!preview && code) {
+        // Mark the learner's click independently of the delayed comparison.
+        void api.studentMarkTriage({
+          p_case: caseId, p_patient: patientId, p_code: code, p_seen_revision: snapshot.revision
+        }).catch(() => {});
+      }
+      saveChoice(selection);
+    }
     changingChoice = false;
     render();
     el('triageOwnChoice').focus({ preventScroll: true });

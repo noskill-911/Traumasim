@@ -45,6 +45,13 @@
    Steuerung, QR-Code und Vorschau. Die Steuerung für die ganze Übung
    steht oben neben dem Übungs-QR. **Übung beenden** schließt die Übung
    samt QR-Zugängen.
+   **Eintreffen erfassen** startet die gemeinsame Stoppuhr. Die Übersicht
+   zeigt je Patient die Zeit vom Eintreffen bis zur ersten erfassten
+   Sichtung. In der Schüleransicht zählt die Auswahl der eigenen SK,
+   unabhängig von der Wartezeit auf die Soll-SK. Ausbilder können eine
+   Sichtung auch im Patientendetail erfassen. **Zeitmessung zurücksetzen**
+   löscht die Referenz und die gemessenen Zeiten. Die Patientenverläufe
+   laufen dabei weiter.
    Die **QR-Druckliste (A4)** kann alle Karten, ein Fahrzeug oder eine
    einzelne Station ausgeben. Auf jeder Karte stehen Übungsname und Gültigkeit.
 6. Die Übung ist auf 45 Minuten ausgelegt. Die Zeit zählt ab dem jeweiligen

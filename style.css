@@ -211,8 +211,12 @@ button:disabled { opacity: .55; cursor: default; }
 .patient-overview button[aria-pressed="true"] { background: #e0edf7; border-color: var(--blue); }
 .patient-overview strong { overflow-wrap: anywhere; }
 .patient-overview .patient-category { margin: 0; padding: .15rem .5rem; border-radius: .35rem; font-size: .85rem; justify-self: start; }
-.patient-runtime { font-variant-numeric: tabular-nums; }
-.patient-forecast { grid-column: 1 / -1; font-size: .85rem; }
+.patient-runtime, .patient-first-triage { font-variant-numeric: tabular-nums; }
+.patient-forecast, .patient-first-triage { grid-column: 1 / -1; font-size: .85rem; }
+.patient-first-triage { font-weight: 650; }
+.patient-triage-timing { margin: .7rem 0; }
+.patient-triage-timing p { margin: 0 0 .4rem; }
+.patient-triage-timing button { margin: 0; }
 @media (max-width: 620px) {
   .patient-overview button { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .patient-overview strong { grid-column: 1 / -1; }
@@ -247,6 +251,9 @@ input#caseTitle, #name, textarea { width: 100%; padding: .55rem; }
 .exercise-tool-actions button { margin: 0; }
 .exercise-tool-actions .exercise-end { background: var(--red); border-color: var(--red); }
 .exercise-tool-actions .exercise-end:not(:disabled):hover { background: #92112a; }
+.arrival-timer { margin-bottom: .75rem; padding-bottom: .75rem; border-bottom: 1px solid var(--line); }
+.arrival-timer p { display: flex; align-items: baseline; flex-wrap: wrap; gap: .25rem .7rem; margin: 0 0 .4rem; }
+#arrivalClock { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .exercise-tool #joinLink, .exercise-briefing { margin-top: .7rem; }
 .exercise-briefing summary { font-size: .85rem; }
 @media (min-width: 640px) {

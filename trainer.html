@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=vehicle-stations">
+  <link rel="stylesheet" href="style.css?v=arrival-clock">
 </head>
 <body><main class="trainer-shell">
   <section class="panel page-banner">
@@ -58,6 +58,13 @@
         </section>
         <section class="exercise-tool" aria-labelledby="exerciseActionsTitle">
           <h2 id="exerciseActionsTitle">Ganze Übung steuern</h2>
+          <div class="arrival-timer">
+            <p><span class="muted small">Seit Eintreffen</span> <span id="arrivalClock">–</span></p>
+            <div class="exercise-tool-actions">
+              <button id="startArrival" type="button" data-action="start_arrival" disabled>Eintreffen erfassen</button>
+              <button id="clearArrival" type="button" data-action="clear_arrival" disabled>Zeitmessung zurücksetzen</button>
+            </div>
+          </div>
           <div class="exercise-tool-actions">
             <button id="resetAll" type="button" data-action="reset_all">Ganze Übung zurücksetzen</button>
             <button id="closeExercise" class="exercise-end" type="button" data-action="close">Übung beenden</button>
@@ -262,6 +269,10 @@
         <h2>Patient im Detail</h2>
         <label>Patient auswählen <select id="choose"></select></label>
         <p id="patientStatus" aria-live="off"></p>
+        <div class="patient-triage-timing">
+          <p id="patientTriageTime" class="muted small"></p>
+          <button id="markTriage" type="button" data-action="mark_triage" disabled>Sichtung erfassen</button>
+        </div>
         <button id="pausePatient" data-action="pause">Patient pausieren</button>
         <button id="resumePatient" data-action="resume">Patient fortsetzen</button>
         <button id="resetPatient" data-action="reset">Patient zurücksetzen</button>
@@ -311,6 +322,6 @@
 <script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
 <script src="scenario-validation.js?v=triage"></script>
-<script src="trainer.js?v=vehicle-stations"></script>
+<script src="trainer.js?v=arrival-clock"></script>
 </body>
 </html>
