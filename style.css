@@ -372,6 +372,8 @@ button:disabled { opacity: .55; cursor: default; }
 .patient-overview button:not(:disabled):hover,
 .patient-overview button[aria-pressed="true"] { background: #e0edf7; border-color: var(--blue); }
 .patient-overview strong { overflow-wrap: anywhere; }
+.patient-station-label { display: block; font-weight: 400; }
+.patient-name-source { margin: .75rem 0 0; opacity: .85; overflow-wrap: anywhere; }
 .patient-overview .patient-category { margin: 0; padding: .15rem .5rem; border-radius: .35rem; font-size: .85rem; justify-self: start; }
 .patient-runtime, .patient-first-triage { font-variant-numeric: tabular-nums; }
 .patient-forecast, .patient-first-triage { grid-column: 1 / -1; font-size: .85rem; }

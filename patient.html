@@ -1,6 +1,6 @@
 <!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
-<title>TraumaSim · Patientenansicht</title><link rel="stylesheet" href="style.css?v=station-stories"></head><body><main id="content">
-<div class="panel page-banner"><div class="muted">TRAUMASIM · PATIENTENSIMULATION</div><h1 id="caseTitle">Übungslage</h1><h2 id="patientTitle"></h2><p id="intro"></p><p id="syncStatus" role="status">Verbindung zur Übung wird geprüft …</p>
+<title>TraumaSim · Patientenansicht</title><link rel="stylesheet" href="style.css?v=patient-identity"></head><body><main id="content">
+<div class="panel page-banner"><div class="muted">TRAUMASIM · PATIENTENSIMULATION</div><h1 id="caseTitle">Übungslage</h1><h2 id="patientTitle"></h2><p id="patientIdentityDetails" class="muted small" hidden></p><p id="intro"></p><p id="syncStatus" role="status">Verbindung zur Übung wird geprüft …</p>
 <p id="previewBanner" class="muted" hidden>Schüler-Vorschau · Der Verlauf wird hier nur angezeigt.</p>
 <p id="connectionNotice" class="warning" role="status" hidden></p>
 <button id="retryConnection" type="button" hidden>Erneut verbinden</button>
@@ -55,4 +55,5 @@
 <div id="storyPanel" class="panel" hidden><details open><summary>🗣 Patientenstory – Was ist passiert?</summary><blockquote id="story" class="story-text"></blockquote><p id="patientQuestions" hidden><strong>Auf Nachfrage:</strong> <span id="questions"></span></p></details></div>
 <div id="clockPanel" class="panel" hidden><div class="muted small">Gemeinsame Patientenzeit: <span id="elapsed">00:00</span></div></div>
 <p class="muted small">Nur für Ausbildung. Simulierte Werte und Kategorien sind keine klinische Prognose und keine validierte Umsetzung des Hamburger mSTaRT-Verfahrens.</p>
-</main><script src="patients.js?v=verkehrsunfall"></script><script src="supabase-config.js"></script><script src="sync.js?v=workflow-6"></script><script src="student.js?v=smooth-ecg"></script></body></html>
+<p id="patientIdentitySource" class="patient-name-source muted small" hidden></p>
+</main><script src="patients.js?v=patient-identity"></script><script src="supabase-config.js"></script><script src="sync.js?v=patient-identity"></script><script src="student.js?v=patient-identity"></script></body></html>

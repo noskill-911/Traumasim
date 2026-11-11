@@ -35,7 +35,8 @@ alter table public.traumasim_sessions
 alter table public.traumasim_patients
  add column if not exists revision integer not null default 0,
  add column if not exists scenario_model jsonb,
- add column if not exists first_triage_at timestamptz;
+ add column if not exists first_triage_at timestamptz,
+ add column if not exists identity_profile jsonb;
 create index if not exists traumasim_sessions_trainer on public.traumasim_sessions (trainer_id, created_at desc);
 
 alter table public.traumasim_sessions enable row level security;
@@ -83,6 +84,149 @@ alter table traumasim_private.bus_templates enable row level security;
 alter table traumasim_private.trainers enable row level security;
 alter table traumasim_private.models enable row level security;
 revoke all on all tables in schema traumasim_private from public, anon, authenticated;
+
+create or replace function traumasim_private.draw_patient_identity(p_session uuid)
+returns jsonb language sql volatile set search_path = '' as $$
+ -- Hamburg's Landeszentrale für politische Bildung and the Lexikon der Feuerwehr Hamburg.
+ with names(full_name, gender, street) as (values
+   ('Abelke Bleken', 'weiblich', 'Abelke-Bleken-Ring'), -- https://hamburg-strassennamen.de/item/23--abelke-bleken-ring
+   ('Agathe Lasch', 'weiblich', 'Agathe-Lasch-Weg'), -- https://hamburg-strassennamen.de/item/16--agathe-lasch-weg
+   ('Agnes Gierck', 'weiblich', 'Agnes-Gierck-Weg'), -- https://hamburg-strassennamen.de/item/18--agnes-gierck-weg
+   ('Agnes Wolffson', 'weiblich', 'Agnes-Wolffson-Straße'), -- https://hamburg-strassennamen.de/item/20--agnes-wolffson-strasse
+   ('Albert Ballin', 'männlich', 'Am Ballinkai'), -- https://hamburg-strassennamen.de/item/58--am-ballinkai
+   ('Albertine Assor', 'weiblich', 'Albertine-Assor-Straße'), -- https://hamburg-strassennamen.de/item/30--albertine-assor-strasse
+   ('Alexander Conze', 'männlich', 'Conzestraße'), -- https://hamburg-strassennamen.de/item/479--conzestrasse
+   ('Alma Ohlmann', 'weiblich', 'Alma-Ohlmann-Weg'), -- https://hamburg-strassennamen.de/item/2542--alma-ohlmann-weg
+   ('Alma Wartenberg', 'weiblich', 'Alma-Wartenberg-Platz'), -- https://hamburg-strassennamen.de/item/51--alma-wartenberg-platz
+   ('Alwin Lippert', 'männlich', 'Alwin-Lippert-Weg'), -- https://hamburg-strassennamen.de/item/56--alwin-lippert-weg
+   ('Amalie Dietrich', 'weiblich', 'Amalie-Dietrich-Stieg'), -- https://hamburg-strassennamen.de/item/77--amalie-dietrich-stieg
+   ('Amalie Sieveking', 'weiblich', 'Amalie-Sieveking-Weg und Sievekingdamm'), -- https://hamburg-strassennamen.de/item/2833--sievekingdamm
+   ('Amália Rodrigues', 'weiblich', 'Amalia-Rodrigues-Weg'), -- https://hamburg-strassennamen.de/item/76--amalia-rodrigues-weg
+   ('Annie Kienast', 'weiblich', 'Annie-Kienast-Straße'), -- https://hamburg-strassennamen.de/item/111--annie-kienast-strasse
+   ('Anny Ahlers', 'weiblich', 'Anny-Ahlers-Weg'), -- https://hamburg-strassennamen.de/item/2620--anny-ahlers-weg
+   ('Anny Tollens', 'weiblich', 'Anny-Tollens-Weg'), -- https://hamburg-strassennamen.de/item/112--anny-tollens-weg
+   ('August Böhme', 'männlich', 'Böhmestraße'), -- https://epub.sub.uni-hamburg.de/epub/volltexte/2013/25292/pdf/Lexikon_der_Hamburger_Feuerwehr.pdf
+   ('Auguste Caecilie Baur', 'weiblich', 'Auguste-Baur-Straße'), -- https://hamburg-strassennamen.de/item/159--auguste-baur-strasse
+   ('Auguste Schmidt', 'weiblich', 'Auguste-Schmidt-Weg'), -- https://hamburg-strassennamen.de/item/162--auguste-schmidt-weg
+   ('Carl von Ossietzky', 'männlich', 'Ossietzkystraße'), -- https://www.hamburg.de/521446
+   ('Catharina Fellendorf', 'weiblich', 'Catharina-Fellendorf-Straße'), -- https://hamburg-strassennamen.de/item/446--catharina-fellendorf-strasse
+   ('Charlotte Mügge', 'weiblich', 'Charlotte-Mügge-Weg'), -- https://hamburg-strassennamen.de/item/453--charlotte-muegge-weg
+   ('Charlotte Niese', 'weiblich', 'Charlotte-Niese-Straße'), -- https://hamburg-strassennamen.de/item/454--charlotte-niese-strasse
+   ('Christoph Probst', 'männlich', 'Christoph-Probst-Weg'), -- https://hamburg-strassennamen.de/item/466--christoph-probst-weg
+   ('Christopher Johann Hennig Harms', 'männlich', 'Christopher-Harms-Weg'), -- https://hamburg-strassennamen.de/item/465--christopher-harms-weg
+   ('Clemens Schultz', 'männlich', 'Clemens-Schultz-Straße'), -- https://hamburg-strassennamen.de/item/475--clemens-schultz-strasse
+   ('Cord Dreyer', 'männlich', 'Cord-Dreyer-Weg'), -- https://hamburg-strassennamen.de/item/480--cord-dreyer-weg
+   ('Edvard Grieg', 'männlich', 'Griegstraße'), -- https://hamburg-strassennamen.de/item/963--griegstrasse
+   ('Elfriede Land', 'weiblich', 'Elfriede-Land-Weg'), -- https://hamburg-strassennamen.de/item/635--elfriede-land-weg
+   ('Elfriede Lohse-Wächtler', 'weiblich', 'Elfriede-Lohse-Wächtler-Weg'), -- https://hamburg-strassennamen.de/item/636--elfriede-lohse-waechtler-weg
+   ('Elisabeth Flügge', 'weiblich', 'Elisabeth-Flügge-Straße'), -- https://hamburg-strassennamen.de/item/640--elisabeth-fluegge-strasse
+   ('Elisabeth Lange', 'weiblich', 'Elisabeth-Lange-Weg'), -- https://hamburg-strassennamen.de/item/641--elisabeth-lange-weg
+   ('Elisabeth Thomann', 'weiblich', 'Elisabeth-Thomann-Weg'), -- https://hamburg-strassennamen.de/item/643--elisabeth-thomann-weg
+   ('Elisabeth Will', 'weiblich', 'Elisabeth-Will-Straße'), -- https://hamburg-strassennamen.de/item/3234--elisabeth-will-strasse
+   ('Elise Averdieck', 'weiblich', 'Elise-Averdieck-Straße'), -- https://hamburg-strassennamen.de/item/645--elise-averdieck-strasse
+   ('Elly Heuss-Knapp', 'weiblich', 'Elly-Heuss-Knapp-Ring'), -- https://hamburg-strassennamen.de/item/650--elly-heuss-knapp-ring
+   ('Elly See', 'weiblich', 'Elly-See-Straße'), -- https://hamburg-strassennamen.de/item/651--elly-see-strasse
+   ('Elsa Bauer', 'weiblich', 'Elsa-Bauer-Weg'), -- https://hamburg-strassennamen.de/item/654--elsa-bauer-weg
+   ('Ernst Cordua', 'männlich', 'Corduaweg'), -- https://hamburg-strassennamen.de/item/482--corduaweg
+   ('Eva Rühmkorf', 'weiblich', 'Eva-Rühmkorf-Straße'), -- https://hamburg-strassennamen.de/item/728--eva-ruehmkorf-strasse
+   ('Fanny David', 'weiblich', 'Fanny-David-Weg'), -- https://hamburg-strassennamen.de/item/738--fanny-david-weg
+   ('Fanny Hensel', 'weiblich', 'Fanny-Mendelssohn-Platz'), -- https://hamburg-strassennamen.de/item/741--fanny-mendelssohn-platz
+   ('Fanny Lewald', 'weiblich', 'Fanny-Lewald-Ring'), -- https://hamburg-strassennamen.de/item/740--fanny-lewald-ring
+   ('Felicitas Kukuck', 'weiblich', 'Felicitas-Kukuck-Straße'), -- https://hamburg-strassennamen.de/item/751--felicitas-kukuck-strasse
+   ('Ferdinand Laeisz', 'männlich', 'Laeiszstraße'), -- https://hamburg-strassennamen.de/item/1649--laeiszstrasse
+   ('Flora Neumann', 'weiblich', 'Flora-Neumann-Straße'), -- https://hamburg-strassennamen.de/item/775--flora-neumann-strasse
+   ('Franz Carl Friedrich Chrysander', 'männlich', 'Chrysanderstraße'), -- https://hamburg-strassennamen.de/item/467--chrysanderstrasse
+   ('Frieda Hertha Martha Wieking', 'weiblich', 'Frieda-Wieking-Stieg'), -- https://hamburg-strassennamen.de/item/798--frieda-wieking-stieg
+   ('Friedrich von Esmarch', 'männlich', 'Esmarchstraße'), -- https://hamburg-strassennamen.de/item/722--esmarchstrasse
+   ('Gerhard Mercator', 'männlich', 'Merkatorweg'), -- https://hamburg-strassennamen.de/item/1903--merkatorweg
+   ('Giacomo Meyerbeer', 'männlich', 'Meyerbeerstraße'), -- https://hamburg-strassennamen.de/item/1913--meyerbeerstrasse
+   ('Hans Scholl', 'männlich', 'Geschwister-Scholl-Straße'), -- https://geschichtswerkstatt-eppendorf.de/denkmaeler/verhoerzelle/
+   ('Helene Lange', 'weiblich', 'Helene-Lange-Straße'), -- https://hamburg-strassennamen.de/item/1195--helene-lange-strasse
+   ('Helga Feddersen', 'weiblich', 'Helga-Feddersen-Twiete'), -- https://hamburg-strassennamen.de/item/1154--helga-feddersen-twiete
+   ('Helma Steinbach', 'weiblich', 'Helma-Steinbach-Weg'), -- https://hamburg-strassennamen.de/item/1203--helma-steinbach-weg
+   ('Henry Bengelsdorf', 'männlich', 'Bengelsdorfstieg'), -- https://hamburg-strassennamen.de/item/258--bengelsdorfstieg
+   ('Herbert Pardo', 'männlich', 'Herbert-Pardo-Weg'), -- https://hamburg-strassennamen.de/item/1219--herbert-pardo-weg
+   ('Hermann Blohm', 'männlich', 'Hermann-Blohm-Straße'), -- https://hamburg-strassennamen.de/item/1231--hermann-blohm-strasse
+   ('Hermann Krüger', 'männlich', 'Hermann-Krüger-Platz'), -- https://hamburg-strassennamen.de/item/2982--hermann-krueger-platz
+   ('Hugo Groothoff', 'männlich', 'Groothoffgasse'), -- https://hamburg-strassennamen.de/item/970--groothoffgasse
+   ('Ida Ehre', 'weiblich', 'Ida-Ehre-Platz'), -- https://filmmuseum-hamburg.de/personen/d-g/ida-ehre.html
+   ('Jens Jacob Eschels', 'männlich', 'Eschelsweg'), -- https://hamburg-strassennamen.de/item/721--eschelsweg
+   ('Joachim Jungius', 'männlich', 'Jungiusstraße'), -- https://hamburg-strassennamen.de/item/1436--jungiusstrasse
+   ('Johann Amos Comenius', 'männlich', 'Comeniusplatz'), -- https://hamburg-strassennamen.de/item/476--comeniusplatz
+   ('Johann Ehlert Bieber', 'männlich', 'Bieberstraße'), -- https://epub.sub.uni-hamburg.de/epub/volltexte/2013/25292/pdf/Lexikon_der_Hamburger_Feuerwehr.pdf
+   ('Johann Georg Repsold', 'männlich', 'Repsoldstraße'), -- https://epub.sub.uni-hamburg.de/epub/volltexte/2013/25292/pdf/Lexikon_der_Hamburger_Feuerwehr.pdf
+   ('Johannes Classen', 'männlich', 'Classenstieg'), -- https://hamburg-strassennamen.de/item/470--classenstieg
+   ('Julius Vosseler', 'männlich', 'Julius-Vosseler-Straße'), -- https://hamburg-strassennamen.de/item/1429--julius-vosseler-strasse
+   ('Justus Brinckmann', 'männlich', 'Justus-Brinckmann-Straße'), -- https://hamburg-strassennamen.de/item/1441--justus-brinckmann-strasse
+   ('Jürgen Fehling', 'männlich', 'Fehlinghöhe'), -- https://hamburg-strassennamen.de/item/745--fehlinghoehe
+   ('Jürgen Töpfer', 'männlich', 'Jürgen-Töpfer-Straße'), -- https://hamburg-strassennamen.de/item/1415--juergen-toepfer-strasse
+   ('Katharina Jacob', 'weiblich', 'Katharina-Jacob-Weg'), -- https://hamburg-strassennamen.de/item/1495--katharina-jacob-weg
+   ('Kurt Emmerich', 'männlich', 'Kurt-Emmerich-Platz'), -- https://hamburg-strassennamen.de/item/1638--kurt-emmerich-platz
+   ('Kurt-Adolf Körber', 'männlich', 'Kurt-A.-Körber-Chaussee'), -- https://hamburg-strassennamen.de/item/1635--kurt-a-koerber-chaussee
+   ('Käte Latzke', 'weiblich', 'Käte-Latzke-Weg'), -- https://hamburg-strassennamen.de/item/1449--kaete-latzke-weg
+   ('Lazarus Ludwig Zamenhof', 'männlich', 'Zamenhofweg'), -- https://hamburg-strassennamen.de/item/2248--zamenhofweg
+   ('Leo Fall', 'männlich', 'Fallstraße'), -- https://hamburg-strassennamen.de/item/737--fallstrasse
+   ('Leonhard Euler', 'männlich', 'Eulerweg'), -- https://hamburg-strassennamen.de/item/724--eulerweg
+   ('Lovis Corinth', 'männlich', 'Corinthstraße'), -- https://hamburg-strassennamen.de/item/483--corinthstrasse
+   ('Margaretha Rothe', 'weiblich', 'Margaretha-Rothe-Weg'), -- https://hamburg-strassennamen.de/item/1815--margaretha-rothe-weg
+   ('Margaretha Treuge', 'weiblich', 'Margaretha-Treuge-Weg'), -- https://hamburg-strassennamen.de/item/1816--margaretha-treuge-weg
+   ('Marianne Timm', 'weiblich', 'Marianne-Timm-Weg'), -- https://hamburg-strassennamen.de/item/1823--marianne-timm-weg
+   ('Marie Bautz', 'weiblich', 'Marie-Bautz-Weg'), -- https://hamburg-strassennamen.de/item/2289--marie-bautz-weg
+   ('Marie-Anna Jonas', 'weiblich', 'Marie-Jonas-Platz'), -- https://hamburg-strassennamen.de/item/1827--marie-jonas-platz
+   ('Matthias Claudius', 'männlich', 'Claudiusstraße'), -- https://hamburg-strassennamen.de/item/473--claudiusstrasse
+   ('Maud Hester von Ossietzky', 'weiblich', 'Ossietzkystraße'), -- https://www.hamburg.de/521446
+   ('Nikolaus Falck', 'männlich', 'Falckweg'), -- https://hamburg-strassennamen.de/item/735--falckweg
+   ('Ottmar Mergenthaler', 'männlich', 'Mergenthalerweg'), -- https://hamburg-strassennamen.de/item/1902--mergenthalerweg
+   ('Otto Meyerhof', 'männlich', 'Meyerhofstraße'), -- https://hamburg-strassennamen.de/item/1915--meyerhofstrasse
+   ('Peter Schulz', 'männlich', 'Peter-Schulz-Platz'), -- https://hamburg-strassennamen.de/item/3366--peter-schulz-platz
+   ('Philipp Otto Runge', 'männlich', 'Rungestieg'), -- https://hamburg-strassennamen.de/item/2527--rungestieg
+   ('Ralph Benatzky', 'männlich', 'Benatzkyweg'), -- https://hamburg-strassennamen.de/item/256--benatzkyweg
+   ('Ricarda Huch', 'weiblich', 'Ricarda-Huch-Ring'), -- https://hamburg-strassennamen.de/item/2435--ricarda-huch-ring
+   ('Salomon Heine', 'männlich', 'Salomon-Heine-Weg'), -- https://hamburg-strassennamen.de/item/2691--salomon-heine-weg
+   ('Siegfried Detlev Bendixen', 'männlich', 'Bendixensweg'), -- https://hamburg-strassennamen.de/item/257--bendixensweg
+   ('Sophie Scholl', 'weiblich', 'Geschwister-Scholl-Straße'), -- https://geschichtswerkstatt-eppendorf.de/denkmaeler/verhoerzelle/
+   ('Stefan Zweig', 'männlich', 'Stefan-Zweig-Straße'), -- https://hamburg-strassennamen.de/item/2905--stefan-zweig-strasse
+   ('Thomas Herbst', 'männlich', 'Herbstsweg'), -- https://hamburg-strassennamen.de/item/1225--herbstsweg
+   ('Traute Lafrenz', 'weiblich', 'Traute-Lafrenz-Straße'), -- https://hamburg-strassennamen.de/item/3569--traute-lafrenz-strasse
+   ('Walter Bärsch', 'männlich', 'Walter-Bärsch-Weg') -- https://hamburg-strassennamen.de/item/2569--walter-baersch-weg
+ )
+ select jsonb_build_object('name', candidate.full_name, 'gender', candidate.gender,
+   'age', 16 + floor(random() * 57)::integer, 'name_source', candidate.street)
+ from names candidate
+ order by exists (
+   select 1 from public.traumasim_patients p
+   where p.session_id = p_session and p.identity_profile->>'name' = candidate.full_name
+ ), random()
+ limit 1;
+$$;
+
+create or replace function traumasim_private.assign_patient_identity()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+ -- Serialize draws for the same exercise, including multi-patient inserts.
+ perform 1 from public.traumasim_sessions s where s.id = new.session_id for update;
+ new.identity_profile := traumasim_private.draw_patient_identity(new.session_id);
+ return new;
+end;
+$$;
+
+create or replace trigger traumasim_assign_patient_identity
+before insert on public.traumasim_patients
+for each row execute function traumasim_private.assign_patient_identity();
+
+do $backfill$
+declare
+ patient record;
+begin
+ for patient in select id, session_id from public.traumasim_patients
+   where identity_profile is null order by session_id, patient_key loop
+   update public.traumasim_patients
+   set identity_profile = traumasim_private.draw_patient_identity(patient.session_id)
+   where id = patient.id;
+ end loop;
+end;
+$backfill$;
+alter table public.traumasim_patients alter column identity_profile set not null;
 
 insert into traumasim_private.models values ('vu-baum', 'fahrer', $model${"nibpFastCycle":true,"secret":"Verdacht auf Becken- und Oberschenkelverletzung mit innerer Blutung.","points":[{"t":0,"s":125,"d":80,"h":95,"r":20,"o":98,"g":15},{"t":5,"s":120,"d":75,"h":105,"r":23,"o":97,"g":15},{"t":10,"s":105,"d":65,"h":118,"r":26,"o":97,"g":15},{"t":15,"s":90,"d":55,"h":130,"r":29,"o":96,"g":14},{"t":20,"s":75,"d":45,"h":145,"r":32,"o":95,"g":12},{"t":25,"s":65,"d":40,"h":152,"r":34,"o":93,"g":9}],"condition":["Wach, orientiert, starke Schmerzen im Bein.","Blass, unruhig, Schwindel und Durst.","Kaltschweißig, schwacher Radialispuls, zunehmend verwirrt.","Bewusstseinsgetrübt, kaum adäquate Antworten."]}$model$)
 on conflict (case_key, patient_key) do update set model = excluded.model;
@@ -523,6 +667,7 @@ begin
  can_select := exercise.triage_mode = 'choose' and seconds >= 10;
  return jsonb_build_object(
    'exercise_id', exercise.id,
+   'identity', patient.identity_profile,
    'revision', patient.revision,
    'status', case when patient.started_at is null then 'ready'
      when seconds >= duration then 'finished' when patient.paused_at is not null then 'paused' else 'running' end,
@@ -728,6 +873,7 @@ returns jsonb language sql stable set search_path = '' as $$
    'patients', coalesce((
      select jsonb_agg(jsonb_build_object(
        'id', p.patient_key,
+       'identity', p.identity_profile,
        'name', coalesce(nullif(patient_model.model->>'name', ''), case
          when p_exercise.case_key = 'vu-baum' and p.patient_key = 'fahrer' then 'Fahrer'
          when p_exercise.case_key = 'vu-baum' and p.patient_key = 'beifahrer' then 'Beifahrer'
@@ -1005,6 +1151,7 @@ begin
  snapshot_time := clock_timestamp();
  select jsonb_agg(jsonb_build_object(
    'id', p.patient_key,
+   'identity', p.identity_profile,
    'code', traumasim_private.patient_code(exercise.id, p.patient_key, exercise.signing_key),
    'preview_code', traumasim_private.preview_code(exercise.id, p.patient_key, exercise.signing_key),
    'model', patient_model.model,

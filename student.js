@@ -218,8 +218,16 @@
 
   function render() {
     const brief = snapshot && (snapshot.brief ?? preset);
+    const identity = snapshot?.identity;
     el('caseTitle').textContent = brief?.title ?? defaultTitle;
-    el('patientTitle').textContent = brief?.name ?? preset?.name ?? 'Übungspatient';
+    const stationName = brief?.name ?? preset?.name;
+    el('patientTitle').textContent = identity?.name ?? stationName ?? 'Übungspatient';
+    const details = el('patientIdentityDetails');
+    details.textContent = [api.identityDetails(identity), identity ? stationName : ''].filter(Boolean).join(' · ');
+    details.hidden = !details.textContent;
+    const source = el('patientIdentitySource');
+    source.textContent = identity ? 'Namensbezug · ' + identity.name_source : '';
+    source.hidden = !identity;
     el('intro').textContent = brief?.intro ?? '';
     const story = brief?.story ?? '';
     const questions = brief?.questions ?? '';

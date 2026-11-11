@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=trainer-usability-qr">
+  <link rel="stylesheet" href="style.css?v=patient-identity">
 </head>
 <body><main class="trainer-shell">
   <section class="panel page-banner trainer-banner">
@@ -309,6 +309,7 @@
         <div id="patientDetail" class="patient-detail" role="region" aria-labelledby="patientDetailTitle" hidden>
           <section id="patientControls" class="panel" hidden>
             <h2 id="patientDetailTitle" tabindex="-1"></h2>
+            <p id="patientIdentityDetails" class="muted small" hidden></p>
             <button id="backToPatients" class="action-secondary patient-back" type="button">Zur Patientenliste</button>
             <select id="choose" aria-label="Ausgewählter Patient" hidden></select>
             <p id="patientStatus" aria-live="off"></p>
@@ -358,6 +359,7 @@
             </div>
             <div class="grid" id="vitals"></div>
           </details>
+          <p id="patientIdentitySource" class="patient-name-source muted small" hidden></p>
         </div>
       </div>
     </div>
@@ -454,9 +456,9 @@
 <div id="exercisePrint" class="exercise-print"></div>
 <script src="patients.js?v=verkehrsunfall"></script>
 <script src="supabase-config.js"></script>
-<script src="sync.js?v=car"></script>
+<script src="sync.js?v=patient-identity"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
 <script src="scenario-validation.js?v=triage"></script>
-<script src="trainer.js?v=trainer-usability"></script>
+<script src="trainer.js?v=patient-identity"></script>
 </body>
 </html>

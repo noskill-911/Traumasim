@@ -86,6 +86,11 @@
     return seat ? 'Pkw ' + model.car_number + ' – ' + seat : name;
   }
 
+  function patientOptionLabel(patient) {
+    const station = patientName(patient.id);
+    return patient.identity ? patient.identity.name + ' · ' + station : station;
+  }
+
   function carSeatName(model) {
     const legacySeat = model.name?.split(' · ').at(-1).replace(/platz$/i, '').trim().toLowerCase();
     return carSeatNames[model.car_seat] ?? Object.values(carSeatNames)
@@ -262,9 +267,9 @@
     const choose = el('choose');
     const rebuild = changed || choose.options.length !== next.patients.length
       || next.patients.some((patient, index) => choose.options[index].value !== patient.id
-        || choose.options[index].textContent !== patientName(patient.id));
+        || choose.options[index].textContent !== patientOptionLabel(patient));
     if (rebuild) {
-      choose.replaceChildren(...next.patients.map((patient) => new Option(patientName(patient.id), patient.id)));
+      choose.replaceChildren(...next.patients.map((patient) => new Option(patientOptionLabel(patient), patient.id)));
       choose.value = next.patients.some((patient) => patient.id === previous) ? previous : next.patients[0]?.id ?? '';
       if (changed || previous !== choose.value) {
         setPatientDetailOpen(false);
@@ -647,7 +652,14 @@
       button.type = 'button';
       button.setAttribute('aria-controls', 'patientDetail');
       const name = document.createElement('strong');
-      name.textContent = patientName(patient.id);
+      const station = patientName(patient.id);
+      name.textContent = patient.identity?.name ?? station;
+      if (patient.identity) {
+        const stationLabel = document.createElement('span');
+        stationLabel.className = 'patient-station-label muted small';
+        stationLabel.textContent = station;
+        name.append(stationLabel);
+      }
       const category = document.createElement('span');
       const status = document.createElement('span');
       status.className = 'patient-runtime';
@@ -728,12 +740,20 @@
       detailPanel.dataset.patientId = patient.id;
     }
     const title = el('patientDetailTitle');
-    const name = patientName(patient.id);
+    const stationName = patientName(patient.id);
+    const identity = patient.identity;
+    const name = identity?.name ?? stationName;
     if (title.textContent !== name) title.textContent = name;
+    const details = el('patientIdentityDetails');
+    details.textContent = identity ? api.identityDetails(identity) + ' · ' + stationName : '';
+    details.hidden = !identity;
+    const source = el('patientIdentitySource');
+    source.textContent = identity ? 'Namensbezug · ' + identity.name_source : '';
+    source.hidden = !identity;
     const station = stationUrl(patient).href;
     const link = patientLink(station, patient);
     const numberedStation = patient.model?.car_number != null;
-    el('stationTitle').textContent = numberedStation ? patientName(patient.id) : 'Stations-QR für diesen Patienten';
+    el('stationTitle').textContent = numberedStation ? stationName : 'Stations-QR für diesen Patienten';
     const { detail, place, placeLabel = 'Auffindeort' } = stationLabel(patient);
     const location = el('stationLocation');
     location.textContent = [detail, place ? placeLabel + ' · ' + place : ''].filter(Boolean).join(' · ');
@@ -1065,7 +1085,8 @@
       const row = document.createElement('tr');
       const name = document.createElement('th');
       name.scope = 'row';
-      name.textContent = patient.name;
+      const labelText = patient.identity ? patient.identity.name + ' · ' + patient.name : patient.name;
+      name.textContent = labelText;
       const category = document.createElement('td');
       const label = categoryLabels[patient.category];
       const badge = document.createElement('span');
@@ -1084,7 +1105,7 @@
         row.append(cell);
       }
       rows.push(row);
-      cards.push(archivePatientCard(patient.name, badge, fields));
+      cards.push(archivePatientCard(labelText, badge, fields));
     }
     el('archiveReportPatients').replaceChildren(...rows);
     el('archiveReportCards').replaceChildren(...cards);
@@ -2292,7 +2313,7 @@
       const patient = isExerciseAction(action) ? null : selectedPatient();
       if (action.startsWith('reset') && !confirm(action === 'reset_all'
         ? 'Übung „' + exercise.title + '“ zurücksetzen? Alle Patientenverläufe, die Eintreffzeit und die erfassten Sichtungszeiten werden zurückgesetzt.'
-        : patientName(patient.id) + ' zurücksetzen? Verlauf und erfasste Sichtungszeit werden zurückgesetzt.')) return;
+        : patientOptionLabel(patient) + ' zurücksetzen? Verlauf und erfasste Sichtungszeit werden zurückgesetzt.')) return;
       if (action === 'clear_arrival' && !confirm('Zeitmessung und alle erfassten Sichtungszeiten zurücksetzen? Die Patientenverläufe laufen weiter.')) return;
       void run(async () => {
         const next = await rpc({ p_action: action, p_session: exercise.id, p_patient: patient?.id });

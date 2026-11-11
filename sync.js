@@ -50,6 +50,7 @@
     signUp: (email, password, redirect) => request('/auth/v1/signup?redirect_to=' + encodeURIComponent(redirect), { email, password }),
     refresh: (refresh_token) => request('/auth/v1/token?grant_type=refresh_token', { refresh_token }),
     signOut: (token) => request('/auth/v1/logout?scope=local', {}, token),
+    identityDetails: (identity) => identity ? identity.age + ' Jahre · ' + identity.gender : '',
     clock: (seconds) => {
       const minutes = Math.floor(seconds / 60);
       const remainder = Math.floor(seconds % 60);
