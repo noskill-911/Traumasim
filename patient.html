@@ -1,5 +1,5 @@
 <!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
-<title>TraumaSim · Patientenansicht</title><link rel="stylesheet" href="style.css?v=vehicle-stations"></head><body><main id="content">
+<title>TraumaSim · Patientenansicht</title><link rel="stylesheet" href="style.css?v=station-stories"></head><body><main id="content">
 <div class="panel page-banner"><div class="muted">TRAUMASIM · PATIENTENSIMULATION</div><h1 id="caseTitle">Übungslage</h1><h2 id="patientTitle"></h2><p id="intro"></p><p id="syncStatus" role="status">Verbindung zur Übung wird geprüft …</p>
 <p id="previewBanner" class="muted" hidden>Schüler-Vorschau · Der Verlauf wird hier nur angezeigt.</p>
 <p id="connectionNotice" class="warning" role="status" hidden></p>
@@ -52,7 +52,7 @@
 <div class="monitor-value resp"><span>AF <small>/min</small></span><strong id="rr"></strong></div>
 </div></div>
 <div class="monitor-footer"><div class="monitor-bp"><span>NIBP · mmHg</span><strong id="bp"></strong><div class="muted small" id="bpTime" hidden></div><div class="muted small" id="bpPrevious" hidden></div><div class="muted small" id="bpNext" hidden></div></div><div class="monitor-gcs"><span>GCS</span><strong id="gcs"></strong><small>/15</small></div></div></div><p class="muted small">Die Kurven sind schematisch animiert und nicht aus echten EKG- oder Sensordaten abgeleitet.</p></div>
-<div id="storyPanel" class="panel" hidden><details open><summary>🗣 Patientenstory – Was ist passiert?</summary><blockquote id="story"></blockquote><p><strong>Auf Nachfrage:</strong> <span id="questions"></span></p></details></div>
+<div id="storyPanel" class="panel" hidden><details open><summary>🗣 Patientenstory – Was ist passiert?</summary><blockquote id="story" class="story-text"></blockquote><p id="patientQuestions" hidden><strong>Auf Nachfrage:</strong> <span id="questions"></span></p></details></div>
 <div id="clockPanel" class="panel" hidden><div class="muted small">Gemeinsame Patientenzeit: <span id="elapsed">00:00</span></div></div>
 <p class="muted small">Nur für Ausbildung. Simulierte Werte und Kategorien sind keine klinische Prognose und keine validierte Umsetzung des Hamburger mSTaRT-Verfahrens.</p>
-</main><script src="patients.js"></script><script src="supabase-config.js"></script><script src="sync.js?v=workflow-6"></script><script src="student.js?v=triage-timing"></script></body></html>
+</main><script src="patients.js"></script><script src="supabase-config.js"></script><script src="sync.js?v=workflow-6"></script><script src="student.js?v=station-stories"></script></body></html>

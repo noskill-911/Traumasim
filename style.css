@@ -116,6 +116,7 @@ input[type="range"] { width: 100%; accent-color: var(--blue); }
 :focus-visible { outline: 3px solid #0070bc; outline-offset: 3px; }
 .clock { font-size: 2rem; font-variant-numeric: tabular-nums; }
 blockquote { margin: .75rem 0; padding: .65rem .85rem; border-left: 3px solid var(--blue); background: var(--surface-soft); }
+.story-text { white-space: pre-line; overflow-wrap: anywhere; }
 details summary { color: var(--navy); cursor: pointer; font-weight: 700; }
 a { color: var(--blue); }
 .hidden { display: none !important; }

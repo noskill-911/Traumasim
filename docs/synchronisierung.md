@@ -37,8 +37,8 @@
    zeigt der Name den Sitzplatz, zum Beispiel **Pkw 1 – Fahrer**.
    Die Übersicht zeigt den Status, die Zeit seit Patientenstart
    und bei gestarteten Patienten die aktuelle Sichtungskategorie im
-   Übungsmodell. Sie kann nach Fahrzeug, aktueller Sichtung und
-   Startstatus gefiltert werden. Über der Liste steht die Uhrzeit des letzten
+   Übungsmodell. Sie kann nach aktueller Sichtung und Startstatus gefiltert
+   werden. Über der Liste steht die Uhrzeit des letzten
    erfolgreichen Abrufs. Bei einer Unterbrechung bleiben die zuletzt
    geladenen Daten sichtbar und sind als veraltet gekennzeichnet.
    Ein Klick auf den Patienten öffnet seine Auswahl für
@@ -118,10 +118,12 @@ Beschreibung und die Fahrzeuglage können ergänzt werden. **SK B · Betroffene*
 und **SK Schwarz** sind auch als feste Profile wählbar. Die Profile
 **SK III → SK II**, **SK II → SK I** und **SK I → SK Schwarz** wechseln
 zur per Schieberegler gewählten Minute ab Patientenstart (Minute 1 bis 44). Voreingestellt
-sind 12, 6 beziehungsweise 8 Minuten. Bei **SK III → SK II** kann die
-Person anfangs gehen. Mit zunehmender Schwellung und Schmerzen am
-Unterschenkel kann sie später nicht mehr auftreten. Bei **SK III → SK II**
+sind 12, 6 beziehungsweise 8 Minuten. Bei **SK III → SK II**
 und **SK II → SK I** entwickelt sich der Verlauf bis Minute 45 weiter.
+Die Standardstory berücksichtigt den Sitzplatz, die Befreiungslage und
+den aktuellen Verletzungsverlauf. Bei einer Einklemmung oder einem
+versperrten Ausstieg beschreibt sie die Behinderung vor Ort. Ein eigener
+Text erscheint als Zusatz zur Patientenstory.
 Die Simulationszeit hält bei einer Pause an. Beim Wechsel zu SK Schwarz endet
 der Verlauf und der simulierte Monitor wird ausgeblendet. Puls und Atemfrequenz schwanken
 leicht und für alle Geräte gleich über der Vitalwertkurve. Der Pkw kann als
@@ -155,6 +157,9 @@ Lkw, Bus und Maschine. Dazu werden die Position **unter** oder **zwischen**
 und die Klemmstelle gewählt. Möglich sind linker oder rechter Arm, linkes
 oder rechtes Bein sowie beide Arme oder beide Beine. Ein Auffindeort kann
 eingetragen werden.
+Die Standardstory verwendet die gewählte Körperregion und Klemmlage.
+In der Verlaufsvorschau lässt sich die Geschichte vor und nach einem
+Kategorienwechsel prüfen.
 
 Lkw und Einklemmungsstellen lassen sich zu einer vorhandenen Übung
 hinzufügen oder als eigene Übung starten. Jede Person hat einen eigenen

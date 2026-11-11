@@ -121,7 +121,19 @@
     const at = progression?.at_seconds;
     let category = fixedCategory(patient.model)
       ?? (progression && (previewTime >= at ? progression.to : progression.from));
-    el('secret').textContent = patient.model.secret + (progression ? ' · Wechsel bei Minute ' + at / 60 : '');
+    const stories = patient.station_stories;
+    const story = (progression && previewTime >= at ? stories?.after : null) ?? stories?.before;
+    const note = el('secret');
+    note.textContent = [story ? '' : patient.model.secret, progression ? 'Wechsel bei Minute ' + at / 60 : '']
+      .filter(Boolean).join(' · ');
+    note.hidden = !note.textContent;
+    el('previewStory').hidden = !story?.story;
+    const storyText = el('previewStoryText');
+    if (storyText.textContent !== (story?.story ?? '')) storyText.textContent = story?.story ?? '';
+    const additional = el('previewStoryAdditional');
+    const additionalText = stories?.additional ? 'Zusatz zur Patientenstory: ' + stories.additional : '';
+    if (additional.textContent !== additionalText) additional.textContent = additionalText;
+    additional.hidden = !additionalText;
     el('clock').textContent = api.clock(previewTime);
     el('seek').value = Math.floor(minute);
     if (category === 'affected' || category === 'black') {
@@ -448,18 +460,12 @@
     if (stations.some((station) => station.id === previous)) select.value = previous;
   }
 
-  function updateStationFilters(groups, reset) {
+  function updatePrintFilters(groups, reset) {
     const choices = groups.map(([group]) => ({ id: group, title: stationGroupName(group) }));
-    for (const id of ['overviewVehicle', 'printVehicle']) {
-      const select = el(id);
-      const previous = reset ? '' : select.value;
-      options(select, choices, 'Alle Fahrzeuge und Stationen');
-      if (choices.some((group) => group.id === previous)) select.value = previous;
-    }
-    if (reset) {
-      el('overviewCategory').value = '';
-      el('overviewStatus').value = '';
-    }
+    const select = el('printVehicle');
+    const previous = reset ? '' : select.value;
+    options(select, choices, 'Alle Fahrzeuge und Stationen');
+    if (choices.some((group) => group.id === previous)) select.value = previous;
     updatePrintStations(reset);
   }
 
@@ -549,14 +555,13 @@
     el('exercisePrint').replaceChildren();
   });
 
-  for (const id of ['overviewVehicle', 'overviewCategory', 'overviewStatus']) {
+  for (const id of ['overviewCategory', 'overviewStatus']) {
     el(id).addEventListener('change', () => renderOverview());
   }
 
   function createOverviewGroup(group, patients) {
     const section = document.createElement('li');
     section.className = 'patient-group';
-    section.dataset.group = group;
     const heading = document.createElement('h3');
     const title = document.createElement('span');
     title.textContent = stationGroupName(group);
@@ -595,26 +600,28 @@
   function renderOverview(rebuild = false, resetFilters = false) {
     const overview = el('patientOverview');
     const focusedId = document.activeElement?.closest('[data-patient]')?.dataset.patient;
+    if (resetFilters) {
+      el('overviewCategory').value = '';
+      el('overviewStatus').value = '';
+    }
     if (rebuild) {
       const groups = overviewGroups();
       renderComposition(groups);
-      updateStationFilters(groups, resetFilters);
+      updatePrintFilters(groups, resetFilters);
       overview.replaceChildren(...groups.map(([group, patients]) => createOverviewGroup(group, patients)));
     }
     const selected = el('choose').value;
-    const groupFilter = el('overviewVehicle').value;
     const categoryFilter = el('overviewCategory').value;
     const statusFilter = el('overviewStatus').value;
     const patients = new Map(exercise.patients.map((patient) => [patient.id, patient]));
     let focusedRow = null;
     let visible = 0;
     for (const section of overview.children) {
-      const groupMatches = !groupFilter || section.dataset.group === groupFilter;
       const rows = section.lastElementChild.children;
       let groupVisible = 0;
       for (const row of rows) {
         const patient = patients.get(row.dataset.patient);
-        row.hidden = !groupMatches || Boolean((categoryFilter && (patient.category ?? 'none') !== categoryFilter)
+        row.hidden = Boolean((categoryFilter && (patient.category ?? 'none') !== categoryFilter)
           || (statusFilter && patient.status !== statusFilter));
         if (!row.hidden) groupVisible++;
         if (patient.id === focusedId) focusedRow = row;
@@ -637,7 +644,7 @@
       section.hidden = groupVisible === 0;
       visible += groupVisible;
     }
-    if (focusedId && (!focusedRow || focusedRow.hidden)) el('overviewVehicle').focus();
+    if (focusedId && (!focusedRow || focusedRow.hidden)) el('overviewCategory').focus();
     else if (rebuild && focusedRow) focusedRow.firstElementChild.focus();
     const count = el('overviewCount');
     const text = visible + ' von ' + exercise.patients.length + ' Patienten angezeigt.';
@@ -1091,12 +1098,13 @@
         <label class="seat-entrapment-label" hidden>Klemmstelle
           <select class="seat-entrapment" required disabled>
             <option value="">Klemmstelle auswählen</option>
-            <option value="door">Tür / B-Säule</option>
-            <option value="footwell">Fußraum / Bein</option><option value="dashboard">Sitz / Armaturenbrett</option>
+            <option value="door">${form.kind === 'truck' ? 'Tür / Kabinenrahmen' : 'Tür / B-Säule'}</option>
+            <option value="footwell">Fußraum / Bein</option>
+            <option value="dashboard">${seat.startsWith('rear-') ? 'Sitzreihe / Vordersitz' : 'Sitz / Armaturenbrett'}</option>
             <option value="roof">Dach / Sitz</option>
           </select>
         </label>`}
-        <label>Eigene Verletzungsbeschreibung (optional)
+        <label>Eigener Zusatz zur Patientenstory (optional)
           <input class="seat-injury" maxlength="400">
         </label>
         ${objectStation ? '' : `<div class="seat-move" hidden>

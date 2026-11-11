@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=arrival-clock">
+  <link rel="stylesheet" href="style.css?v=station-stories">
 </head>
 <body><main class="trainer-shell">
   <section class="panel page-banner">
@@ -240,7 +240,6 @@
           <p class="muted small">Wähle im Druckdialog deinen Drucker oder „Als PDF speichern“.</p>
         </details>
         <div class="overview-fields" role="group" aria-label="Patientenübersicht filtern">
-          <label>Fahrzeug oder Station <select id="overviewVehicle"></select></label>
           <label>Aktuelle Sichtungskategorie
             <select id="overviewCategory">
               <option value="">Alle Kategorien</option>
@@ -304,6 +303,11 @@
           <option value="1">1×</option><option value="5">5×</option><option value="30">30×</option><option value="60">60×</option>
         </select></label>
         <div id="triage" class="triage yellow"></div>
+        <div id="previewStory" hidden>
+          <h3>Patientenstory</h3>
+          <blockquote id="previewStoryText" class="story-text"></blockquote>
+          <p id="previewStoryAdditional" class="story-text" hidden></p>
+        </div>
         <div class="grid" id="vitals"></div>
       </details>
     </div>
@@ -322,6 +326,6 @@
 <script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
 <script src="scenario-validation.js?v=triage"></script>
-<script src="trainer.js?v=object-labels"></script>
+<script src="trainer.js?v=station-stories"></script>
 </body>
 </html>

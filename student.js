@@ -198,8 +198,11 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     el('caseTitle').textContent = brief?.title ?? scenario?.title ?? 'TraumaSim';
     el('patientTitle').textContent = brief?.name ?? preset?.name ?? 'Übungspatient';
     el('intro').textContent = brief?.intro ?? '';
-    el('story').textContent = brief?.story ?? '';
-    el('questions').textContent = brief?.questions ?? '';
+    const story = brief?.story ?? '';
+    const questions = brief?.questions ?? '';
+    if (el('story').textContent !== story) el('story').textContent = story;
+    if (el('questions').textContent !== questions) el('questions').textContent = questions;
+    el('patientQuestions').hidden = !questions.trim();
     el('storyPanel').hidden = !snapshot;
     el('startPatient').hidden = preview || snapshot?.status !== 'ready';
     renderTriage();

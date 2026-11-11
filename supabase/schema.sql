@@ -193,6 +193,172 @@ create or replace function traumasim_private.patient_category(
    else 'yellow' end;
 $$;
 
+create or replace function traumasim_private.station_story(p_model jsonb, p_patient text, p_category text)
+returns jsonb language plpgsql immutable set search_path = '' as $$
+declare
+ kind text := coalesce(p_model->>'station_kind', 'car');
+ access_code text := p_model->>'car_entrapment';
+ seat text := coalesce(p_model->>'car_seat', case (regexp_match(p_model->>'name', ' · ([^·]+)$'))[1]
+   when 'Fahrerplatz' then 'driver' when 'Fahrer' then 'driver'
+   when 'Beifahrerplatz' then 'front' when 'Beifahrer' then 'front'
+   when 'hinten links' then 'rear-left' when 'hinten Mitte' then 'rear-center' when 'hinten rechts' then 'rear-right'
+ end);
+ profile text := coalesce(p_model->>'car_profile', case
+   when p_model->'affected' = 'true'::jsonb then 'affected'
+   when p_model->'black' = 'true'::jsonb then 'black'
+   when p_model->'progression'->>'to' = 'yellow' then 'green-yellow'
+   when p_model->'progression'->>'to' = 'red' then 'urgent-red'
+   when p_model->'progression'->>'to' = 'black' then 'red-ex'
+   when p_model->'walkable' = 'true'::jsonb then 'minor'
+   when p_model->'nibpFastCycle' = 'true'::jsonb then 'critical'
+   else 'urgent' end);
+ legacy_story text := p_model->>'story';
+ legacy_default text;
+ additional text := nullif(p_model->>'car_injury', '');
+ object_type text := p_model->>'object_type';
+ object_name text;
+ object_place text;
+ limb text;
+ seat_description text;
+ access_description text;
+ pain_site text;
+ blocked boolean;
+ findings text;
+ condition text;
+ reason text;
+begin
+ if p_model is null or not (p_patient like any (array['car-%', 'truck-%', 'object-%'])) then
+   return null;
+ end if;
+
+ if kind = 'object' then
+   object_name := case object_type
+     when 'beam' then 'einem Betonträger' when 'skip' then 'einer Mulde'
+     when 'car' then 'einem Pkw' when 'car-bike' then 'einem Pkw'
+     when 'truck' then 'einem Lkw' when 'bus' then 'einem Bus' when 'machine' then 'einer Maschine'
+   end;
+   object_place := case p_model->>'object_position'
+     when 'under' then 'unter ' || object_name
+       || case when object_type = 'car-bike' then ' neben einem Fahrrad' else '' end
+     when 'between' then 'zwischen ' || object_name
+       || case when object_type = 'car-bike' then ' und einem Fahrrad' else ' und einem Hindernis' end
+   end;
+   limb := case access_code
+     when 'left-arm' then 'dem linken Arm' when 'right-arm' then 'dem rechten Arm' when 'both-arms' then 'beiden Armen'
+     when 'left-leg' then 'dem linken Bein' when 'right-leg' then 'dem rechten Bein' when 'both-legs' then 'beiden Beinen'
+   end;
+   access_description := case when limb is not null and object_place is not null
+     then format('Die Person ist mit %s %s eingeklemmt.', limb, object_place)
+     else p_model->>'intro' end;
+   pain_site := case access_code
+     when 'both-arms' then 'an beiden Armen' when 'both-legs' then 'an beiden Beinen'
+     else 'am ' || substring(limb from 5) end;
+ else
+   if access_code is null then
+     access_code := case
+       when p_model->>'intro' like '%eingeschlossen, Ausstieg versperrt.' then 'enclosed'
+       when p_model->>'intro' like '%Tür und B-Säule eingeklemmt.' then 'door'
+       when p_model->>'intro' like '%im deformierten Fußraum eingeklemmt.' then 'footwell'
+       when p_model->>'intro' like '%zwischen Sitz und Armaturenbrett eingeklemmt.' then 'dashboard'
+       when p_model->>'intro' like '%von Dach und Sitz eingeklemmt.' then 'roof'
+       else 'none' end;
+   end if;
+   seat_description := case seat
+     when 'driver' then 'Die Person sitzt auf dem Fahrerplatz.'
+     when 'front' then 'Die Person sitzt auf dem Beifahrerplatz.'
+     when 'rear-left' then 'Die Person sitzt hinten links.'
+     when 'rear-center' then 'Die Person sitzt hinten in der Mitte.'
+     when 'rear-right' then 'Die Person sitzt hinten rechts.'
+   end;
+   access_description := case access_code
+     when 'none' then 'Die Person ist frei zugänglich.'
+     when 'enclosed' then 'Der Ausstieg ist versperrt. Die Person ist eingeschlossen.'
+     when 'door' then case when kind = 'truck'
+       then 'Die Person ist im Bereich von Tür und Kabinenrahmen eingeklemmt.'
+       else 'Die Person ist im Bereich von Tür und B-Säule eingeklemmt.' end
+     when 'footwell' then 'Ein Bein ist im deformierten Fußraum eingeklemmt.'
+     when 'dashboard' then case when seat in ('driver', 'front')
+       then 'Die Person ist zwischen Sitz und Armaturenbrett eingeklemmt.'
+       else 'Die Person ist im Bereich der hinteren Sitzreihe am verformten Vordersitz eingeklemmt.' end
+     when 'roof' then 'Die Person ist im Bereich von Dach und Sitz eingeklemmt.'
+     else p_model->>'intro' end;
+   pain_site := case access_code
+     when 'footwell' then 'am betroffenen Bein'
+     when 'dashboard' then 'im Bereich der Beine'
+     when 'door' then 'an der Seite zur Tür'
+     when 'roof' then 'im Schulterbereich'
+     else case seat when 'driver' then 'am Unterarm' when 'front' then 'am Handgelenk' else 'am Unterschenkel' end
+   end;
+ end if;
+ blocked := kind = 'object' or access_code is distinct from 'none';
+
+ -- Original Pkw records did not distinguish built-in descriptions from authored text.
+ if not (p_model ? 'car_injury') then
+   legacy_default := case profile
+     when 'affected' then 'Keine Verletzung in dieser Übungsrolle. Die Person ist aufgewühlt.'
+     when 'black' then 'Die Person reagiert nicht auf Ansprache.'
+     when 'minor' then 'Die Person ist orientiert und klagt über eine schmerzhafte Prellung.'
+     when 'urgent' then 'Die Person klagt über starke Schmerzen an einer Extremität. Verdacht auf eine Fraktur.'
+     when 'urgent-red' then 'Die Person ist zunächst orientiert und klagt über Schmerzen nach einem Anprall.'
+     when 'green-yellow' then 'Beim Aufprall ist mein Unterschenkel gegen den Sitz vor mir gestoßen. Ein paar Schritte gingen noch, aber es tut weh.'
+     else 'Die Person ist blass, antwortet verzögert und wirkt zunehmend benommen.' end;
+   additional := nullif(nullif(legacy_story, legacy_default), '');
+ end if;
+ -- Leave the injury site open when the trainer supplied an explicit description.
+ pain_site := case when additional is not null or pain_site is null then '' else ' ' || pain_site end;
+
+ if p_category = 'black' then
+   condition := case when profile = 'red-ex' then 'Keine Reaktion mehr auf Ansprache.' else 'Keine Reaktion auf Ansprache.' end;
+   findings := case when profile = 'red-ex'
+     then 'Die Person, die zuvor noch reagiert hat, zeigt auf Ansprache keine erkennbare Reaktion mehr.'
+     else 'Die Person zeigt auf Ansprache keine erkennbare Reaktion.' end
+     || ' Es sind keine Atembewegungen erkennbar.';
+   reason := 'Im Übungsmodell verstorben';
+ elsif profile = 'affected' then
+   condition := 'Ansprechbar und aufgewühlt. Keine Verletzung in dieser Übungsrolle.';
+   findings := case when blocked
+     then 'Die Person ist aufgewühlt und bittet darum, aus der Lage befreit zu werden. Sie gibt keine Verletzung an.'
+     else 'Die Person ist aufgewühlt, möchte wissen, was passiert ist, und gibt keine Verletzung an.' end;
+   if kind = 'object' then
+     findings := 'Das Objekt ist abgestützt. Der enge Spalt hält die Person trotzdem fest. ' || findings;
+   end if;
+   reason := 'Unverletzt, aufgewühlt und betreuungsbedürftig';
+ elsif profile = 'minor' or (profile = 'green-yellow' and p_category = 'green') then
+   condition := 'Wach und orientiert. Leichte Schmerzen.';
+   findings := format('Die Person antwortet klar und berichtet über leichte Schmerzen%s.', pain_site);
+   if profile = 'green-yellow' and not blocked then
+     findings := findings || ' Anfangs kann sie den betroffenen Bereich noch vorsichtig bewegen.';
+   end if;
+   reason := case when blocked then 'Im Übungsmodell leicht verletzt. Bewegung durch die Lage behindert. Nachsichtung vorgesehen.'
+     else 'Im Übungsmodell leicht verletzt. Nachsichtung vorgesehen.' end;
+ elsif profile in ('urgent', 'green-yellow') or (profile = 'urgent-red' and p_category = 'yellow') then
+   condition := case profile when 'green-yellow' then 'Wach. Schmerzen nehmen zu, Bewegung schmerzt deutlich.'
+     else 'Wach und orientiert. Deutliche Schmerzen.' end;
+   findings := case profile
+     when 'green-yellow' then format('Die Schmerzen%s haben deutlich zugenommen. Die Person schont den betroffenen Bereich.', pain_site)
+     when 'urgent-red' then format('Die Person antwortet klar und klagt über Schmerzen%s.', pain_site)
+       || case when additional is null then ' Sie berichtet auch über Beschwerden am Rumpf.' else '' end
+     else format('Die Person klagt über starke Schmerzen%s und vermeidet Bewegungen im betroffenen Bereich.', pain_site)
+       || case when additional is null then ' Es zeigt sich eine Schwellung.' else '' end
+   end;
+   reason := 'Schwer verletzt, ohne erkennbare vitale Bedrohung (Übungsmodell)';
+ else
+   condition := case profile when 'urgent-red' then 'Zunehmend blass und benommen. Antwortet verzögert.'
+     else 'Blass und benommen. Reagiert verzögert auf Ansprache.' end;
+   findings := case profile
+     when 'urgent-red' then 'Die Person wird blass und kaltschweißig. Sie antwortet langsamer als zu Beginn.'
+       || case when additional is null then ' Die Beschwerden am Rumpf haben zugenommen.' else '' end
+     else 'Die Person ist blass und reagiert verzögert auf Ansprache.'
+       || case when additional is null then ' Am Rumpf sind zusätzlich Anprallspuren zu sehen.'
+          else '' end
+   end;
+   reason := 'Didaktische Einstufung: Zeichen eines kritischen Schocks';
+ end if;
+ return jsonb_build_object('story', concat_ws(' ', seat_description, access_description, findings),
+   'condition', condition, 'reason', reason, 'additional', additional);
+end;
+$$;
+
 create or replace function traumasim_private.student_snapshot(
  p_case text, p_patient text, p_code text, p_start_revision integer, p_selection text, p_seen_revision integer
 ) returns jsonb language plpgsql set search_path = '' as $$
@@ -222,6 +388,7 @@ declare
  triage_delay integer;
  condition_index integer;
  observation text;
+ generated_story jsonb;
  can_select boolean;
  exercise_access boolean := split_part(p_code, '.', 2) like 'j%';
  preview_access boolean := split_part(p_code, '.', 2) like 'p%';
@@ -333,6 +500,8 @@ begin
      else 'Der Unterschenkel schwillt an. Die Schmerzen nehmen zu, Auftreten ist nicht mehr möglich.' end
    when progression->>'to' = 'red' and category = 'red' then 'Die Person wird blass und benommen. Der Kreislauf verschlechtert sich.'
    else model->'condition'->>condition_index end;
+ generated_story := traumasim_private.station_story(model, p_patient, category);
+ observation := coalesce(generated_story->>'condition', observation);
  -- The choice becomes available at the same time for every category.
  can_select := exercise.triage_mode = 'choose' and seconds >= 10;
  return jsonb_build_object(
@@ -350,13 +519,13 @@ begin
      then jsonb_build_object(
      'category', category, 'red', category = 'red',
      'condition', observation,
-     'reason', case when category = 'black' then 'Im Übungsmodell verstorben'
+     'reason', coalesce(generated_story->>'reason', case when category = 'black' then 'Im Übungsmodell verstorben'
        when affected then 'Unverletzt, aufgewühlt und betreuungsbedürftig'
        when category = 'red' then coalesce(model->>'triageReason', 'Didaktische Einstufung: Zeichen eines kritischen Schocks')
        when category = 'green' then 'Gehfähig; Nachsichtung vorgesehen'
        when patient.scenario_model is not null then 'Schwer verletzt, ohne erkennbare vitale Bedrohung (Übungsmodell)'
        when p_patient = 'beifahrer' then 'Schwer verletzt, zunächst ohne erkennbare vitale Bedrohung'
-       else 'Schwere Verletzung, Kreislauf zunächst kompensiert' end
+       else 'Schwere Verletzung, Kreislauf zunächst kompensiert' end)
    ) end,
    'monitor', case when not affected and category <> 'black' and seconds >= 25 then jsonb_strip_nulls(jsonb_build_object(
      'h', vitals->'h',
@@ -385,8 +554,16 @@ begin
        when 'rear-right' then 'hinten rechts' end,
        (regexp_match(model->>'name', ' · (Fahrer|Beifahrer|hinten links|hinten Mitte|hinten rechts)(platz)?$'))[1])
      end, model->>'name'),
-   'intro', model->>'intro',
+   'intro', case when model->>'station_kind' = 'truck' and model->>'car_entrapment' = 'door'
+     then regexp_replace(model->>'intro', 'Tür und B-Säule eingeklemmt[.]$', 'Tür und Kabinenrahmen eingeklemmt.')
+     when generated_story is not null and (model->>'car_seat' like 'rear-%'
+       or model->>'name' ~ ' · hinten (links|Mitte|rechts)$')
+     then regexp_replace(model->>'intro', 'zwischen Sitz und Armaturenbrett eingeklemmt[.]$',
+       'im Bereich der hinteren Sitzreihe am verformten Vordersitz eingeklemmt.')
+     else model->>'intro' end,
    'story', case
+     when generated_story is not null then concat_ws(E'\n\n', generated_story->>'story',
+       'Ergänzende Fallinformation: ' || (generated_story->>'additional'))
      when static_black then coalesce(nullif(model->>'story', ''), observation)
      when category = 'black' then 'Die Person gibt im Übungsmodell keine Antwort mehr.'
      else model->>'story' end,
@@ -612,6 +789,13 @@ begin
    'code', traumasim_private.patient_code(exercise.id, p.patient_key, exercise.signing_key),
    'preview_code', traumasim_private.preview_code(exercise.id, p.patient_key, exercise.signing_key),
    'model', patient_model.model,
+   'station_stories', case when initial_story.payload is not null then jsonb_build_object(
+     'before', initial_story.payload - 'additional',
+     'after', case when patient_model.model->'progression'->>'to' is not null
+       then traumasim_private.station_story(patient_model.model, p.patient_key,
+         patient_model.model->'progression'->>'to') - 'additional' end,
+     'additional', initial_story.payload->'additional'
+   ) end,
    'custom', p.scenario_model is not null,
    'elapsed', floor(t.seconds),
    'first_triage_seconds', floor(extract(epoch from (p.first_triage_at - exercise.arrived_at))),
@@ -624,6 +808,12 @@ begin
  from public.traumasim_patients p
  left join traumasim_private.models m on m.case_key = exercise.case_key and m.patient_key = p.patient_key
  cross join lateral (select coalesce(p.scenario_model, m.model) as model) patient_model
+ cross join lateral (select case when p.patient_key like any (array['car-%', 'truck-%', 'object-%'])
+   then traumasim_private.station_story(patient_model.model, p.patient_key,
+     coalesce(patient_model.model->'progression'->>'from',
+       traumasim_private.patient_category(patient_model.model, p.patient_key, true, 0,
+         traumasim_private.vitals(patient_model.model, 0))))
+   end as payload) initial_story
  cross join lateral (select traumasim_private.patient_duration(p.scenario_model) as duration) limit_time
  cross join lateral (select least(limit_time.duration,
    traumasim_private.elapsed(p.started_at, p.paused_at, p.accumulated_pause_seconds, snapshot_time)) as seconds) t
