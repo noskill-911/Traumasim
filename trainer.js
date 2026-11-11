@@ -1017,7 +1017,7 @@
     });
   }
   const objectTypeLabels = {
-    beam: 'Balken', skip: 'Absetzmulde', car: 'Pkw', 'car-bike': 'Pkw und Fahrrad',
+    beam: 'Betonträger', skip: 'Mulde', car: 'Pkw', 'car-bike': 'Pkw und Fahrrad',
     truck: 'Lkw', bus: 'Bus', machine: 'Maschine'
   };
   const objectPositionLabels = { under: 'Unter einem Gegenstand', between: 'Zwischen Gegenständen' };
