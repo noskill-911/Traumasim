@@ -52,7 +52,8 @@
   let busy = false;
   let choice = null;
   let choiceKey = null;
-  let focusResolution = false;
+  let revealTimer;
+  const revealDelay = 4000;
   let animation = null;
   let waveFrameTime = null;
   let cardiacPhase = 0;
@@ -64,7 +65,7 @@
     timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
   });
   const triageLabels = {
-    red: 'SK I · Rot', yellow: 'SK II · Gelb', green: 'SK III · Grün', affected: 'Unverletzt betroffen', black: 'EX · Schwarz'
+    red: 'SK I · Rot', yellow: 'SK II · Gelb', green: 'SK III · Grün', affected: 'SK B · Betroffene', black: 'SK Schwarz'
   };
 
   function restoreChoice() {
@@ -72,7 +73,8 @@
     try {
       const saved = JSON.parse(localStorage.getItem(choiceKey));
       if (saved?.revision === snapshot.revision && Object.hasOwn(triageLabels, saved.selection)) {
-        choice = saved.selection;
+        const revealAt = Number.isFinite(saved.revealAt) ? Math.min(saved.revealAt, Date.now() + revealDelay) : 0;
+        choice = { selection: saved.selection, revealAt };
       } else if (saved?.revision < snapshot.revision) {
         localStorage.removeItem(choiceKey);
       }
@@ -80,14 +82,21 @@
   }
 
   function saveChoice(selection) {
-    choice = selection;
+    choice = { selection, revealAt: Date.now() + revealDelay };
     if (preview || !choiceKey) return;
     try {
       const saved = JSON.parse(localStorage.getItem(choiceKey));
       if (!(saved?.revision > snapshot.revision)) {
-        localStorage.setItem(choiceKey, JSON.stringify({ revision: snapshot.revision, selection }));
+        localStorage.setItem(choiceKey, JSON.stringify({ revision: snapshot.revision, ...choice }));
       }
     } catch {}
+  }
+
+  function scheduleReveal() {
+    clearTimeout(revealTimer);
+    if (choice && choice.revealAt > Date.now()) {
+      revealTimer = setTimeout(() => { if (!document.hidden) void synchronize(); }, choice.revealAt - Date.now());
+    }
   }
 
 function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+=2){let p=(x/width*6-phase)%1;if(p<0)p+=1;let y=45;if(kind==='ecg'){if(p<.58)y=45;else if(p<.64)y=43-4*Math.sin((p-.58)/.06*Math.PI);else if(p<.69)y=45+10*(p-.64)/.05;else if(p<.72)y=55-47*(p-.69)/.03;else if(p<.75)y=8+58*(p-.72)/.03;else if(p<.79)y=66-21*(p-.75)/.04;else if(p<.95)y=45-7*Math.sin((p-.79)/.16*Math.PI)}else if(kind==='pleth'){y=62-34*Math.pow(Math.max(0,Math.sin(Math.PI*p)),5)-8*Math.sin(Math.PI*p)}else{y=45-19*Math.sin(2*Math.PI*p)}out+=(x===0?'M':'L')+x+' '+y.toFixed(1)+' '}return out}
@@ -132,13 +141,41 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     if (choiceKey !== nextKey || previousRevision !== data.revision) {
       choiceKey = nextKey;
       choice = null;
-      focusResolution = false;
-      el('triageSelection').value = '';
       restoreChoice();
+      scheduleReveal();
     }
     snapshotReceivedAt = performance.now();
     serverClockOffset = Date.parse(data.server_time) - snapshotReceivedAt;
     lastReceived = new Date();
+  }
+
+  function renderTriage() {
+    const choosing = snapshot?.triage_mode === 'choose';
+    const comparing = Boolean(choosing && snapshot.triage_selectable && choice);
+    const showButtons = choosing && snapshot.triage_selectable && !choice;
+    const result = choosing && (!comparing || Date.now() < choice.revealAt) ? null : snapshot?.triage;
+    const category = result && (result.category ?? (result.red ? 'red' : 'yellow'));
+    const reason = result?.reason ?? '';
+    const condition = result?.condition ?? (comparing ? snapshot.observation : '') ?? '';
+    el('triageChoicePanel').hidden = !showButtons;
+    el('triageObservation').hidden = !showButtons || !snapshot.observation;
+    el('triageObservation').textContent = showButtons ? snapshot.observation ?? '' : '';
+    el('triagePanel').hidden = !comparing && !result;
+    el('triageAutoLabel').hidden = comparing;
+    el('triageComparison').classList.toggle('is-comparison', comparing);
+    el('triageOwnBox').hidden = !comparing;
+    el('triageOwnBox').className = comparing ? 'triage ' + choice.selection : 'triage';
+    el('triageOwnChoice').textContent = comparing ? triageLabels[choice.selection] : '';
+    el('triageTargetLabel').hidden = !comparing;
+    el('triageChoicePending').hidden = !comparing || Boolean(result);
+    el('triageBox').className = 'triage' + (category ? ' ' + category : comparing ? ' pending' : '');
+    const label = triageLabels[category] ?? '';
+    if (el('triage').textContent !== label) el('triage').textContent = label;
+    el('triageExplanation').hidden = !reason && !condition;
+    el('triageReason').hidden = !reason;
+    el('triageReason').textContent = reason;
+    el('patientCondition').hidden = !condition;
+    el('patientCondition').textContent = condition;
   }
 
   function render() {
@@ -150,22 +187,7 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     el('questions').textContent = brief?.questions ?? '';
     el('storyPanel').hidden = !snapshot;
     el('startPatient').hidden = preview || snapshot?.status !== 'ready';
-    const showChoice = snapshot?.triage_mode === 'choose' && snapshot.triage_selectable && !snapshot.triage;
-    el('triageChoicePanel').hidden = !showChoice;
-    el('triageObservation').hidden = !showChoice || !snapshot.observation;
-    el('triageObservation').textContent = showChoice ? snapshot.observation ?? '' : '';
-    el('triageChoiceForm').hidden = !showChoice || Boolean(choice);
-    el('triageChoicePending').hidden = !showChoice || !choice;
-    el('triagePanel').hidden = !snapshot?.triage;
-    if (!snapshot?.triage) {
-      el('triage').textContent = '';
-      el('triageReason').textContent = '';
-      el('patientCondition').textContent = '';
-      el('triageBox').className = 'triage';
-    }
-    const showOwnChoice = snapshot?.triage_mode === 'choose' && snapshot.triage && choice;
-    el('triageOwnChoice').hidden = !showOwnChoice;
-    el('triageOwnChoice').textContent = showOwnChoice ? 'Deine Sichtung · ' + triageLabels[choice] : '';
+    renderTriage();
     monitor = snapshot?.monitor ?? (snapshot?.vitals && { ...snapshot.vitals, ecg: true });
     el('vitalsPanel').hidden = !monitor;
     el('clockPanel').hidden = !snapshot || Boolean(monitor && el('monitorElapsed'));
@@ -173,16 +195,6 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     if (!snapshot) return;
 
     el('syncStatus').textContent = api.labels[snapshot.status];
-    if (snapshot.triage) {
-      const { red, reason, condition } = snapshot.triage;
-      const category = snapshot.triage.category ?? (red ? 'red' : 'yellow');
-      el('triageBox').className = 'triage ' + category;
-      el('triage').textContent = triageLabels[category]?.toLocaleUpperCase('de') ?? '';
-      el('triageReason').textContent = reason;
-      el('patientCondition').textContent = condition;
-      if (showOwnChoice && focusResolution) el('triage').focus({ preventScroll: true });
-      focusResolution = false;
-    }
     if (monitor) {
       const { s, d, h, r, o, g, ecg, bp_at, bp_wall_at, bp_next_wall_at, bp_previous } = monitor;
       el('bp').textContent = s != null && d != null ? s + '/' + d : '—';
@@ -226,8 +238,8 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     const query = { p_case: caseId, p_patient: patientId, p_code: code };
     try {
       if (revision !== undefined && !preview) pendingStartRevision = revision;
-      const canAssess = () => snapshot?.triage_mode === 'choose' && snapshot.triage_selectable && choice;
-      const assess = () => api.studentAssess({ ...query, p_selection: choice, p_seen_revision: snapshot.revision });
+      const canAssess = () => snapshot?.triage_mode === 'choose' && snapshot.triage_selectable && choice && Date.now() >= choice.revealAt;
+      const assess = () => api.studentAssess({ ...query, p_selection: choice.selection, p_seen_revision: snapshot.revision });
       const useAssessment = pendingStartRevision === undefined && canAssess();
       const request = useAssessment ? assess() : api.student({ ...query, p_start_revision: pendingStartRevision });
       receiveSnapshot(await request);
@@ -292,19 +304,23 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
   el('startPatient').addEventListener('click', () => {
     if (snapshot?.status === 'ready') void synchronize({ revision: snapshot.revision });
   });
-  el('triageChoiceForm').addEventListener('submit', (event) => {
-    event.preventDefault();
-    const selection = el('triageSelection').value;
+  el('triageChoiceButtons').addEventListener('click', (event) => {
+    const selection = event.target.closest('button[data-category]')?.dataset.category;
     if (snapshot?.triage_mode !== 'choose' || !snapshot.triage_selectable || choice || !Object.hasOwn(triageLabels, selection)) return;
-    saveChoice(selection);
-    focusResolution = true;
+    restoreChoice();
+    if (!choice) saveChoice(selection);
     render();
-    void synchronize();
+    el('triageOwnChoice').focus({ preventScroll: true });
+    scheduleReveal();
   });
   window.addEventListener('storage', (event) => {
     if (event.key !== choiceKey || !snapshot || choice) return;
     restoreChoice();
-    if (choice) void synchronize();
+    if (choice) {
+      render();
+      scheduleReveal();
+      void synchronize();
+    }
   });
   el('retryConnection').addEventListener('click', () => { void synchronize(); });
   if (code) {

@@ -24,6 +24,13 @@
   const textLength = (value) => Array.from(value).length;
   const shortText = (value) => typeof value === 'string' && textLength(value) <= 2000;
 
+  function triageMode(patient) {
+    if (['affected', 'black'].some((field) => Object.hasOwn(patient, field) && typeof patient[field] !== 'boolean') ||
+      (patient.affected === true && patient.black === true)) return null;
+    if (patient.affected === true) return 'affected';
+    return patient.black === true ? 'black' : 'automatic';
+  }
+
   // PostgreSQL includes spaces after JSONB separators when checking the size.
   function jsonByteLength(value) {
     const json = JSON.stringify(value);
@@ -49,6 +56,9 @@
       const label = 'Patient ' + (patientIndex + 1) + (name && textLength(name) <= 100 ? ' „' + name + '“' : '');
       if (!isRecord(patient) || !name || textLength(name) > 100) {
         return { patientIndex, field: 'name', message: label + ' benötigt einen Namen mit 1 bis 100 Zeichen.' };
+      }
+      if (triageMode(patient) === null) {
+        return { patientIndex, field: 'triageMode', message: label + ' benötigt eine eindeutige Sichtungsvorgabe. Wähle im Szenarioeditor „Automatisch“, „SK B“ oder „SK Schwarz“.' };
       }
       for (const [field, title] of TEXT_FIELDS) {
         if (Object.hasOwn(patient, field) && !shortText(patient[field])) {
@@ -83,5 +93,5 @@
     return null;
   }
 
-  window.TraumaScenario = { MAX_PATIENTS, MAX_BYTES, MINUTES, MEASURES, validate };
+  window.TraumaScenario = { MAX_PATIENTS, MAX_BYTES, MINUTES, MEASURES, triageMode, validate };
 })();

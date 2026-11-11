@@ -4,7 +4,7 @@
   const el = (id) => document.getElementById(id);
   const key = 'traumasim-editor-v1';
   const fields = ['name', 'intro', 'story', 'questions', 'secret'];
-  const { MAX_PATIENTS, MAX_BYTES, MEASURES: measures, MINUTES: minutes, validate } = window.TraumaScenario;
+  const { MAX_PATIENTS, MAX_BYTES, MEASURES: measures, MINUTES: minutes, triageMode, validate } = window.TraumaScenario;
   const initialPoints = () => minutes.map((t) => ({ t, s: 120, d: 80, h: 80, r: 16, o: 98, g: 15 }));
   let data;
   let current = 0;
@@ -52,6 +52,9 @@
     el('choose').replaceChildren(...data.patients.map((item, i) => new Option(item.name || 'Patient ' + (i + 1), i)));
     el('choose').value = current;
     for (const field of fields) el(field).value = patient[field] ?? '';
+    const mode = triageMode(patient);
+    el('triageMode').value = mode ?? '';
+    el('walkable').disabled = mode !== 'automatic';
     el('walkable').checked = patient.walkable === true;
 
     const points = Array.isArray(patient.points) ? patient.points : initialPoints();
@@ -86,6 +89,14 @@
     commit();
     current = Number(el('choose').value);
     render();
+  });
+
+  el('triageMode').addEventListener('change', () => {
+    const patient = data.patients[current];
+    const mode = el('triageMode').value;
+    patient.affected = mode === 'affected';
+    patient.black = mode === 'black';
+    el('walkable').disabled = mode !== 'automatic';
   });
 
   el('add').addEventListener('click', () => {

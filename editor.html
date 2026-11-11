@@ -19,6 +19,14 @@
   <section class="panel">
     <h2>Patient</h2>
     <label>Name / Kennung <input id="name" maxlength="100"></label>
+    <label>Sichtungsvorgabe
+      <select id="triageMode">
+        <option value="" disabled hidden>Sichtungsvorgabe auswählen</option>
+        <option value="automatic">Automatisch</option>
+        <option value="affected">SK B · Betroffene</option>
+        <option value="black">SK Schwarz</option>
+      </select>
+    </label>
     <label><input id="walkable" type="checkbox"> Gehfähig</label>
     <label>Für Schüler sichtbare Lagebeschreibung <textarea id="intro" rows="3" maxlength="2000"></textarea></label>
     <label>Patientenaussage <textarea id="story" rows="4" maxlength="2000"></textarea></label>
@@ -40,7 +48,7 @@
   </section>
 </main>
 <script src="patients.js"></script>
-<script src="scenario-validation.js?v=1"></script>
-<script src="editor.js?v=validation"></script>
+<script src="scenario-validation.js?v=triage"></script>
+<script src="editor.js?v=triage"></script>
 </body>
 </html>

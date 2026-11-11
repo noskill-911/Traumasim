@@ -53,8 +53,10 @@
 
 Unter **Konfiguration → Sichtung in der Schüleransicht** können Ausbilder
 pro Übung **Eigene Sichtung vor Auflösung** aktivieren. Teilnehmende wählen
-dann zuerst selbst eine Kategorie und sehen anschließend die im Übungsmodell
-hinterlegte Kategorie. Standardmäßig erscheint diese weiterhin automatisch.
+dann am Patienten per Schaltfläche **SK I**, **SK II**, **SK III**,
+**SK B · Betroffene** oder **SK Schwarz**. Die eigene Wahl bleibt sichtbar.
+Nach vier Sekunden erscheint daneben die **Soll-SK** aus dem Übungsmodell.
+Standardmäßig erscheint die hinterlegte Kategorie weiterhin automatisch.
 
 ## Eigene Szenarien
 
@@ -67,6 +69,8 @@ Der Durchlauf kann einen eigenen Namen bekommen. Eine bestehende Vorlage
 lässt sich mit der Besetzung der aktiven Übung aktualisieren.
 
 Im Szenarioeditor Patienten, Texte, Gehfähigkeit und Vitalverläufe pflegen.
+Für **SK B · Betroffene** und **SK Schwarz** kann die Kategorie fest
+vorgegeben werden.
 Danach den gespeicherten Entwurf oder eine exportierte JSON-Datei in der
 Ausbilderansicht als Live-Übung starten. Unterstützt werden bis zu 30
 Patienten. Unvollständige Entwürfe bleiben speicherbar. Die Prüfung vor dem
@@ -85,7 +89,7 @@ In der Ausbilderansicht unter **Übungselement Busunfall** die Variante mit
 5 oder 10 Personen einschließlich Fahrer auswählen. Den Bus als eigene
 Übung starten oder zur aktiven Übung als zusätzliche Lage hinzufügen.
 Jede Busvariante enthält eine unverletzte, betreuungsbedürftige Person.
-Die Rolle erscheint als **Unverletzt betroffen** und hat keine simulierte
+Die Rolle erscheint als **SK B · Betroffene** und hat keine simulierte
 Monitoranzeige. Die bestehenden Stationslinks einer laufenden Übung bleiben gültig.
 Die Fallmodelle sind private Supabase-Vorlagen und werden bei der Buchung
 in die Übung kopiert. Bei einer Neuinstallation werden die Vorlagen aus
@@ -98,15 +102,16 @@ Unter **Übungselement Pkw mit Insassen** bis zu fünf Sitzplätze besetzen.
 Verletzungsprofil und Befreiungslage werden je Person gewählt. Zur Auswahl
 stehen **Frei zugänglich**, **Eingeschlossen** und **Eingeklemmt**.
 Für eingeklemmte Personen wird zusätzlich die Klemmstelle gewählt. Eine eigene
-Beschreibung und die Fahrzeuglage können ergänzt werden. Die Profile
-**SK III → SK II**, **SK II → SK I** und **SK I → EX (schwarz)** wechseln
+Beschreibung und die Fahrzeuglage können ergänzt werden. **SK B · Betroffene**
+und **SK Schwarz** sind auch als feste Profile wählbar. Die Profile
+**SK III → SK II**, **SK II → SK I** und **SK I → SK Schwarz** wechseln
 zur per Schieberegler gewählten Minute ab Patientenstart (Minute 1 bis 44). Voreingestellt
 sind 12, 6 beziehungsweise 8 Minuten. Bei **SK III → SK II** kann die
 Person anfangs gehen. Mit zunehmender Schwellung und Schmerzen am
 Unterschenkel kann sie später nicht mehr auftreten. Bei **SK III → SK II**
 und **SK II → SK I** entwickelt sich der Verlauf bis Minute 45 weiter.
-Die Simulationszeit hält bei einer Pause an. Bei EX endet der Verlauf
-und der simulierte Monitor wird ausgeblendet. Puls und Atemfrequenz schwanken
+Die Simulationszeit hält bei einer Pause an. Beim Wechsel zu SK Schwarz endet
+der Verlauf und der simulierte Monitor wird ausgeblendet. Puls und Atemfrequenz schwanken
 leicht und für alle Geräte gleich über der Vitalwertkurve. Der Pkw kann als
 eigene Übung starten oder zu einer laufenden Übung hinzugefügt werden.
 

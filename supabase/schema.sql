@@ -180,6 +180,7 @@ create or replace function traumasim_private.patient_category(
 ) returns text language sql immutable set search_path = '' as $$
  select case
    when p_model->'affected' = 'true'::jsonb then 'affected'
+   when p_model->'black' = 'true'::jsonb then 'black'
    when p_model->'progression'->>'from' is not null then case
      when p_elapsed >= (p_model->'progression'->>'at_seconds')::integer then p_model->'progression'->>'to'
      else p_model->'progression'->>'from' end
@@ -214,6 +215,7 @@ declare
  bp_pause_seconds numeric;
  previous_bp_pause_seconds numeric;
  affected boolean;
+ static_black boolean;
  category text;
  triage_delay integer;
  condition_index integer;
@@ -312,6 +314,7 @@ begin
  end if;
  category := traumasim_private.patient_category(model, p_patient, patient.scenario_model is not null, seconds, vitals);
  affected := category = 'affected';
+ static_black := model->'black' = 'true'::jsonb;
  -- Training timings follow the category available at the current patient time.
  triage_delay := case category when 'affected' then 10 when 'green' then 10 when 'yellow' then 20 else 35 end;
  condition_index := case
@@ -321,6 +324,7 @@ begin
    when (vitals->>'h')::integer >= 110 then 1
    else 0 end;
  observation := case
+   when static_black then 'Die Person reagiert nicht.'
    when category = 'black' then 'Die Person reagiert im Übungsmodell nicht mehr.'
    when progression->>'from' = 'green' then case category
      when 'green' then 'Wach und orientiert. Schmerzen am Unterschenkel, kann noch selbst gehen.'
@@ -372,7 +376,10 @@ begin
    'vitals', case when not affected and category <> 'black' and seconds >= 120 then vitals || jsonb_build_object('s', bp_values->'s', 'd', bp_values->'d') end
  ) || case when patient.scenario_model is not null then jsonb_build_object('brief', jsonb_build_object(
    'title', exercise.title, 'name', model->>'name', 'intro', model->>'intro',
-   'story', case when category = 'black' then 'Die Person gibt im Übungsmodell keine Antwort mehr.' else model->>'story' end,
+   'story', case
+     when static_black then coalesce(nullif(model->>'story', ''), observation)
+     when category = 'black' then 'Die Person gibt im Übungsmodell keine Antwort mehr.'
+     else model->>'story' end,
    'questions', case when category <> 'black' then model->>'questions' end
  )) else '{}'::jsonb end;
 end;
@@ -602,6 +609,14 @@ begin
    if jsonb_array_length(points) <> 6 then
      raise exception using errcode = '22023', message = 'Die Vitalwerte benötigen sechs Zeitpunkte von Minute 0 bis 25.';
    end if;
+   foreach field in array array['affected', 'black'] loop
+     if model ? field and jsonb_typeof(model->field) <> 'boolean' then
+       raise exception using errcode = '22023', message = 'Die Kennzeichen für unverletzt betroffene und verstorbene Personen sind ungültig.';
+     end if;
+   end loop;
+   if model->'affected' = 'true'::jsonb and model->'black' = 'true'::jsonb then
+     raise exception using errcode = '22023', message = 'Wähle für eine Person entweder unverletzt betroffen oder SK Schwarz.';
+   end if;
    foreach field in array array['intro', 'story', 'questions', 'secret', 'triageReason'] loop
      if model ? field and (jsonb_typeof(model->field) <> 'string' or length(model->>field) > 2000) then
        raise exception using errcode = '22023', message = 'Patiententexte dürfen bis zu 2000 Zeichen enthalten.';
@@ -640,6 +655,7 @@ begin
      'secret', coalesce(model->>'secret', ''), 'walkable', model->'walkable' = 'true'::jsonb,
      'points', points, 'condition', model->'condition', 'triageReason', model->>'triageReason',
      'affected', coalesce(model->'affected' = 'true'::jsonb, false),
+     'black', coalesce(model->'black' = 'true'::jsonb, false),
      'nibpFastCycle', coalesce(model->'nibpFastCycle' = 'true'::jsonb, false)
    ));
  end loop;
@@ -807,7 +823,7 @@ begin
      when 'dashboard' then 'zwischen Sitz und Armaturenbrett eingeklemmt'
      when 'roof' then 'im Bereich von Dach und Sitz eingeklemmt'
    end;
-   if seat_name is null or profile is null or profile not in ('affected','minor','urgent','critical','green-yellow','urgent-red','red-ex')
+   if seat_name is null or profile is null or profile not in ('affected','black','minor','urgent','critical','green-yellow','urgent-red','red-ex')
       or entrapment is null or length(coalesce(person->>'injury', '')) > 400 then
      raise exception using errcode = '22023', message = 'Sitzplatz, Verletzungsprofil oder Befreiungslage sind ungültig.';
    end if;
@@ -823,6 +839,7 @@ begin
    end if;
    injury := coalesce(nullif(btrim(person->>'injury'), ''), case profile
      when 'affected' then 'Keine Verletzung in dieser Übungsrolle. Die Person ist aufgewühlt.'
+     when 'black' then 'Die Person reagiert nicht auf Ansprache.'
      when 'minor' then 'Die Person ist orientiert und klagt über eine schmerzhafte Prellung.'
      when 'urgent' then 'Die Person klagt über starke Schmerzen an einer Extremität. Verdacht auf eine Fraktur.'
      when 'urgent-red' then 'Die Person ist zunächst orientiert und klagt über Schmerzen nach einem Anprall.'
@@ -860,6 +877,10 @@ begin
      from traumasim_private.models m
      cross join lateral jsonb_array_elements(m.model->'points') with ordinality as sample(point, ordinal)
      where m.case_key = 'vu-baum' and m.patient_key = 'fahrer';
+   elsif profile = 'black' then
+     select jsonb_agg(jsonb_build_object('t', minute, 's', 0, 'd', 0, 'h', 0, 'r', 0, 'o', 0, 'g', 3)
+       order by minute)
+     into points from generate_series(0, 25, 5) minute;
    else
      select jsonb_agg(jsonb_build_object('t', minute, 's', 125, 'd', 80,
        'h', case when profile = 'urgent' then 103 else 86 end,
@@ -889,7 +910,7 @@ begin
      'car_vehicle', nullif(btrim(p_config->>'vehicle'), ''),
      'car_seat', person->>'seat', 'car_profile', profile, 'car_entrapment', person->>'entrapment',
      'car_injury', nullif(btrim(person->>'injury'), ''), 'car_edit_version', edit_version,
-     'affected', profile = 'affected', 'walkable', profile in ('affected','minor'),
+     'affected', profile = 'affected', 'black', profile = 'black', 'walkable', profile in ('affected','minor'),
      'nibpFastCycle', profile in ('critical','urgent-red','red-ex'),
      'progression', progression, 'points', points
    );

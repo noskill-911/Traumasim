@@ -9,7 +9,7 @@
   const sessionLifetime = 24 * 60 * 60 * 1000;
   const categoryLabels = {
     red: 'SK I · Rot', yellow: 'SK II · Gelb', green: 'SK III · Grün',
-    black: 'EX · Schwarz', affected: 'Unverletzt betroffen'
+    black: 'SK Schwarz', affected: 'SK B · Betroffene'
   };
   const busStationPattern = /^bus-(5|10)-(\d{2})$/;
   const busLocations = [
@@ -69,20 +69,24 @@
   }
 
   function categoryForVitals(patient, vitals) {
-    if (patient.model.affected === true) return 'affected';
     const red = (patient.id === 'fahrer' || patient.custom) && (vitals.s < 100 || vitals.g < 15 || vitals.h >= 120);
     return red ? 'red' : patient.model.walkable ? 'green' : 'yellow';
   }
 
+  function fixedCategory(model) {
+    if (model.black === true) return 'black';
+    if (model.affected === true) return 'affected';
+    return null;
+  }
+
   function forecastLabel(patient) {
     const shortCategory = (category) => categoryLabels[category].split(' · ')[0];
+    const fixed = fixedCategory(patient.model);
+    if (fixed) return patient.status === 'ready' ? 'Start · ' + categoryLabels[fixed] : '';
     const progression = patient.model.progression;
     if (progression) {
       return 'Verlauf · ' + shortCategory(progression.from) + ' → ' + shortCategory(progression.to)
         + ' bei Minute ' + progression.at_seconds / 60;
-    }
-    if (patient.model.affected === true) {
-      return patient.status === 'ready' ? 'Start · Unverletzt betroffen' : '';
     }
     const points = patient.model.points;
     const start = patient.category ?? categoryForVitals(patient, points[0]);
@@ -101,24 +105,16 @@
     const patient = selectedPatient();
     if (!patient) return;
     const minute = previewTime / 60;
-    if (patient.model.affected === true) {
-      el('secret').textContent = patient.model.secret;
-      el('clock').textContent = api.clock(previewTime);
-      el('seek').value = Math.floor(minute);
-      el('triage').className = 'triage affected';
-      el('triage').textContent = 'UNVERLETZT BETROFFEN · BETREUUNG';
-      el('vitals').replaceChildren();
-      return;
-    }
     const progression = patient.model.progression;
     const at = progression?.at_seconds;
-    let category = progression && (previewTime >= at ? progression.to : progression.from);
+    let category = fixedCategory(patient.model)
+      ?? (progression && (previewTime >= at ? progression.to : progression.from));
     el('secret').textContent = patient.model.secret + (progression ? ' · Wechsel bei Minute ' + at / 60 : '');
     el('clock').textContent = api.clock(previewTime);
     el('seek').value = Math.floor(minute);
-    if (category === 'black') {
-      el('triage').className = 'triage black';
-      el('triage').textContent = 'EX · SCHWARZ (Übungsmodell)';
+    if (category === 'affected' || category === 'black') {
+      el('triage').className = 'triage ' + category;
+      el('triage').textContent = categoryLabels[category] + ' (Übungsmodell)';
       el('vitals').replaceChildren();
       return;
     }
@@ -142,7 +138,7 @@
     }
     category ||= categoryForVitals(patient, v);
     el('triage').className = 'triage ' + category;
-    el('triage').textContent = { red: 'SK I · ROT', yellow: 'SK II · GELB', green: 'SK III · GRÜN' }[category] + ' (Übungsmodell)';
+    el('triage').textContent = categoryLabels[category] + ' (Übungsmodell)';
     el('vitals').innerHTML = [
       ['Blutdruck', v.s + '/' + v.d + ' mmHg'], ['Puls', v.h + '/min'], ['Atemfrequenz', v.r + '/min'],
       ['SpO₂', v.o + ' %'], ['GCS', v.g + '/15']
@@ -925,12 +921,13 @@
     group.innerHTML = `<legend>${label}</legend>
       <label>Besetzung und Verletzungsprofil
         <select class="seat-profile">
-          <option value="">Leer</option><option value="affected">Unverletzt betroffen</option>
+          <option value="">Leer</option><option value="affected">${categoryLabels.affected}</option>
           <option value="minor">Leicht verletzt · SK III</option><option value="urgent">Schwer verletzt · SK II</option>
           <option value="critical">Vital bedroht · SK I</option>
+          <option value="black">${categoryLabels.black}</option>
           <option value="green-yellow">Verlauf · SK III → SK II</option>
           <option value="urgent-red">Verlauf · SK II → SK I</option>
-          <option value="red-ex">Verlauf · SK I → EX (schwarz)</option>
+          <option value="red-ex">Verlauf · SK I → ${categoryLabels.black}</option>
         </select>
       </label>
       <div class="seat-details" hidden>
@@ -1044,7 +1041,7 @@
     }[at < 0 ? '' : model.intro.slice(at + separator.length, -1)] ?? 'none';
     const profile = model.progression
       ? { yellow: 'green-yellow', red: 'urgent-red', black: 'red-ex' }[model.progression.to]
-      : model.affected ? 'affected' : model.walkable ? 'minor' : model.nibpFastCycle ? 'critical' : 'urgent';
+      : fixedCategory(model) ?? (model.walkable ? 'minor' : model.nibpFastCycle ? 'critical' : 'urgent');
     const defaults = {
       affected: 'Keine Verletzung in dieser Übungsrolle. Die Person ist aufgewühlt.',
       minor: 'Die Person ist orientiert und klagt über eine schmerzhafte Prellung.',
