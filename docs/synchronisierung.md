@@ -9,8 +9,10 @@
    bleibt im selben Browserprofil bis zu 24 Stunden gültig. **Abmelden**
    beendet sie auch in weiteren Ausbilder-Tabs desselben Profils.
 2. In **Konfiguration** eine Übung anlegen und Stationen zusammenstellen
-   oder oben eine vorhandene Übung auswählen. Direkt unter der Auswahl
-   steht der Übungs-QR fürs Briefing. Teilnehmende scannen ihn einmal und
+   oder oben bei **Aktive Übung** eine vorhandene Übung auswählen.
+   Direkt darunter steht der Übungs-QR fürs Briefing. Über **Übungs-QR als A4 drucken**
+   lässt er sich als eigener Aushang mit Übungsname und Gültigkeit ausgeben.
+   Teilnehmende scannen ihn einmal und
    können die Seite danach schließen. Während der Übung suchen sie die
    Patienten und öffnen die Stations-QRs im selben Browser. Der Beitritt
    speichert nur den Übungszugang.
@@ -19,7 +21,8 @@
    Neu erzeugte Stations-QRs enthalten diesen eindeutigen Patientenzugang.
    Für ältere allgemeine Stations-QRs gilt der Übungsbeitritt im selben
    Browser. Wenn eine Station zu einer anderen Übung gehört, bleibt ein
-   gültiger Übungszugang gespeichert.
+   gültiger Übungszugang gespeichert. Bei einem abgelaufenen Stations-QR
+   verweist die Patientenansicht auf den aktuellen QR vor Ort oder die Übungsleitung.
 3. Beim ersten gültigen Aufruf setzt PostgreSQL die gemeinsame Startzeit. Geöffnete
    Patientenansichten fragen den Server im Vordergrund alle zwei Sekunden ab.
    Bei einer kurzen Unterbrechung bleibt der zuletzt empfangene Stand mit
@@ -29,10 +32,13 @@
 4. Beim Zurücksetzen bleibt der Zugangscode gültig. Bereits geöffnete Geräte
    zeigen „Wartet auf Start“. Ein erneuter Aufruf oder „Patient starten“ startet
    die neue Runde. Einzelreset und Übungsreset ändern den zentralen Zustand.
-5. Die Patientenübersicht zeigt den Status, die Zeit seit Patientenstart
+5. Unter **Übung** zeigt die Patientenübersicht den Status, die Zeit seit Patientenstart
    und bei gestarteten Patienten die aktuelle Sichtungskategorie im
    Übungsmodell. Sie kann nach Fahrzeug, aktueller Sichtung und
-   Startstatus gefiltert werden. Ein Klick auf den Patienten öffnet seine Auswahl für
+   Startstatus gefiltert werden. Über der Liste steht die Uhrzeit des letzten
+   erfolgreichen Abrufs. Bei einer Unterbrechung bleiben die zuletzt
+   geladenen Daten sichtbar und sind als veraltet gekennzeichnet.
+   Ein Klick auf den Patienten öffnet seine Auswahl für
    Steuerung, QR-Code und Vorschau. Die Steuerung für die ganze Übung
    steht oben neben dem Übungs-QR. **Übung beenden** schließt die Übung
    samt QR-Zugängen.
@@ -45,11 +51,16 @@
    Die Ausbildervorschau hat eine eigene Uhr bis Minute 45. Sie verändert
    den Live-Verlauf nicht.
 
+Unter **Konfiguration → Sichtung in der Schüleransicht** können Ausbilder
+pro Übung **Eigene Sichtung vor Auflösung** aktivieren. Teilnehmende wählen
+dann zuerst selbst eine Kategorie und sehen anschließend die im Übungsmodell
+hinterlegte Kategorie. Standardmäßig erscheint diese weiterhin automatisch.
+
 ## Eigene Szenarien
 
 Unter **Konfiguration → Weitere Übungsstarts → Übungsvorlagen** kann
 die aktive Zusammenstellung als benannte Vorlage gespeichert werden. Eine
-Vorlage enthält die Besetzung und Patientenprofile und bleibt für den
+Vorlage enthält die Besetzung, Patientenprofile und Sichtungseinstellung und bleibt für den
 Ausbilder verfügbar. Ein Start aus der Vorlage legt einen eigenen
 Durchlauf mit 24 Stunden Gültigkeit und frischen QR-Zugängen an.
 Der Durchlauf kann einen eigenen Namen bekommen. Eine bestehende Vorlage
@@ -99,8 +110,8 @@ und der simulierte Monitor wird ausgeblendet. Puls und Atemfrequenz schwanken
 leicht und für alle Geräte gleich über der Vitalwertkurve. Der Pkw kann als
 eigene Übung starten oder zu einer laufenden Übung hinzugefügt werden.
 
-Pkw werden innerhalb der Übung nummeriert, Personen innerhalb des Pkw in
-Sitzplatzreihenfolge. Beispiel **Pkw 02 · Patient 03 · hinten rechts**.
+Pkw werden innerhalb der Übung nummeriert. Personen erhalten je Pkw
+fortlaufende Nummern. Beispiel **Pkw 02 · Patient 03 · hinten rechts**.
 Den einzelnen QR-Code in der Ausbilderansicht am jeweiligen Platz auslegen.
 Die Pkw-Personen erscheinen nicht in der Teilnehmerliste und lassen sich
 nur mit ihrem eigenen Patienten-QR öffnen.
@@ -108,7 +119,9 @@ nur mit ihrem eigenen Patienten-QR öffnen.
 Unter **Konfiguration → Pkw mit Insassen → Pkw auswählen** lässt sich
 ein gebuchter Pkw öffnen. Fahrzeuglage, Verletzungsprofile, Befreiungslage,
 Wechselzeiten und eigene Verletzungstexte können dort geändert werden.
-Die Patientennummern und Stations-QRs bleiben dabei gültig. Bereits
+Personen können hinzugefügt, entfernt oder auf einen anderen Sitzplatz
+gesetzt werden. Verbleibende Personen behalten Nummer und Stations-QR.
+Bereits
 gestartete Patienten dieses Pkw müssen vor dem Speichern zurückgesetzt werden.
 Beim Wechsel des Pkw oder der Übung fragt TraumaSim nach, wenn Änderungen
 noch gespeichert, verworfen oder weiter bearbeitet werden können.

@@ -57,6 +57,22 @@ main { max-width: 49rem; margin: auto; }
 .page-banner :focus-visible { outline-color: #abdaff; }
 .page-banner .warning { color: #ffe6a5; }
 .page-banner .muted { color: #d6e7f6; }
+.trainer-shell:has(#workspace:not([hidden])) > .page-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: .7rem;
+}
+.trainer-shell:has(#workspace:not([hidden])) > .page-banner > :first-child,
+.trainer-shell:has(#workspace:not([hidden])) #message { grid-column: 1 / -1; }
+.trainer-shell:has(#workspace:not([hidden])) .page-banner h1 {
+  grid-column: 1;
+  grid-row: 2;
+  margin: .2rem 0;
+  font-size: clamp(1.35rem, 4vw, 1.9rem);
+}
+.trainer-shell:has(#workspace:not([hidden])) #logout { grid-column: 2; grid-row: 2; margin-right: 0; }
+.trainer-shell:has(#workspace:not([hidden])) #message { margin: .25rem 0 0; }
 .muted { color: var(--muted); }
 .small { font-size: .85rem; line-height: 1.5; }
 h1, h2, h3 { line-height: 1.2; overflow-wrap: anywhere; }
@@ -129,14 +145,52 @@ button:disabled { opacity: .55; cursor: default; }
 }
 .overview-fields label { min-width: 0; margin: .6rem 0; }
 .overview-fields select { display: block; width: 100%; }
-.trainer-views { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
-.trainer-views button { margin: 0; }
-.trainer-views button,
+.workspace-header { display: grid; gap: .75rem; }
+.active-exercise {
+  min-width: 0;
+  padding: .9rem 1rem;
+  border: 1px solid #aec7de;
+  border-left: .28rem solid var(--blue);
+  border-radius: var(--radius);
+  background: #edf5fc;
+}
+.active-exercise-label { color: var(--navy); font-size: .85rem; font-weight: 750; }
+.active-exercise h2 { margin: .25rem 0 .7rem; font-size: clamp(1.25rem, 3vw, 1.65rem); }
+.active-exercise label { margin: 0; color: var(--muted); font-size: .85rem; }
+.active-exercise select { width: 100%; margin: .2rem 0 0; }
+.trainer-views { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.trainer-views button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  margin: 0;
+  padding: .75rem;
+  border-color: #a6bed2;
+  background: var(--surface-soft);
+  color: var(--navy);
+  text-align: left;
+}
+.trainer-views strong { display: block; font-size: clamp(1rem, 2.5vw, 1.3rem); overflow-wrap: anywhere; }
+.trainer-views span { display: block; margin-top: .15rem; font-size: .82rem; line-height: 1.35; overflow-wrap: anywhere; }
 .patient-overview button { border: 1px solid transparent; }
 #exercise, #exerciseTemplate, #choose, .car-seat select { max-width: 100%; }
-.trainer-views button { background: var(--surface-soft); color: var(--navy); }
 .trainer-views button:not(:disabled):hover { background: #e0edf7; }
-.trainer-views button[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: white; }
+.trainer-views button[aria-pressed="true"],
+.trainer-views button[aria-pressed="true"]:hover { background: var(--navy); border-color: var(--navy); color: white; }
+@media (min-width: 740px) {
+  .workspace-header { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+.overview-sync {
+  margin: .55rem 0 .8rem;
+  padding: .45rem .7rem;
+  border-left: .23rem solid var(--blue);
+  border-radius: .2rem;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.overview-sync[data-stale="true"] { border-color: #946300; background: #fff4d5; color: #593900; }
 .patient-overview button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 11rem minmax(9rem, auto);
@@ -215,12 +269,26 @@ input#caseTitle, #name, textarea { width: 100%; padding: .55rem; }
   #carSeats { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 }
 
-.station-print { display: none; }
+.exercise-print { display: none; }
 @media print {
   @page { size: A4 portrait; margin: 12mm; }
-  body.printing-stations { color-scheme: light; margin: 0; padding: 0; background: white; color: #161616; }
-  body.printing-stations > main { display: none; }
-  body.printing-stations .station-print { display: block; }
+  body.printing-exercise { color-scheme: light; margin: 0; padding: 0; background: white; color: #161616; }
+  body.printing-exercise > main { display: none; }
+  body.printing-exercise .exercise-print { display: block; }
+  .briefing-sheet {
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 5mm;
+    height: 270mm;
+    padding: 10mm;
+    text-align: center;
+    break-inside: avoid;
+  }
+  .briefing-sheet h2 { margin: 0; color: inherit; font-size: 30pt; }
+  .briefing-sheet p { margin: 0; max-width: 125mm; font-size: 15pt; }
+  .briefing-sheet .print-validity { font-size: 12pt; }
+  .briefing-sheet-qr svg { display: block; width: 105mm; height: 105mm; }
   .station-sheet {
     display: grid;
     grid-template-rows: 1fr;

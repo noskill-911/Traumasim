@@ -40,6 +40,7 @@
       } catch {}
     },
     student: (params) => request('/rest/v1/rpc/traumasim_student', params),
+    studentAssess: (params) => request('/rest/v1/rpc/traumasim_student_assess', params),
     bookCar: (params, token) => request('/rest/v1/rpc/traumasim_book_car', params, token),
     bookBus: (params, token) => request('/rest/v1/rpc/traumasim_book_bus', params, token),
     createCustom: (scenario, token) => request('/rest/v1/rpc/traumasim_create_custom', { p_scenario: scenario }, token),

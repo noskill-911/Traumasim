@@ -26,6 +26,10 @@
   let polling = false;
   let actionVersion = 0;
   let refreshing = null;
+  let lastOverviewUpdate = 0;
+  const overviewTime = new Intl.DateTimeFormat('de-DE', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Europe/Berlin'
+  });
   let previewTime = 0;
   let previewTick = null;
   let carEditVersion = 0;
@@ -190,7 +194,13 @@
   function renderExercise(next) {
     const previous = selectedPatient()?.id;
     const changed = exercise?.id !== next?.id;
+    const triageMode = next?.triage_mode ?? 'automatic';
+    if (changed || (exercise?.triage_mode ?? 'automatic') !== triageMode) el('triageMode').value = triageMode;
     exercise = next;
+    el('triageSettings').hidden = !next;
+    el('activeExerciseTitle').textContent = next?.title ?? 'Keine Übung ausgewählt';
+    lastOverviewUpdate = next ? Date.now() : 0;
+    renderOverviewSync(navigator.onLine === false ? 'Verbindung unterbrochen' : '');
     el('noExercise').hidden = Boolean(next);
     el('live').hidden = !next;
     el('patientControls').hidden = !next;
@@ -236,14 +246,31 @@
     renderPatient();
   }
 
+  function renderOverviewSync(problem = '') {
+    const notice = el('overviewSync');
+    notice.hidden = !lastOverviewUpdate;
+    if (!lastOverviewUpdate) return;
+    notice.dataset.stale = String(Boolean(problem));
+    const label = problem || 'Live verbunden';
+    const status = el('overviewSyncStatus');
+    if (status.textContent !== label) status.textContent = label;
+    const time = el('overviewSyncTime');
+    const timestamp = new Date(lastOverviewUpdate);
+    time.dateTime = timestamp.toISOString();
+    time.textContent = overviewTime.format(timestamp);
+  }
+
   function renderJoin(code) {
     el('exerciseJoin').hidden = !code;
     const link = el('joinLink');
+    const qr = el('joinQr');
+    const print = el('printJoinQr');
     if (!code) {
-      el('joinQr').replaceChildren();
-      delete el('joinQr').dataset.url;
+      qr.replaceChildren();
+      delete qr.dataset.url;
       link.value = '';
       link.hidden = true;
+      print.disabled = true;
       return;
     }
     const url = new URL('join.html', location.href);
@@ -252,12 +279,34 @@
       link.value = url.href;
       link.hidden = true;
     }
-    drawQr(el('joinQr'), url.href, 'QR-Code zum Übungsbeitritt');
+    drawQr(qr, url.href, 'QR-Code zum Übungsbeitritt');
+    print.disabled = !qr.dataset.url;
   }
 
   el('resizeJoinQr').addEventListener('click', () => {
     const enlarged = el('joinQr').classList.toggle('is-enlarged');
     el('resizeJoinQr').textContent = enlarged ? 'QR verkleinern' : 'QR vergrößern';
+  });
+
+  el('printJoinQr').addEventListener('click', () => {
+    const url = el('joinQr').dataset.url;
+    if (!exercise || !url) return;
+    const sheet = document.createElement('section');
+    sheet.className = 'briefing-sheet';
+    const heading = document.createElement('p');
+    heading.textContent = 'Übungsbeitritt';
+    const title = document.createElement('h2');
+    title.textContent = exercise.title;
+    const qr = document.createElement('div');
+    qr.className = 'briefing-sheet-qr';
+    drawQr(qr, url, 'QR-Code zum Übungsbeitritt');
+    const instruction = document.createElement('p');
+    instruction.textContent = 'Scanne diesen QR-Code beim Briefing. Öffne die Stations-QRs während der Übung im selben Browser.';
+    const validity = document.createElement('p');
+    validity.className = 'print-validity';
+    validity.textContent = printValidity(exercise.expires_at);
+    sheet.append(heading, title, qr, instruction, validity);
+    printExercise([sheet]);
   });
 
   function drawQr(container, url, title) {
@@ -379,6 +428,21 @@
 
   el('printVehicle').addEventListener('change', () => updatePrintStations());
 
+  function printValidity(expiresAt) {
+    const date = new Intl.DateTimeFormat('de-DE', {
+      dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Berlin'
+    }).format(new Date(expiresAt));
+    return 'Gültig bis ' + date + ' Uhr (Berlin)';
+  }
+
+  function printExercise(pages, twoPerPage = false) {
+    const print = el('exercisePrint');
+    print.classList.toggle('two-per-page', twoPerPage);
+    print.replaceChildren(...pages);
+    document.body.classList.add('printing-exercise');
+    window.print();
+  }
+
   el('printStations').addEventListener('click', () => {
     if (!exercise?.patients.length) return;
     if (typeof window.qrcode !== 'function') {
@@ -398,9 +462,7 @@
       groups.get(group).push({ ...printLabel(patient), qrUrl });
     }
     if (!groups.size) return;
-    const expiresAt = new Intl.DateTimeFormat('de-DE', {
-      dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Berlin'
-    }).format(new Date(exercise.expires_at));
+    const validUntil = printValidity(exercise.expires_at);
     const pages = [];
     const sortedGroups = [...groups.entries()].sort(([a], [b]) => compareStationGroups(a, b));
     for (const [group, stations] of sortedGroups) {
@@ -429,23 +491,19 @@
           }
           const validity = document.createElement('p');
           validity.className = 'station-card-meta';
-          validity.textContent = 'Gültig bis ' + expiresAt + ' Uhr (Berlin)';
+          validity.textContent = validUntil;
           card.append(validity);
           sheet.append(card);
         }
         pages.push(sheet);
       }
     }
-    const print = el('stationPrint');
-    print.classList.toggle('two-per-page', perPage === 2);
-    print.replaceChildren(...pages);
-    document.body.classList.add('printing-stations');
-    window.print();
+    printExercise(pages, perPage === 2);
   });
 
   window.addEventListener('afterprint', () => {
-    document.body.classList.remove('printing-stations');
-    el('stationPrint').replaceChildren();
+    document.body.classList.remove('printing-exercise');
+    el('exercisePrint').replaceChildren();
   });
 
   for (const id of ['overviewVehicle', 'overviewCategory', 'overviewStatus']) {
@@ -630,9 +688,13 @@
     if (revoke && current) void api.signOut(current.access_token).catch(() => {});
   }
 
+  function trainerAccessLost(error) {
+    return error.status === 401 || (error.code === '42501'
+      && error.message === 'Konto nicht für die Ausbilderansicht freigegeben');
+  }
+
   function handleError(error) {
-    if (error.status === 401 || (error.code === '42501'
-      && error.message === 'Konto nicht für die Ausbilderansicht freigegeben')) {
+    if (trainerAccessLost(error)) {
       signedOut();
     } else if (exerciseUnavailable(error)) {
       el('exercise').selectedOptions[0]?.remove();
@@ -669,7 +731,7 @@
     if (busy) return;
     busy = true;
     actionVersion++;
-    const controls = document.querySelectorAll('form button, #logout, #exercise, #createCustom, #startBus, #attachBus, #editCar');
+    const controls = document.querySelectorAll('form button, #logout, #exercise, #createCustom, #startBus, #attachBus, #editCar, #triageMode');
     for (const control of controls) control.disabled = true;
     renderPatient();
     try {
@@ -684,6 +746,18 @@
       renderPatient();
     }
   }
+
+  el('triageSettingsForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!exercise) return;
+    const mode = el('triageMode').value;
+    void run(async () => {
+      const next = await rpc({ p_action: 'set_triage_mode', p_session: exercise.id, p_title: mode });
+      renderExercise(next);
+      el('triageMode').value = next.triage_mode ?? 'automatic';
+      message('Sichtungseinstellung gespeichert.');
+    });
+  });
 
   el('login').addEventListener('submit', (event) => {
     event.preventDefault();
@@ -882,7 +956,14 @@
         <label>Eigene Verletzungsbeschreibung (optional)
           <input class="seat-injury" maxlength="400">
         </label>
+        <div class="seat-move" hidden>
+          <label>Sitzplatz wechseln
+            <select class="seat-move-target"></select>
+          </label>
+          <button class="seat-move-button" type="button">Umsetzen oder tauschen</button>
+        </div>
       </div>`;
+    const legend = group.querySelector('legend');
     const profile = group.querySelector('.seat-profile');
     const details = group.querySelector('.seat-details');
     const transition = group.querySelector('.seat-transition');
@@ -891,6 +972,11 @@
     const access = group.querySelector('.seat-access');
     const entrapment = group.querySelector('.seat-entrapment');
     const entrapmentLabel = group.querySelector('.seat-entrapment-label');
+    const injury = group.querySelector('.seat-injury');
+    const move = group.querySelector('.seat-move');
+    const moveTarget = group.querySelector('.seat-move-target');
+    const moveButton = group.querySelector('.seat-move-button');
+    const row = { seat, label, profile, transition, access, entrapment, injury, move, moveTarget, moveButton, patientNumber: null };
     function showEntrapment() {
       entrapment.disabled = entrapmentLabel.hidden = !profile.value || access.value !== 'trapped';
     }
@@ -902,6 +988,15 @@
     }
     transition.addEventListener('input', showTransitionMinute);
     profile.addEventListener('change', () => {
+      if (!profile.value) {
+        row.patientNumber = null;
+        access.value = 'none';
+        entrapment.value = '';
+        injury.value = '';
+      }
+      legend.textContent = row.patientNumber == null
+        ? label
+        : label + ' · Patient ' + String(row.patientNumber).padStart(2, '0');
       details.hidden = !profile.value;
       showEntrapment();
       const defaultMinute = { 'green-yellow': 12, 'urgent-red': 6, 'red-ex': 8 }[profile.value];
@@ -911,8 +1006,10 @@
         showTransitionMinute();
       }
     });
+    moveTarget.addEventListener('change', updateCarActions);
+    moveButton.addEventListener('click', () => moveCarOccupant(row));
     el('carSeats').append(group);
-    return { seat, label, group, profile, transition, access, entrapment, injury: group.querySelector('.seat-injury') };
+    return row;
   });
 
   function carPatients(number) {
@@ -968,12 +1065,7 @@
     loadedCarNumber = el('editCar').value;
     const patients = carPatients(loadedCarNumber);
     el('carForm').reset();
-    for (const row of seatControls) {
-      row.group.hidden = Boolean(patients.length);
-      row.profile.options[0].disabled = Boolean(patients.length);
-      row.patientNumber = null;
-      row.profile.dispatchEvent(new Event('change'));
-    }
+    for (const row of seatControls) fillCarSeat(row);
     carEditVersion = patients[0]?.model.car_edit_version ?? 0;
     for (const {model} of patients) {
       const config = model.car_seat ? {
@@ -982,22 +1074,54 @@
       } : legacyCarConfig(model);
       const row = seatControls.find((item) => item.seat === config.seat);
       if (!row) continue;
-      row.group.hidden = false;
-      row.patientNumber = model.car_patient_number;
       el('carSituation').value = config.vehicle ?? '';
-      row.profile.value = config.profile;
-      row.access.value = ['none', 'enclosed'].includes(config.entrapment) ? config.entrapment : 'trapped';
-      row.entrapment.value = row.access.value === 'trapped' ? config.entrapment : '';
-      row.injury.value = config.injury ?? '';
-      row.profile.dispatchEvent(new Event('change'));
-      if (model.progression) {
-        row.transition.value = model.progression.at_seconds / 60;
-        row.transition.dispatchEvent(new Event('input'));
-      }
+      fillCarSeat(row, { ...config, patient_number: model.car_patient_number,
+        transition_minute: model.progression ? model.progression.at_seconds / 60 : null });
     }
+    updateCarMoveChoices();
     carFormBaseline = JSON.stringify(carFormConfig());
     showCarDirtyState();
+  }
+
+  function fillCarSeat(row, config) {
+    row.patientNumber = config?.patient_number ?? null;
+    row.profile.value = config?.profile ?? '';
+    const entrapment = config?.entrapment ?? 'none';
+    row.access.value = ['none', 'enclosed'].includes(entrapment) ? entrapment : 'trapped';
+    row.entrapment.value = row.access.value === 'trapped' ? entrapment : '';
+    row.injury.value = config?.injury ?? '';
+    row.profile.dispatchEvent(new Event('change'));
+    if (config?.transition_minute != null) {
+      row.transition.value = config.transition_minute;
+      row.transition.dispatchEvent(new Event('input'));
+    }
+  }
+
+  function updateCarMoveChoices() {
+    for (const row of seatControls) {
+      row.move.hidden = !loadedCarNumber || !row.profile.value;
+      const target = row.moveTarget.value;
+      row.moveTarget.replaceChildren(new Option('Zielplatz wählen', ''),
+        ...seatControls.filter((other) => other !== row).map((other) =>
+          new Option(other.profile.value ? 'Tauschen mit ' + other.label : other.label, other.seat)));
+      row.moveTarget.value = target;
+    }
     updateCarActions();
+  }
+
+  function moveCarOccupant(row) {
+    if (!loadedCarNumber || busy || !row.profile.value) return;
+    const target = seatControls.find((other) => other.seat === row.moveTarget.value);
+    if (!target || target === row) return;
+    const occupant = carOccupantConfig(row);
+    const otherOccupant = target.profile.value ? carOccupantConfig(target) : null;
+    fillCarSeat(row, otherOccupant);
+    fillCarSeat(target, occupant);
+    row.moveTarget.value = '';
+    target.moveTarget.value = '';
+    updateCarMoveChoices();
+    showCarDirtyState();
+    target.profile.focus();
   }
 
   function updateCarActions() {
@@ -1008,20 +1132,25 @@
     el('attachCar').hidden = !exercise || editing;
     el('saveCar').hidden = !editing;
     el('saveCar').disabled = busy || started;
+    for (const row of seatControls) row.moveButton.disabled = busy || !row.moveTarget.value;
     const status = el('carEditStatus');
     status.hidden = !editing;
     const text = started ? 'Setze die bereits gestarteten Patienten dieses Pkw vor dem Bearbeiten zurück.'
-      : 'Änderungen gelten für die vorhandenen Insassen. Ihre Patienten-QRs bleiben gültig.';
+      : 'Umgesetzte Insassen behalten ihre Patientennummer und ihren QR-Code. Entfernte Insassen verlieren ihren QR-Zugang. Neue Insassen erhalten einen eigenen Code.';
     if (status.textContent !== text) status.textContent = text;
   }
 
-  function carFormConfig() {
-    const occupants = seatControls.filter((row) => row.profile.value).map((row) => ({
+  function carOccupantConfig(row) {
+    return {
       seat: row.seat, profile: row.profile.value, injury: row.injury.value,
-      patient_number: row.patientNumber,
+      ...(row.patientNumber == null ? {} : { patient_number: row.patientNumber }),
       entrapment: row.access.value === 'trapped' ? row.entrapment.value : row.access.value,
       transition_minute: row.transition.disabled ? null : row.transition.valueAsNumber
-    }));
+    };
+  }
+
+  function carFormConfig() {
+    const occupants = seatControls.filter((row) => row.profile.value).map(carOccupantConfig);
     return { vehicle: el('carSituation').value, occupants };
   }
 
@@ -1065,7 +1194,10 @@
     button.addEventListener('click', () => el('carChangesDialog').close(button.dataset.carChoice));
   }
   el('carForm').addEventListener('input', showCarDirtyState);
-  el('carForm').addEventListener('change', showCarDirtyState);
+  el('carForm').addEventListener('change', (event) => {
+    if (event.target.classList.contains('seat-profile')) updateCarMoveChoices();
+    showCarDirtyState();
+  });
 
   el('editCar').addEventListener('change', () => {
     const select = el('editCar');
@@ -1177,13 +1309,18 @@
     drawPreview();
   }, 200);
   async function poll() {
-    if (!auth || busy || polling || document.hidden) return;
+    if (!auth || document.hidden) return;
+    if (lastOverviewUpdate && Date.now() - lastOverviewUpdate > 12000
+      && el('overviewSync').dataset.stale !== 'true') {
+      renderOverviewSync('Aktualisierung verzögert');
+    }
+    if (busy || polling) return;
     if (Date.now() >= auth.until) {
       signedOut(true);
       message(needsLogin().message);
       return;
     }
-    if (!exercise) return;
+    if (!exercise || navigator.onLine === false) return;
     polling = true;
     const version = actionVersion;
     try {
@@ -1191,7 +1328,8 @@
       if (auth && version === actionVersion) renderExercise(next);
     } catch (error) {
       if (auth && version === actionVersion) {
-        handleError(error);
+        if (trainerAccessLost(error) || exerciseUnavailable(error)) handleError(error);
+        else renderOverviewSync('Verbindung unterbrochen');
       }
     } finally {
       polling = false;
@@ -1199,6 +1337,9 @@
   }
 
   setInterval(poll, 3000);
+  window.addEventListener('offline', () => renderOverviewSync('Verbindung unterbrochen'));
+  window.addEventListener('online', poll);
+  document.addEventListener('visibilitychange', poll);
   window.addEventListener('storage', (event) => {
     if ((event.key !== sessionKey && event.key !== null) || !persistentSession || !auth) return;
     if (readSession()?.id === auth.id) return;

@@ -10,7 +10,7 @@
   const api = window.TraumaSync;
 
   const busStation = scenario && /^bus-(5|10)-[0-9]{2}$/.test(patientId);
-  const carStation = /^car-[0-9]{2}-[0-9]{2}$/.test(patientId);
+  const carStation = /^car-[0-9]{2}-[0-9]{2,}$/.test(patientId);
   if (!preset && !busStation && !carStation && !/^custom-[0-9a-f-]{36}$/.test(caseId)) {
     el('content').innerHTML = '<div class="panel"><h1>Patient nicht gefunden</h1><a href="index.html">Zur Übersicht</a></div>';
     return;
@@ -32,11 +32,12 @@
   });
   // A direct link keeps its exercise on reload. A new station scan uses the joined exercise.
   const directCode = history.state?.traumasimPatientCode;
+  const rejectedStationLink = history.state?.traumasimStationRejected === true;
   const preview = history.state?.preview === true;
   el('previewBanner').hidden = !preview;
-  const exerciseCode = directCode || carStation ? null : api.exerciseCode(caseId);
+  const exerciseCode = directCode || carStation || rejectedStationLink ? null : api.exerciseCode(caseId);
   let code = directCode || exerciseCode;
-  if (!carStation) {
+  if (!carStation && !rejectedStationLink) {
     try { code ||= sessionStorage.getItem(storageKey); } catch {}
   }
   let openPending = Boolean(code) && !preview;
@@ -49,6 +50,9 @@
   };
   let snapshot = null;
   let busy = false;
+  let choice = null;
+  let choiceKey = null;
+  let focusResolution = false;
   let animation = null;
   let waveFrameTime = null;
   let cardiacPhase = 0;
@@ -59,6 +63,32 @@
   const berlinClock = new Intl.DateTimeFormat('de-DE', {
     timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
   });
+  const triageLabels = {
+    red: 'SK I · Rot', yellow: 'SK II · Gelb', green: 'SK III · Grün', affected: 'Unverletzt betroffen', black: 'EX · Schwarz'
+  };
+
+  function restoreChoice() {
+    if (preview || !choiceKey) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(choiceKey));
+      if (saved?.revision === snapshot.revision && Object.hasOwn(triageLabels, saved.selection)) {
+        choice = saved.selection;
+      } else if (saved?.revision < snapshot.revision) {
+        localStorage.removeItem(choiceKey);
+      }
+    } catch {}
+  }
+
+  function saveChoice(selection) {
+    choice = selection;
+    if (preview || !choiceKey) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(choiceKey));
+      if (!(saved?.revision > snapshot.revision)) {
+        localStorage.setItem(choiceKey, JSON.stringify({ revision: snapshot.revision, selection }));
+      }
+    } catch {}
+  }
 
 function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+=2){let p=(x/width*6-phase)%1;if(p<0)p+=1;let y=45;if(kind==='ecg'){if(p<.58)y=45;else if(p<.64)y=43-4*Math.sin((p-.58)/.06*Math.PI);else if(p<.69)y=45+10*(p-.64)/.05;else if(p<.72)y=55-47*(p-.69)/.03;else if(p<.75)y=8+58*(p-.72)/.03;else if(p<.79)y=66-21*(p-.75)/.04;else if(p<.95)y=45-7*Math.sin((p-.79)/.16*Math.PI)}else if(kind==='pleth'){y=62-34*Math.pow(Math.max(0,Math.sin(Math.PI*p)),5)-8*Math.sin(Math.PI*p)}else{y=45-19*Math.sin(2*Math.PI*p)}out+=(x===0?'M':'L')+x+' '+y.toFixed(1)+' '}return out}
   function animateWaves(now) {
@@ -96,7 +126,16 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
   }
 
   function receiveSnapshot(data) {
+    const previousRevision = snapshot?.revision;
+    const nextKey = data.exercise_id ? 'traumasim:triage:' + data.exercise_id + ':' + patientId : null;
     snapshot = data;
+    if (choiceKey !== nextKey || previousRevision !== data.revision) {
+      choiceKey = nextKey;
+      choice = null;
+      focusResolution = false;
+      el('triageSelection').value = '';
+      restoreChoice();
+    }
     snapshotReceivedAt = performance.now();
     serverClockOffset = Date.parse(data.server_time) - snapshotReceivedAt;
     lastReceived = new Date();
@@ -111,7 +150,22 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     el('questions').textContent = brief?.questions ?? '';
     el('storyPanel').hidden = !snapshot;
     el('startPatient').hidden = preview || snapshot?.status !== 'ready';
+    const showChoice = snapshot?.triage_mode === 'choose' && snapshot.triage_selectable && !snapshot.triage;
+    el('triageChoicePanel').hidden = !showChoice;
+    el('triageObservation').hidden = !showChoice || !snapshot.observation;
+    el('triageObservation').textContent = showChoice ? snapshot.observation ?? '' : '';
+    el('triageChoiceForm').hidden = !showChoice || Boolean(choice);
+    el('triageChoicePending').hidden = !showChoice || !choice;
     el('triagePanel').hidden = !snapshot?.triage;
+    if (!snapshot?.triage) {
+      el('triage').textContent = '';
+      el('triageReason').textContent = '';
+      el('patientCondition').textContent = '';
+      el('triageBox').className = 'triage';
+    }
+    const showOwnChoice = snapshot?.triage_mode === 'choose' && snapshot.triage && choice;
+    el('triageOwnChoice').hidden = !showOwnChoice;
+    el('triageOwnChoice').textContent = showOwnChoice ? 'Deine Sichtung · ' + triageLabels[choice] : '';
     monitor = snapshot?.monitor ?? (snapshot?.vitals && { ...snapshot.vitals, ecg: true });
     el('vitalsPanel').hidden = !monitor;
     el('clockPanel').hidden = !snapshot || Boolean(monitor && el('monitorElapsed'));
@@ -123,9 +177,11 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
       const { red, reason, condition } = snapshot.triage;
       const category = snapshot.triage.category ?? (red ? 'red' : 'yellow');
       el('triageBox').className = 'triage ' + category;
-      el('triage').textContent = { red: 'SK I · ROT', yellow: 'SK II · GELB', green: 'SK III · GRÜN', affected: 'UNVERLETZT BETROFFEN', black: 'EX · SCHWARZ' }[category];
+      el('triage').textContent = triageLabels[category]?.toLocaleUpperCase('de') ?? '';
       el('triageReason').textContent = reason;
       el('patientCondition').textContent = condition;
+      if (showOwnChoice && focusResolution) el('triage').focus({ preventScroll: true });
+      focusResolution = false;
     }
     if (monitor) {
       const { s, d, h, r, o, g, ecg, bp_at, bp_wall_at, bp_next_wall_at, bp_previous } = monitor;
@@ -170,8 +226,11 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     const query = { p_case: caseId, p_patient: patientId, p_code: code };
     try {
       if (revision !== undefined && !preview) pendingStartRevision = revision;
-      if (pendingStartRevision !== undefined) query.p_start_revision = pendingStartRevision;
-      receiveSnapshot(await api.student(query));
+      const canAssess = () => snapshot?.triage_mode === 'choose' && snapshot.triage_selectable && choice;
+      const assess = () => api.studentAssess({ ...query, p_selection: choice, p_seen_revision: snapshot.revision });
+      const useAssessment = pendingStartRevision === undefined && canAssess();
+      const request = useAssessment ? assess() : api.student({ ...query, p_start_revision: pendingStartRevision });
+      receiveSnapshot(await request);
       pendingStartRevision = undefined;
       const firstVisit = openPending;
       openPending = false;
@@ -180,6 +239,7 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
         receiveSnapshot(await api.student({ ...query, p_start_revision: pendingStartRevision }));
         pendingStartRevision = undefined;
       }
+      if (!useAssessment && canAssess() && !snapshot.triage) receiveSnapshot(await assess());
       if (!preview && !exerciseCode && !carStation) {
         try { sessionStorage.setItem(storageKey, code); } catch {}
       }
@@ -204,10 +264,18 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
       el('retryConnection').hidden = true;
       if (error.code === '42501') {
         if (exerciseCode) api.clearExerciseCode(caseId, exerciseCode);
-        if (directCode) history.replaceState(null, '');
-        try { sessionStorage.removeItem(storageKey); } catch {}
+        if (directCode) {
+          // Keep a rejected station entry from falling through to a different exercise on reload.
+          history.replaceState(preview ? null : { traumasimStationRejected: true }, '');
+          el('stationRecovery').hidden = preview;
+        }
+        try {
+          if (!directCode || sessionStorage.getItem(storageKey) === directCode) {
+            sessionStorage.removeItem(storageKey);
+          }
+        } catch {}
         code = null;
-        if (!preview) showJoinHint();
+        if (!preview && !directCode) showJoinHint();
       } else if (error.code === 'P0002') {
         code = null;
       }
@@ -224,9 +292,26 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
   el('startPatient').addEventListener('click', () => {
     if (snapshot?.status === 'ready') void synchronize({ revision: snapshot.revision });
   });
+  el('triageChoiceForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const selection = el('triageSelection').value;
+    if (snapshot?.triage_mode !== 'choose' || !snapshot.triage_selectable || choice || !Object.hasOwn(triageLabels, selection)) return;
+    saveChoice(selection);
+    focusResolution = true;
+    render();
+    void synchronize();
+  });
+  window.addEventListener('storage', (event) => {
+    if (event.key !== choiceKey || !snapshot || choice) return;
+    restoreChoice();
+    if (choice) void synchronize();
+  });
   el('retryConnection').addEventListener('click', () => { void synchronize(); });
   if (code) {
     void synchronize();
+  } else if (rejectedStationLink) {
+    el('stationRecovery').hidden = false;
+    el('syncStatus').textContent = 'Patientenzugang ungültig oder abgelaufen.';
   } else {
     showJoinHint();
     el('syncStatus').textContent = 'Übungszugang erforderlich.';

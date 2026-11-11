@@ -28,7 +28,8 @@ create table if not exists public.traumasim_patients (
 alter table public.traumasim_sessions
  add column if not exists trainer_id uuid references auth.users(id) on delete cascade,
  add column if not exists case_key text not null default 'vu-baum',
- add column if not exists signing_key uuid not null default gen_random_uuid();
+ add column if not exists signing_key uuid not null default gen_random_uuid(),
+ add column if not exists triage_mode text not null default 'automatic' check (triage_mode in ('automatic', 'choose'));
 alter table public.traumasim_patients
  add column if not exists revision integer not null default 0,
  add column if not exists scenario_model jsonb;
@@ -62,6 +63,8 @@ create table if not exists traumasim_private.exercise_templates (
  created_at timestamptz not null default now(),
  unique (trainer_id, title)
 );
+alter table traumasim_private.exercise_templates
+ add column if not exists triage_mode text not null default 'automatic' check (triage_mode in ('automatic', 'choose'));
 alter table traumasim_private.exercise_templates enable row level security;
 alter table traumasim_private.bus_templates enable row level security;
 alter table traumasim_private.trainers enable row level security;
@@ -187,9 +190,9 @@ create or replace function traumasim_private.patient_category(
    else 'yellow' end;
 $$;
 
-create or replace function traumasim_private.student(
- p_case text, p_patient text, p_code text, p_start_revision integer default null
-) returns jsonb language plpgsql security definer set search_path = '' as $$
+create or replace function traumasim_private.student_snapshot(
+ p_case text, p_patient text, p_code text, p_start_revision integer, p_selection text, p_seen_revision integer
+) returns jsonb language plpgsql set search_path = '' as $$
 declare
  exercise public.traumasim_sessions%rowtype;
  patient public.traumasim_patients%rowtype;
@@ -214,6 +217,8 @@ declare
  category text;
  triage_delay integer;
  condition_index integer;
+ observation text;
+ can_select boolean;
  exercise_access boolean := split_part(p_code, '.', 2) like 'j%';
  preview_access boolean := split_part(p_code, '.', 2) like 'p%';
 begin
@@ -240,7 +245,7 @@ begin
 
  if p_start_revision is not null and not preview_access then
    -- Serialize starts with whole-exercise resets and instructor commands.
-   perform 1 from public.traumasim_sessions s
+   select s.* into exercise from public.traumasim_sessions s
    where s.id = exercise.id and s.expires_at > clock_timestamp() for update;
    if not found then
      raise exception using errcode = '42501', message = 'Patientenzugang ungültig oder abgelaufen';
@@ -315,21 +320,30 @@ begin
    when (vitals->>'s')::integer < 100 then 2
    when (vitals->>'h')::integer >= 110 then 1
    else 0 end;
+ observation := case
+   when category = 'black' then 'Die Person reagiert im Übungsmodell nicht mehr.'
+   when progression->>'from' = 'green' then case category
+     when 'green' then 'Wach und orientiert. Schmerzen am Unterschenkel, kann noch selbst gehen.'
+     else 'Der Unterschenkel schwillt an. Die Schmerzen nehmen zu, Auftreten ist nicht mehr möglich.' end
+   when progression->>'to' = 'red' and category = 'red' then 'Die Person wird blass und benommen. Der Kreislauf verschlechtert sich.'
+   else model->'condition'->>condition_index end;
+ -- The choice becomes available at the same time for every category.
+ can_select := exercise.triage_mode = 'choose' and seconds >= 10;
  return jsonb_build_object(
+   'exercise_id', exercise.id,
    'revision', patient.revision,
    'status', case when patient.started_at is null then 'ready'
      when seconds >= duration then 'finished' when patient.paused_at is not null then 'paused' else 'running' end,
    'elapsed', floor(seconds),
    'server_time', snapshot_time,
-   'triage', case when seconds >= triage_delay then jsonb_build_object(
+   'triage_mode', exercise.triage_mode,
+   'triage_selectable', can_select,
+   'observation', case when can_select then observation end,
+   'triage', case when (exercise.triage_mode = 'automatic' and seconds >= triage_delay)
+     or (can_select and p_seen_revision = patient.revision and p_selection in ('red', 'yellow', 'green', 'affected', 'black'))
+     then jsonb_build_object(
      'category', category, 'red', category = 'red',
-     'condition', case
-       when category = 'black' then 'Die Person reagiert im Übungsmodell nicht mehr.'
-       when progression->>'from' = 'green' then case category
-         when 'green' then 'Wach und orientiert. Schmerzen am Unterschenkel, kann noch selbst gehen.'
-         else 'Der Unterschenkel schwillt an. Die Schmerzen nehmen zu, Auftreten ist nicht mehr möglich.' end
-       when progression->>'to' = 'red' and category = 'red' then 'Die Person wird blass und benommen. Der Kreislauf verschlechtert sich.'
-       else model->'condition'->>condition_index end,
+     'condition', observation,
      'reason', case when category = 'black' then 'Im Übungsmodell verstorben'
        when affected then 'Unverletzt, aufgewühlt und betreuungsbedürftig'
        when category = 'red' then coalesce(model->>'triageReason', 'Didaktische Einstufung: Zeichen eines kritischen Schocks')
@@ -362,6 +376,18 @@ begin
    'questions', case when category <> 'black' then model->>'questions' end
  )) else '{}'::jsonb end;
 end;
+$$;
+
+create or replace function traumasim_private.student(
+ p_case text, p_patient text, p_code text, p_start_revision integer default null
+) returns jsonb language sql security definer set search_path = '' as $$
+ select traumasim_private.student_snapshot(p_case, p_patient, p_code, p_start_revision, null, null);
+$$;
+
+create or replace function traumasim_private.student_assess(
+ p_case text, p_patient text, p_code text, p_selection text, p_seen_revision integer
+) returns jsonb language sql security definer set search_path = '' as $$
+ select traumasim_private.student_snapshot(p_case, p_patient, p_code, null, p_selection, p_seen_revision);
 $$;
 
 create or replace function traumasim_private.require_trainer()
@@ -421,9 +447,9 @@ begin
      raise exception using errcode = '42501', message = 'Vorlage nicht verfügbar.';
    end if;
    new_session_id := gen_random_uuid();
-   insert into public.traumasim_sessions (id, title, trainer_id, case_key)
+   insert into public.traumasim_sessions (id, title, trainer_id, case_key, triage_mode)
    values (new_session_id, coalesce(btrim(p_title), template.title), trainer, case when template.case_key like 'custom-%'
-     then 'custom-' || new_session_id::text else template.case_key end)
+     then 'custom-' || new_session_id::text else template.case_key end, template.triage_mode)
    returning * into exercise;
    insert into public.traumasim_patients (session_id, patient_key, scenario_model)
    select exercise.id, p.patient_key, p.scenario_model
@@ -450,6 +476,12 @@ begin
    snapshot_time := clock_timestamp();
    case p_action
      when 'status' then null;
+     when 'set_triage_mode' then
+       if p_title is null or p_title not in ('automatic', 'choose') then
+         raise exception using errcode = '22023', message = 'Ungültige Einstellung für die Sichtung.';
+       end if;
+       update public.traumasim_sessions s set triage_mode = p_title where s.id = exercise.id
+       returning s.* into exercise;
      when 'save_template', 'update_template' then
        select jsonb_agg(jsonb_build_object('patient_key', p.patient_key, 'scenario_model', p.scenario_model)
          order by p.patient_key)
@@ -459,8 +491,8 @@ begin
          raise exception using errcode = '22023', message = 'Für die Vorlage wird mindestens ein Patient benötigt.';
        end if;
        if p_action = 'save_template' then
-         insert into traumasim_private.exercise_templates (trainer_id, title, case_key, patients)
-         values (trainer, btrim(p_title), exercise.case_key, template_patients)
+         insert into traumasim_private.exercise_templates (trainer_id, title, case_key, patients, triage_mode)
+         values (trainer, btrim(p_title), exercise.case_key, template_patients, exercise.triage_mode)
          on conflict (trainer_id, title) do nothing
          returning * into template;
          if not found then
@@ -471,7 +503,7 @@ begin
            raise exception using errcode = '22023', message = 'Wähle eine gültige Vorlage aus.';
          end if;
          update traumasim_private.exercise_templates t
-         set case_key = exercise.case_key, patients = template_patients
+         set case_key = exercise.case_key, patients = template_patients, triage_mode = exercise.triage_mode
          where t.id = p_patient::uuid and t.trainer_id = trainer
          returning * into template;
          if not found then
@@ -530,7 +562,7 @@ begin
    traumasim_private.elapsed(p.started_at, p.paused_at, p.accumulated_pause_seconds, snapshot_time)) as seconds) t
  where p.session_id = exercise.id;
  return jsonb_build_object('id', exercise.id, 'title', exercise.title, 'case', exercise.case_key,
-   'expires_at', exercise.expires_at, 'patients', result,
+   'expires_at', exercise.expires_at, 'patients', result, 'triage_mode', exercise.triage_mode,
    'join_code', traumasim_private.exercise_code(exercise.id, exercise.case_key, exercise.signing_key));
 end;
 $$;
@@ -668,7 +700,9 @@ declare
  vehicle text := coalesce(nullif(btrim(p_config->>'vehicle'), ''), 'Fahrzeuglage vor Ort erkunden.');
  person jsonb;
  car_no integer;
- person_no integer := 0;
+ person_no bigint;
+ last_person_no bigint := 0;
+ last_booked_person_no bigint;
  car_label text;
  person_label text;
  seat_name text;
@@ -680,8 +714,9 @@ declare
  points jsonb;
  edit_car boolean := coalesce(p_config ? 'car_number', false);
  edit_version integer;
- existing_count integer;
+ existing_count integer := 0;
  has_started boolean;
+ retain_person boolean;
  patient_model jsonb;
 begin
  if jsonb_typeof(p_config) is distinct from 'object'
@@ -711,17 +746,15 @@ begin
    if not found then
      raise exception using errcode = '42501', message = 'Übung nicht verfügbar oder abgelaufen';
    end if;
-   if not edit_car and (select count(*) from public.traumasim_patients p where p.session_id = exercise.id)
-      + jsonb_array_length(occupants) > 30 then
-     raise exception using errcode = '22023', message = 'Eine Übung unterstützt insgesamt bis zu 30 Patienten.';
-   end if;
  end if;
 
  if edit_car then
    car_no := (p_config->>'car_number')::integer;
    select count(*), bool_or(p.started_at is not null),
-          max(coalesce((p.scenario_model->>'car_edit_version')::integer, 0))
-   into existing_count, has_started, edit_version
+          max(coalesce((p.scenario_model->>'car_edit_version')::integer, 0)),
+          max(greatest((p.scenario_model->>'car_patient_number')::bigint,
+                       (p.scenario_model->>'car_patient_sequence')::bigint))
+   into existing_count, has_started, edit_version, last_person_no
    from public.traumasim_patients p
    where p.session_id = exercise.id and p.patient_key like 'car-%'
      and (p.scenario_model->>'car_number')::integer = car_no;
@@ -734,17 +767,33 @@ begin
    if edit_version <> (p_config->>'edit_version')::integer then
      raise exception using errcode = '40001', message = 'Der Pkw wurde zwischenzeitlich bearbeitet. Öffne die Bearbeitung erneut.';
    end if;
-   if existing_count <> jsonb_array_length(occupants)
-      or (select count(distinct item->>'patient_number') from jsonb_array_elements(occupants) item) <> existing_count then
-     raise exception using errcode = '22023', message = 'Speichere alle vorhandenen Insassen genau einmal.';
+   if (select count(item->>'patient_number') <> count(distinct item->>'patient_number')
+       from jsonb_array_elements(occupants) item) then
+     raise exception using errcode = '22023', message = 'Jeder vorhandene Insasse darf nur einmal ausgewählt werden.';
    end if;
+   -- Keep the highest assigned number on every remaining occupant so deleted QR links stay invalid.
+   select last_person_no + count(*) into last_booked_person_no
+   from jsonb_array_elements(occupants) item where item->>'patient_number' is null;
    edit_version := edit_version + 1;
  else
    edit_version := 0;
+   last_booked_person_no := jsonb_array_length(occupants);
    select coalesce(max((p.scenario_model->>'car_number')::integer), 0) + 1 into car_no
    from public.traumasim_patients p where p.session_id = exercise.id and p.patient_key like 'car-%';
  end if;
+ if (select count(*) from public.traumasim_patients p where p.session_id = exercise.id)
+    - existing_count + jsonb_array_length(occupants) > 30 then
+   raise exception using errcode = '22023', message = 'Eine Übung unterstützt insgesamt bis zu 30 Patienten.';
+ end if;
  car_label := lpad(car_no::text, 2, '0');
+
+ if edit_car then
+   delete from public.traumasim_patients p
+   where p.session_id = exercise.id and p.patient_key like 'car-%'
+     and (p.scenario_model->>'car_number')::integer = car_no
+     and not exists (select 1 from jsonb_array_elements(occupants) item
+                     where item->>'patient_number' = p.scenario_model->>'car_patient_number');
+ end if;
 
  for person in select value from jsonb_array_elements(occupants)
    order by array_position(seats, value->>'seat') loop
@@ -819,22 +868,24 @@ begin
      into points from generate_series(0, 25, 5) minute;
    end if;
 
-   if edit_car then
-     if coalesce(person->>'patient_number', '') !~ '^[1-5]$' then
+   retain_person := edit_car and person->>'patient_number' is not null;
+   if retain_person then
+     if person->>'patient_number' !~ '^[1-9][0-9]{0,9}$' then
        raise exception using errcode = '22023', message = 'Die Patientennummer ist ungültig.';
      end if;
-     person_no := (person->>'patient_number')::integer;
+     person_no := (person->>'patient_number')::bigint;
    else
-     person_no := person_no + 1;
+     last_person_no := last_person_no + 1;
+     person_no := last_person_no;
    end if;
-   person_label := lpad(person_no::text, 2, '0');
+   person_label := lpad(person_no::text, greatest(2, length(person_no::text)), '0');
    patient_model := jsonb_build_object(
      'name', format('Pkw %s · Patient %s · %s', car_label, person_label, seat_name),
      'intro', format('%s. Sitzplatz %s, %s.', rtrim(vehicle, '.'), seat_name, entrapment),
      'story', injury,
      'questions', '',
      'secret', format('Pkw %s · %s · %s. %s', car_label, seat_name, entrapment, injury),
-     'car_number', car_no, 'car_patient_number', person_no,
+     'car_number', car_no, 'car_patient_number', person_no, 'car_patient_sequence', last_booked_person_no,
      'car_vehicle', nullif(btrim(p_config->>'vehicle'), ''),
      'car_seat', person->>'seat', 'car_profile', profile, 'car_entrapment', person->>'entrapment',
      'car_injury', nullif(btrim(person->>'injury'), ''), 'car_edit_version', edit_version,
@@ -842,7 +893,7 @@ begin
      'nibpFastCycle', profile in ('critical','urgent-red','red-ex'),
      'progression', progression, 'points', points
    );
-   if edit_car then
+   if retain_person then
      update public.traumasim_patients p
      set scenario_model = patient_model, updated_at = clock_timestamp()
      where p.session_id = exercise.id and p.patient_key = 'car-' || car_label || '-' || person_label
@@ -869,6 +920,12 @@ create or replace function public.traumasim_student(
  p_case text, p_patient text, p_code text, p_start_revision integer default null
 ) returns jsonb language sql security invoker set search_path = '' as $$
  select traumasim_private.student(p_case, p_patient, p_code, p_start_revision);
+$$;
+
+create or replace function public.traumasim_student_assess(
+ p_case text, p_patient text, p_code text, p_selection text, p_seen_revision integer
+) returns jsonb language sql security invoker set search_path = '' as $$
+ select traumasim_private.student_assess(p_case, p_patient, p_code, p_selection, p_seen_revision);
 $$;
 
 create or replace function public.traumasim_trainer(
@@ -898,6 +955,7 @@ revoke all on function public.traumasim_book_bus(integer, uuid) from public, ano
 revoke all on function public.traumasim_create_custom(jsonb) from public, anon, authenticated;
 revoke all on function public.traumasim_join(text) from public, anon, authenticated;
 revoke all on function public.traumasim_student(text, text, text, integer) from public, anon, authenticated;
+revoke all on function public.traumasim_student_assess(text, text, text, text, integer) from public, anon, authenticated;
 revoke all on function public.traumasim_trainer(text, uuid, text, text) from public, anon, authenticated;
 grant usage on schema traumasim_private to anon, authenticated;
 grant execute on function traumasim_private.join_exercise(text) to anon, authenticated;
@@ -905,6 +963,8 @@ grant execute on function public.traumasim_join(text) to anon, authenticated;
 grant execute on function traumasim_private.student(text, text, text, integer) to anon, authenticated;
 grant execute on function traumasim_private.trainer(text, uuid, text, text) to authenticated;
 grant execute on function public.traumasim_student(text, text, text, integer) to anon, authenticated;
+grant execute on function traumasim_private.student_assess(text, text, text, text, integer),
+ public.traumasim_student_assess(text, text, text, text, integer) to anon, authenticated;
 grant execute on function traumasim_private.create_custom(jsonb) to authenticated;
 grant execute on function traumasim_private.book_bus(integer, uuid), public.traumasim_book_bus(integer, uuid) to authenticated;
 grant execute on function traumasim_private.book_car(jsonb, uuid), public.traumasim_book_car(jsonb, uuid) to authenticated;

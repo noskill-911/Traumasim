@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=workflow-2">
+  <link rel="stylesheet" href="style.css?v=workflow-3">
 </head>
 <body><main class="trainer-shell">
   <section class="panel page-banner">
@@ -24,11 +24,22 @@
 
   <div id="workspace" hidden>
     <section class="panel">
-      <label>Aktive Übung <select id="exercise"></select></label>
-      <nav class="trainer-views" aria-label="Ausbilderbereiche">
-        <button id="showConfiguration" type="button" aria-controls="configurationView" aria-pressed="true">Konfiguration</button>
-        <button id="showExercise" type="button" aria-controls="exerciseView" aria-pressed="false">Übung</button>
-      </nav>
+      <div class="workspace-header">
+        <section class="active-exercise" aria-labelledby="activeExerciseLabel activeExerciseTitle">
+          <div id="activeExerciseLabel" class="active-exercise-label">Aktive Übung</div>
+          <h2 id="activeExerciseTitle">Keine Übung ausgewählt</h2>
+          <label for="exercise">Übung auswählen oder wechseln</label>
+          <select id="exercise"></select>
+        </section>
+        <nav class="trainer-views" aria-label="Ausbilderbereiche">
+          <button id="showConfiguration" type="button" aria-label="Konfiguration" aria-controls="configurationView" aria-pressed="true">
+            <strong>Konfiguration</strong><span>Fahrzeuge, Patienten und Vorlagen</span>
+          </button>
+          <button id="showExercise" type="button" aria-label="Übung" aria-controls="exerciseView" aria-pressed="false">
+            <strong>Übung</strong><span>Patientenübersicht und Steuerung</span>
+          </button>
+        </nav>
+      </div>
       <div id="exerciseToolbar" class="exercise-toolbar" hidden>
         <section id="exerciseJoin" class="exercise-tool" aria-labelledby="exerciseJoinTitle" hidden>
           <h2 id="exerciseJoinTitle">Übungs-QR</h2>
@@ -36,6 +47,7 @@
           <div class="exercise-tool-actions">
             <button id="resizeJoinQr" type="button" aria-controls="joinQr">QR vergrößern</button>
             <button id="copyJoin" type="button">Übungslink kopieren</button>
+            <button id="printJoinQr" type="button" disabled>Übungs-QR drucken (A4)</button>
           </div>
           <input id="joinLink" aria-label="Übungslink zum manuellen Kopieren" readonly hidden>
           <details class="exercise-briefing">
@@ -70,7 +82,7 @@
         <details class="booking-card" id="carBooking">
           <summary><span>Pkw mit Insassen</span><span class="muted small">Bis zu 5 Sitzplätze</span></summary>
           <div class="booking-fields">
-            <p>Lege je besetztem Sitzplatz das Verletzungsprofil und die Befreiungslage fest. Jeder Patient erhält einen eigenen QR-Code.</p>
+            <p>Lege je besetztem Sitzplatz das Verletzungsprofil und die Befreiungslage fest. Wähle „Leer“, um einen Insassen zu entfernen. Beim Bearbeiten kannst du Insassen auch umsetzen.</p>
             <p class="muted small">Bei <strong>Eingeschlossen</strong> ist der Ausstieg versperrt. Bei <strong>Eingeklemmt</strong> steckt ein Körperteil fest, etwa im Fußraum.</p>
             <label id="editCarChoice" hidden>Pkw auswählen
               <select id="editCar"></select>
@@ -106,6 +118,17 @@
             </div>
           </div>
         </details>
+      </section>
+      <section id="triageSettings" class="panel" hidden>
+        <h2>Sichtung in der Schüleransicht</h2>
+        <form id="triageSettingsForm">
+          <label for="triageMode">Wann erscheint die Sichtungskategorie?</label>
+          <select id="triageMode">
+            <option value="automatic">Automatisch nach der Wartezeit</option>
+            <option value="choose">Eigene Sichtung vor Auflösung</option>
+          </select>
+          <button type="submit">Sichtungseinstellung speichern</button>
+        </form>
       </section>
       <section class="panel">
         <h2>Weitere Übungsstarts</h2>
@@ -145,6 +168,10 @@
       <section id="live" class="panel" hidden>
         <h2>Patientenübersicht</h2>
         <p id="liveTitle"></p>
+        <p id="overviewSync" class="overview-sync small" hidden>
+          <strong id="overviewSyncStatus" role="status"></strong>
+          <span> · Letzter erfolgreicher Abruf <time id="overviewSyncTime"></time></span>
+        </p>
         <details>
           <summary>QR-Druckliste (A4)</summary>
           <div class="overview-fields">
@@ -232,12 +259,12 @@
   <button type="button" data-car-choice="discard">Verwerfen</button>
   <button type="button" data-car-choice="cancel" autofocus>Abbrechen</button>
 </dialog>
-<div id="stationPrint" class="station-print"></div>
+<div id="exercisePrint" class="exercise-print"></div>
 <script src="patients.js"></script>
 <script src="supabase-config.js"></script>
 <script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
 <script src="scenario-validation.js?v=1"></script>
-<script src="trainer.js?v=workflow-2"></script>
+<script src="trainer.js?v=workflow-3"></script>
 </body>
 </html>
