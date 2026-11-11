@@ -15,6 +15,12 @@
    Die **Übungsübersicht** zeigt aktive und inaktive Übungen sowie Vorlagen
    mit Besetzung und Sichtungskategorien. Von dort lassen sich Übungen
    öffnen und vorkonfigurierte Vorlagen auswählen.
+   Über **Teilen** kannst du einen Link für ein bestätigtes Ausbilderkonto
+   erstellen. Der Empfänger öffnet ihn mit diesem Konto und sieht den
+   Übungsstand im Lesemodus. Der Link lässt sich kopieren, über WhatsApp
+   oder über das Teilen-Menü des Geräts weitergeben. Freigaben lassen sich
+   im selben Dialog widerrufen. Ein neuer Link für dieselbe Adresse ersetzt
+   den bisherigen.
    Über **Übung umbenennen** lässt sich der Name der aktiven Übung ändern.
    Direkt darunter steht der Übungs-QR fürs Briefing. Über **Übungs-QR als A4 drucken**
    lässt er sich als eigener Aushang mit Übungsname und Gültigkeit ausgeben.
@@ -54,6 +60,10 @@
    inaktiv und sperrt ihre QR-Zugänge. In der Übungsübersicht kann sie
    mit denselben QR-Codes wieder aktiviert werden. Laufende Patientenverläufe
    sind dabei pausiert und lassen sich gezielt fortsetzen.
+   Ungespeicherte Stationsentwürfe bleiben im selben Browser erhalten und
+   lassen sich nach der Reaktivierung in derselben Übung wiederherstellen.
+   Bei inaktiven Übungen öffnet **Bericht ansehen** die Patientenstände und
+   Sichtungszeiten im Lesemodus. Der Bericht lässt sich als CSV herunterladen.
    **Übung löschen** steht bei den inaktiven Übungen zur Verfügung.
    **Eintreffen erfassen** startet die gemeinsame Stoppuhr. Die Übersicht
    zeigt je Patient die Zeit vom Eintreffen bis zur ersten erfassten

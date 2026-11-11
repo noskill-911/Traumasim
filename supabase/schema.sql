@@ -68,7 +68,17 @@ create table if not exists traumasim_private.exercise_templates (
 );
 alter table traumasim_private.exercise_templates
  add column if not exists triage_mode text not null default 'automatic' check (triage_mode in ('automatic', 'choose'));
+create table if not exists traumasim_private.exercise_shares (
+ session_id uuid not null references public.traumasim_sessions(id) on delete cascade,
+ recipient_id uuid not null references auth.users(id) on delete cascade,
+ recipient_email text not null check (recipient_email = lower(btrim(recipient_email))),
+ token_hash bytea not null unique check (octet_length(token_hash) = 32),
+ created_at timestamptz not null default now(),
+ primary key (session_id, recipient_email)
+);
+create index if not exists traumasim_exercise_shares_recipient on traumasim_private.exercise_shares (recipient_id);
 alter table traumasim_private.exercise_templates enable row level security;
+alter table traumasim_private.exercise_shares enable row level security;
 alter table traumasim_private.bus_templates enable row level security;
 alter table traumasim_private.trainers enable row level security;
 alter table traumasim_private.models enable row level security;
@@ -93,6 +103,12 @@ begin
   create or replace function traumasim_private.patient_code(p_session uuid, p_patient text, p_signing_key uuid)
   returns text language sql immutable strict set search_path = '' as $body$
     select p_session::text || '.' || encode(%I.hmac(p_patient, p_signing_key::text, 'sha256'), 'hex');
+  $body$;
+ $fn$, crypto_schema);
+ execute format($fn$
+  create or replace function traumasim_private.new_share_token()
+  returns text language sql volatile set search_path = '' as $body$
+    select encode(%I.gen_random_bytes(32), 'hex');
   $body$;
  $fn$, crypto_schema);
 end
@@ -696,6 +712,47 @@ returns jsonb language sql stable set search_path = '' as $$
  from overview;
 $$;
 
+create or replace function traumasim_private.exercise_report(p_exercise public.traumasim_sessions, p_now timestamptz)
+returns jsonb language sql stable set search_path = '' as $$
+ with timing as (
+   select p_exercise.inactive_at is null and p_exercise.expires_at > p_now as active,
+     least(p_now, p_exercise.expires_at, p_exercise.inactive_at) as course_at
+ )
+ select jsonb_build_object(
+   'id', p_exercise.id,
+   'title', p_exercise.title,
+   'active', timing.active,
+   'created_at', p_exercise.created_at,
+   'ended_at', case when not timing.active then coalesce(p_exercise.inactive_at, p_exercise.expires_at) end,
+   'arrived_at', p_exercise.arrived_at,
+   'patients', coalesce((
+     select jsonb_agg(jsonb_build_object(
+       'id', p.patient_key,
+       'name', coalesce(nullif(patient_model.model->>'name', ''), case
+         when p_exercise.case_key = 'vu-baum' and p.patient_key = 'fahrer' then 'Fahrer'
+         when p_exercise.case_key = 'vu-baum' and p.patient_key = 'beifahrer' then 'Beifahrer'
+         else p.patient_key end),
+       'status', case when p.started_at is null then 'ready'
+         when t.seconds >= patient_model.duration then 'finished'
+         when p.paused_at is not null or not timing.active then 'paused' else 'running' end,
+       'category', traumasim_private.patient_category(patient_model.model, p.patient_key, p.scenario_model is not null,
+         t.seconds, traumasim_private.vitals(patient_model.model, t.seconds)),
+       'elapsed', floor(t.seconds),
+       'first_triage_seconds', floor(extract(epoch from (p.first_triage_at - p_exercise.arrived_at)))
+     ) order by p.patient_key)
+     from public.traumasim_patients p
+     left join traumasim_private.models m on m.case_key = p_exercise.case_key and m.patient_key = p.patient_key
+     cross join lateral (select coalesce(p.scenario_model, m.model) as model,
+       traumasim_private.patient_duration(coalesce(p.scenario_model, m.model)) as duration) patient_model
+     cross join lateral (select least(patient_model.duration,
+       traumasim_private.elapsed(p.started_at, least(p.paused_at, timing.course_at),
+         p.accumulated_pause_seconds, timing.course_at)) as seconds) t
+     where p.session_id = p_exercise.id
+   ), '[]'::jsonb)
+ )
+ from timing;
+$$;
+
 create or replace function traumasim_private.trainer(
  p_action text default 'list', p_session uuid default null, p_patient text default null, p_title text default null
 ) returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -709,9 +766,26 @@ declare
  snapshot_time timestamptz;
  archive_time timestamptz;
  exercise_active boolean;
+ selected_email text;
+ recipient_account uuid;
+ share_token text;
  result jsonb;
 begin
 
+ if p_action = 'shared_report' then
+   if p_title is null or p_title !~ '^[0-9a-f]{64}$' then
+     raise exception using errcode = '42501', message = 'Freigabe nicht verfügbar.';
+   end if;
+   select traumasim_private.exercise_report(s, clock_timestamp()) into result
+   from traumasim_private.exercise_shares sh
+   join public.traumasim_sessions s on s.id = sh.session_id
+   join auth.users u on u.id = sh.recipient_id and lower(u.email) = sh.recipient_email
+   where sh.token_hash = sha256(decode(p_title, 'hex')) and u.id = trainer and u.email_confirmed_at is not null;
+   if not found then
+     raise exception using errcode = '42501', message = 'Freigabe nicht verfügbar.';
+   end if;
+   return result;
+ end if;
 
  if p_action = 'list_overview' then
    return traumasim_private.list_overview(trainer, clock_timestamp());
@@ -767,6 +841,47 @@ begin
 
    snapshot_time := clock_timestamp();
    exercise_active := exercise.inactive_at is null and exercise.expires_at > snapshot_time;
+   if p_action = 'archive_report' then
+     if exercise_active then
+       raise exception using errcode = '22023', message = 'Der Archivbericht ist nur bei inaktiven Übungen verfügbar.';
+     end if;
+     return traumasim_private.exercise_report(exercise, snapshot_time);
+   end if;
+
+   if p_action = 'share_list' then
+     select coalesce(jsonb_agg(jsonb_build_object('email', sh.recipient_email, 'created_at', sh.created_at)
+       order by sh.created_at desc, sh.recipient_email), '[]'::jsonb) into result
+     from traumasim_private.exercise_shares sh where sh.session_id = exercise.id;
+     return result;
+   end if;
+
+   if p_action in ('share_create', 'share_revoke') then
+     selected_email := lower(regexp_replace(p_title, '^[[:space:]]+|[[:space:]]+$', '', 'g'));
+     if selected_email is null or length(selected_email) not between 3 and 254
+       or position('@' in selected_email) < 2 then
+       raise exception using errcode = '22023', message = 'Gib eine gültige E-Mail-Adresse an.';
+     end if;
+     if p_action = 'share_revoke' then
+       delete from traumasim_private.exercise_shares sh
+       where sh.session_id = exercise.id and sh.recipient_email = selected_email;
+       return jsonb_build_object('email', selected_email, 'revoked', true);
+     end if;
+     select (array_agg(u.id))[1] into recipient_account
+     from auth.users u
+     join traumasim_private.trainers t on t.email = lower(u.email)
+     where t.email = selected_email and u.email_confirmed_at is not null
+     having count(*) = 1;
+     if not found then
+       raise exception using errcode = '22023', message = 'Für diese Adresse ist kein bestätigtes Ausbilderkonto verfügbar.';
+     end if;
+     share_token := traumasim_private.new_share_token();
+     insert into traumasim_private.exercise_shares (session_id, recipient_id, recipient_email, token_hash, created_at)
+     values (exercise.id, recipient_account, selected_email, sha256(decode(share_token, 'hex')), snapshot_time)
+     on conflict (session_id, recipient_email) do update
+     set recipient_id = excluded.recipient_id, token_hash = excluded.token_hash, created_at = excluded.created_at;
+     return jsonb_build_object('token', share_token, 'email', selected_email);
+   end if;
+
    if p_action in ('reactivate', 'delete_exercise') then
      if exercise_active then
        raise exception using errcode = '22023', message = 'Diese Aktion ist nur bei inaktiven Übungen möglich.';

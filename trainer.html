@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=exercise-management">
+  <link rel="stylesheet" href="style.css?v=exercise-sharing">
 </head>
 <body><main class="trainer-shell">
   <section class="panel page-banner trainer-banner">
@@ -87,12 +87,18 @@
             </div>
           </div>
           <div class="exercise-tool-actions">
+            <button id="shareCurrentExercise" type="button">Übung teilen</button>
             <button id="resetAll" type="button" data-action="reset_all">Ganze Übung zurücksetzen</button>
             <button id="closeExercise" class="exercise-end" type="button" data-action="close">Übung beenden</button>
           </div>
           <p id="expiry" class="muted small"></p>
         </section>
       </div>
+    </section>
+    <section id="stationDraftRecovery" class="panel" aria-labelledby="stationDraftTitle" hidden>
+      <h2 id="stationDraftTitle">Ungespeicherte Stationsentwürfe</h2>
+      <p>Diese Entwürfe wurden in diesem Browser für die ausgewählte Übung gesichert.</p>
+      <div id="stationDrafts"></div>
     </section>
     <div id="managementView" hidden>
       <section class="panel" aria-labelledby="managementTitle">
@@ -347,6 +353,66 @@
     </div>
   </div>
 </main>
+<dialog id="shareExerciseDialog" class="share-dialog" aria-labelledby="shareExerciseTitle">
+  <div class="share-dialog-heading">
+    <h2 id="shareExerciseTitle">Übung teilen</h2>
+    <button id="closeShareExercise" type="button">Schließen</button>
+  </div>
+  <p>Der Link gibt dem ausgewählten Ausbilderkonto Lesezugriff auf diese Übung.</p>
+  <form id="shareExerciseForm">
+    <label for="shareEmail">E-Mail des Ausbilderkontos</label>
+    <input id="shareEmail" type="email" maxlength="254" autocomplete="email" required>
+    <button type="submit">Freigabelink erstellen</button>
+  </form>
+  <p id="shareStatus" role="status"></p>
+  <div id="shareLinkActions" hidden>
+    <label for="exerciseShareLink">Freigabelink</label>
+    <input id="exerciseShareLink" type="url" readonly>
+    <div class="exercise-tool-actions">
+      <button id="nativeExerciseShare" type="button" hidden>Teilen …</button>
+      <a id="shareViaWhatsApp" class="action" target="_blank" rel="noopener noreferrer">WhatsApp öffnen</a>
+      <button id="copyExerciseShare" type="button">Link kopieren</button>
+    </div>
+  </div>
+  <h3>Freigegebene Konten</h3>
+  <p id="noExerciseShares" class="muted small" hidden>Diese Übung ist noch für kein Konto freigegeben.</p>
+  <ul id="exerciseShares" class="share-accounts"></ul>
+</dialog>
+<dialog id="archiveReportDialog" aria-labelledby="archiveReportTitle" aria-describedby="archiveReportAccess">
+  <p id="archiveReportAccess" class="muted small">Übungsbericht · Lesezugriff</p>
+  <div class="archive-report-heading">
+    <h2 id="archiveReportTitle">Übungsbericht</h2>
+    <button id="closeArchiveReport" type="button" autofocus>Schließen</button>
+  </div>
+  <p id="archiveReportStatus" role="status" hidden></p>
+  <div id="archiveReportContent" hidden>
+    <dl class="archive-report-meta">
+      <div><dt>Status</dt><dd id="archiveReportState"></dd></div>
+      <div><dt>Angelegt</dt><dd id="archiveReportCreated"></dd></div>
+      <div><dt>Beendet</dt><dd id="archiveReportEnded"></dd></div>
+      <div><dt>Eintreffen</dt><dd id="archiveReportArrival"></dd></div>
+    </dl>
+    <p id="archiveReportEmpty" class="muted small" hidden>Keine Patienten im Bericht.</p>
+    <div id="archiveReportTable" class="archive-report-table" role="region" aria-label="Patienten im Übungsbericht" tabindex="0">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Patient</th>
+            <th scope="col">Sichtungskategorie</th>
+            <th scope="col">Verlaufsstatus</th>
+            <th scope="col">Patientenuhr</th>
+            <th scope="col">Erste Sichtung nach Eintreffen</th>
+          </tr>
+        </thead>
+        <tbody id="archiveReportPatients"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="archive-report-actions">
+    <button id="exportArchiveCsv" type="button" hidden>CSV herunterladen</button>
+    <button id="refreshArchiveReport" type="button" hidden>Aktualisieren</button>
+  </div>
+</dialog>
 <dialog id="carChangesDialog" aria-labelledby="carChangesTitle">
   <h2 id="carChangesTitle">Ungespeicherte Pkw-Änderungen</h2>
   <p id="carChangesMessage">Möchtest du die Änderungen vor dem Wechsel speichern?</p>
@@ -360,6 +426,6 @@
 <script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
 <script src="scenario-validation.js?v=triage"></script>
-<script src="trainer.js?v=exercise-management"></script>
+<script src="trainer.js?v=exercise-sharing"></script>
 </body>
 </html>

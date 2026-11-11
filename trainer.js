@@ -9,6 +9,7 @@
   const previewDuration = Number(el('seek').max) * 60;
   const actions = Array.from(document.querySelectorAll('[data-action]'));
   const sessionKey = 'traumasim:trainer-session';
+  const stationDraftPrefix = 'traumasim:station-draft:v1:';
   const sessionLifetime = 24 * 60 * 60 * 1000;
   const categoryLabels = {
     red: 'SK I · Rot', yellow: 'SK II · Gelb', green: 'SK III · Grün',
@@ -38,9 +39,15 @@
   const overviewTime = new Intl.DateTimeFormat('de-DE', {
     hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Europe/Berlin'
   });
+  const archiveDate = new Intl.DateTimeFormat('de-DE', {
+    dateStyle: 'short', timeStyle: 'medium', timeZone: 'Europe/Berlin'
+  });
+  let archiveReportView = null;
   let previewTime = 0;
   let previewTick = null;
   let arrivalClock = null;
+  let sharingExercise = null;
+  let currentShareEmail = '';
 
   if (new URLSearchParams(location.hash.slice(1)).has('access_token')) {
     history.replaceState(null, '', location.pathname + location.search);
@@ -739,7 +746,8 @@
     if (!data?.access_token || !data.refresh_token || !(data.expires_in > 0)) {
       throw new Error('Die Anmeldung lieferte keine gültige Sitzung.');
     }
-    auth = { id, until, access_token: data.access_token, refresh_token: data.refresh_token,
+    const accountId = data.user?.id ?? (auth?.id === id ? auth.accountId : null);
+    auth = { id, accountId, until, access_token: data.access_token, refresh_token: data.refresh_token,
       deadline: Date.now() + data.expires_in * 1000 };
     try {
       localStorage.setItem(sessionKey, JSON.stringify(auth));
@@ -747,6 +755,18 @@
     } catch {
       persistentSession = false;
     }
+  }
+
+  function trainerAccountId() {
+    let id = auth?.accountId;
+    if (!id && auth) {
+      // Sessions created before account-scoped drafts still carry the Supabase user ID.
+      try {
+        const payload = auth.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        id = JSON.parse(atob(payload)).sub;
+      } catch {}
+    }
+    return typeof id === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id) ? id.toLowerCase() : null;
   }
 
   function currentSession() {
@@ -799,12 +819,14 @@
   }
 
   function signedOut(revoke = false) {
+    closeArchiveReport();
     const saved = readSession();
     const current = saved && saved.id === auth?.id ? saved : auth;
     if (current && saved?.id === current.id) {
       try { localStorage.removeItem(sessionKey); } catch {}
     }
     auth = null;
+    if (el('shareExerciseDialog').open) el('shareExerciseDialog').close();
     persistentSession = false;
     actionVersion++;
     renderExercise(null);
@@ -825,14 +847,16 @@
   }
 
   function handleError(error) {
+    let notice = error.message;
     if (trainerAccessLost(error)) {
       signedOut();
     } else if (exerciseUnavailable(error)) {
+      if (hasStationDrafts()) notice += ' Lokale Stationsentwürfe sind nach der Reaktivierung wieder verfügbar.';
       el('exercise').selectedOptions[0]?.remove();
       el('exercise').value = '';
       renderExercise(null);
     }
-    message(error.message);
+    message(notice);
   }
 
   function exerciseUnavailable(error) {
@@ -899,21 +923,159 @@
     const controls = document.createElement('div');
     controls.className = 'management-actions';
     const entries = kind === 'active' ? [['open', 'Öffnen'], ['deactivate', 'Deaktivieren']]
-      : kind === 'inactive' ? [['reactivate', 'Reaktivieren'], ['delete', 'Übung löschen']]
+      : kind === 'inactive' ? [['report', 'Bericht ansehen'], ['reactivate', 'Reaktivieren'], ['delete', 'Übung löschen']]
         : [['template', 'Vorlage auswählen']];
+    if (kind !== 'template') entries.push(['share', 'Teilen']);
     for (const [action, label] of entries) {
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.managementAction = action;
       button.setAttribute('aria-describedby', title.id);
       button.textContent = label;
-      button.addEventListener('click', () => manageExercise(item, action));
+      button.addEventListener('click', () => manageExercise(item, action, button));
       controls.append(button);
     }
     categories.hidden = !categories.childElementCount;
     card.append(counts, categories, controls);
     return card;
   }
+
+  function archiveTimestamp(value) {
+    const time = Date.parse(value);
+    return Number.isFinite(time) ? archiveDate.format(time) : '';
+  }
+
+  function renderArchiveReport(report) {
+    el('archiveReportTitle').textContent = report?.title ?? 'Übungsbericht';
+    el('archiveReportState').textContent = report ? (report.active ? 'Aktiv' : 'Inaktiv') : '';
+    for (const [id, key] of [['archiveReportCreated', 'created_at'], ['archiveReportEnded', 'ended_at'],
+      ['archiveReportArrival', 'arrived_at']]) {
+      const field = el(id);
+      const stamp = report?.[key];
+      const display = archiveTimestamp(stamp);
+      field.textContent = '–';
+      if (display) {
+        const time = document.createElement('time');
+        time.dateTime = stamp;
+        time.textContent = display;
+        field.replaceChildren(time);
+      }
+    }
+    const patients = report?.patients ?? [];
+    const rows = patients.map((patient) => {
+      const row = document.createElement('tr');
+      const name = document.createElement('th');
+      name.scope = 'row';
+      name.textContent = patient.name;
+      const category = document.createElement('td');
+      const label = categoryLabels[patient.category];
+      if (label) {
+        const badge = document.createElement('span');
+        badge.className = 'triage ' + patient.category;
+        badge.textContent = label;
+        category.append(badge);
+      } else category.textContent = '–';
+      row.append(name, category);
+      for (const text of [api.labels[patient.status] ?? '–',
+        Number.isFinite(patient.elapsed) ? api.clock(patient.elapsed) : '–',
+        Number.isFinite(patient.first_triage_seconds) ? api.clock(patient.first_triage_seconds) : '–']) {
+        const cell = document.createElement('td');
+        cell.textContent = text;
+        row.append(cell);
+      }
+      return row;
+    });
+    el('archiveReportPatients').replaceChildren(...rows);
+    el('archiveReportEmpty').hidden = Boolean(rows.length);
+    el('archiveReportTable').hidden = !rows.length;
+    el('archiveReportContent').hidden = !report;
+    el('exportArchiveCsv').hidden = !report;
+  }
+
+  function archiveReportStatus(text = '') {
+    const status = el('archiveReportStatus');
+    status.textContent = text;
+    status.hidden = !text;
+  }
+
+  function openArchiveReport(report, { shared = false, refresh = null, returnFocus = null } = {}) {
+    archiveReportView = { report, refresh, returnFocus };
+    el('archiveReportAccess').textContent = shared ? 'Freigegebene Übung · Lesezugriff' : 'Archivbericht · Lesezugriff';
+    el('refreshArchiveReport').hidden = !refresh;
+    el('refreshArchiveReport').disabled = false;
+    archiveReportStatus();
+    renderArchiveReport(report);
+    const dialog = el('archiveReportDialog');
+    if (!dialog.open) dialog.showModal();
+  }
+
+  function clearArchiveReport() {
+    const returnFocus = archiveReportView?.returnFocus;
+    archiveReportView = null;
+    archiveReportStatus();
+    renderArchiveReport(null);
+    returnFocus?.focus();
+  }
+
+  function closeArchiveReport() {
+    if (!archiveReportView) return;
+    el('archiveReportDialog').close();
+    clearArchiveReport();
+  }
+
+  el('closeArchiveReport').addEventListener('click', closeArchiveReport);
+  el('archiveReportDialog').addEventListener('close', () => {
+    if (archiveReportView && !el('archiveReportDialog').open) clearArchiveReport();
+  });
+  el('refreshArchiveReport').addEventListener('click', async (event) => {
+    const view = archiveReportView;
+    if (!view?.refresh) return;
+    const button = event.currentTarget;
+    button.disabled = true;
+    archiveReportStatus('Bericht wird aktualisiert …');
+    try {
+      const report = await view.refresh();
+      if (archiveReportView !== view || !el('archiveReportDialog').open) return;
+      renderArchiveReport(report);
+      view.report = report;
+      archiveReportStatus();
+    } catch {
+      if (archiveReportView !== view || !el('archiveReportDialog').open) return;
+      view.report = null;
+      renderArchiveReport(null);
+      archiveReportStatus('Die Freigabe ist nicht verfügbar oder konnte nicht geladen werden.');
+    } finally {
+      if (archiveReportView === view) button.disabled = false;
+    }
+  });
+
+  function csvCell(value) {
+    let text = String(value ?? '');
+    if (/^(?:[\u0000-\u001f]|[\s\u200b]*[=+\-@＝＋－＠])/u.test(text)) text = "'" + text;
+    return '"' + text.replaceAll('"', '""') + '"';
+  }
+
+  el('exportArchiveCsv').addEventListener('click', () => {
+    const report = archiveReportView?.report;
+    if (!report) return;
+    const headings = ['Übung', 'Übungsstatus', 'Angelegt', 'Beendet', 'Eintreffen', 'Patient', 'Sichtungskategorie',
+      'Verlaufsstatus', 'Patientenuhr (s)', 'Erste Sichtung nach Eintreffen (s)'];
+    const exerciseInfo = [report.title, report.active ? 'Aktiv' : 'Inaktiv', archiveTimestamp(report.created_at),
+      archiveTimestamp(report.ended_at), archiveTimestamp(report.arrived_at)];
+    const rows = report.patients.map((patient) => [...exerciseInfo, patient.name, categoryLabels[patient.category],
+      api.labels[patient.status], patient.elapsed, patient.first_triage_seconds]);
+    if (!rows.length) rows.push([...exerciseInfo, '', '', '', '', '']);
+    const csv = [headings, ...rows].map((row) => row.map(csvCell).join(';')).join('\r\n') + '\r\n';
+    const filename = report.title.normalize('NFKD').replace(/\p{M}/gu, '').replace(/[^a-z0-9]+/gi, '-')
+      .replace(/^-/, '').slice(0, 75).replace(/-$/, '') || 'uebung';
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
+    link.download = 'traumasim-bericht-' + filename + '.csv';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  });
 
   async function refreshManagement() {
     const status = el('managementStatus');
@@ -931,7 +1093,10 @@
       const select = el('exercise');
       options(select, active, 'Übung auswählen');
       select.value = exercise && active.some((item) => item.id === exercise.id) ? exercise.id : '';
-      if (exercise && !select.value) renderExercise(null);
+      if (exercise && !select.value) {
+        if (hasStationDrafts()) message('Die Übung ist nicht mehr aktiv. Lokale Stationsentwürfe sind nach der Reaktivierung wieder verfügbar.');
+        renderExercise(null);
+      }
       renderTemplateOptions(templates, true);
       status.hidden = true;
       groups.hidden = false;
@@ -952,8 +1117,25 @@
     }
   }
 
-  function manageExercise(item, action) {
+  function manageExercise(item, action, button) {
     if (busy) return;
+    if (action === 'report') {
+      void run(async () => {
+        try {
+          const report = await rpc({ p_action: 'archive_report', p_session: item.id });
+          openArchiveReport(report, { returnFocus: button });
+        } catch (error) {
+          if (!exerciseUnavailable(error) && error.code !== '22023') throw error;
+          message(error.message);
+          await refreshManagement();
+        }
+      });
+      return;
+    }
+    if (action === 'share') {
+      showExerciseShare(item);
+      return;
+    }
     if (action === 'template') {
       const select = el('exerciseTemplate');
       select.value = item.id;
@@ -1007,13 +1189,151 @@
   });
   el('refreshManagement').addEventListener('click', () => void run(refreshManagement));
 
+  function shareRequest(work) {
+    void run(async () => {
+      try {
+        await work();
+      } catch (error) {
+        el('shareStatus').textContent = error.message;
+        if (trainerAccessLost(error)) throw error;
+      }
+    });
+  }
+
+  function clearExerciseShareLink() {
+    currentShareEmail = '';
+    el('exerciseShareLink').value = '';
+    el('shareViaWhatsApp').removeAttribute('href');
+    el('shareLinkActions').hidden = true;
+  }
+
+  async function refreshExerciseShares(item) {
+    const shares = await rpc({ p_action: 'share_list', p_session: item.id });
+    if (sharingExercise !== item || !el('shareExerciseDialog').open) return;
+    el('noExerciseShares').hidden = Boolean(shares.length);
+    el('exerciseShares').replaceChildren(...shares.map(({ email }) => {
+      const row = document.createElement('li');
+      const label = document.createElement('span');
+      label.textContent = email;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Freigabe widerrufen';
+      button.setAttribute('aria-label', 'Freigabe für ' + email + ' widerrufen');
+      button.addEventListener('click', () => {
+        if (busy || !confirm('Freigabe für ' + email + ' widerrufen?')) return;
+        shareRequest(async () => {
+          await rpc({ p_action: 'share_revoke', p_session: item.id, p_title: email });
+          if (currentShareEmail === email) clearExerciseShareLink();
+          await refreshExerciseShares(item);
+          el('shareStatus').textContent = 'Freigabe widerrufen.';
+        });
+      });
+      row.append(label, button);
+      return row;
+    }));
+  }
+
+  function showExerciseShare(item) {
+    if (!item || busy) return;
+    sharingExercise = item;
+    clearExerciseShareLink();
+    el('shareExerciseForm').reset();
+    el('exerciseShares').replaceChildren();
+    el('noExerciseShares').hidden = true;
+    el('shareExerciseTitle').textContent = 'Übung teilen · ' + item.title;
+    el('shareStatus').textContent = 'Freigaben werden geladen …';
+    el('shareExerciseDialog').showModal();
+    shareRequest(async () => {
+      await refreshExerciseShares(item);
+      el('shareStatus').textContent = '';
+    });
+  }
+
+  el('shareCurrentExercise').addEventListener('click', () => showExerciseShare(exercise));
+  el('closeShareExercise').addEventListener('click', () => el('shareExerciseDialog').close());
+  el('shareExerciseDialog').addEventListener('close', () => {
+    sharingExercise = null;
+    clearExerciseShareLink();
+    el('exerciseShares').replaceChildren();
+  });
+  el('shareExerciseForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const item = sharingExercise;
+    if (!item || busy) return;
+    const email = el('shareEmail').value.trim();
+    shareRequest(async () => {
+      const share = await rpc({ p_action: 'share_create', p_session: item.id, p_title: email });
+      if (sharingExercise !== item || !el('shareExerciseDialog').open) return;
+      const url = new URL(trainerUrl);
+      url.hash = new URLSearchParams({ share: share.token });
+      currentShareEmail = share.email;
+      el('exerciseShareLink').value = url.href;
+      const whatsapp = new URL('https://wa.me/');
+      whatsapp.searchParams.set('text', 'TraumaSim – Freigegebene Übung\n' + url.href);
+      el('shareViaWhatsApp').href = whatsapp.href;
+      el('nativeExerciseShare').hidden = typeof navigator.share !== 'function';
+      el('shareLinkActions').hidden = false;
+      el('shareExerciseForm').reset();
+      el('shareStatus').textContent = 'Link für ' + share.email + ' erstellt.';
+      await refreshExerciseShares(item);
+    });
+  });
+  el('nativeExerciseShare').addEventListener('click', async () => {
+    const url = el('exerciseShareLink').value;
+    if (!url || typeof navigator.share !== 'function') return;
+    try {
+      await navigator.share({ title: 'TraumaSim', text: 'Freigegebene Übung', url });
+    } catch (error) {
+      if (error.name !== 'AbortError') el('shareStatus').textContent = 'Teile den Link über WhatsApp oder kopiere ihn.';
+    }
+  });
+  el('copyExerciseShare').addEventListener('click', async () => {
+    const field = el('exerciseShareLink');
+    try {
+      await navigator.clipboard.writeText(field.value);
+      el('shareStatus').textContent = 'Freigabelink kopiert.';
+    } catch {
+      field.focus();
+      field.select();
+      el('shareStatus').textContent = 'Der Link ist markiert und kann kopiert werden.';
+    }
+  });
+
+  function requestedShareToken() {
+    return new URLSearchParams(location.hash.slice(1)).get('share');
+  }
+
+  async function openSharedExercise(token) {
+    const loadReport = () => rpc({ p_action: 'shared_report', p_title: token });
+    try {
+      if (!/^[0-9a-f]{64}$/.test(token)) throw new Error('Ungültiger Freigabelink.');
+      const report = await loadReport();
+      if (auth) openArchiveReport(report, { shared: true, refresh: loadReport });
+    } catch (error) {
+      if (trainerAccessLost(error)) throw error;
+      message(error.message);
+    }
+  }
+
+  const showSharedLogin = () => message('Melde dich mit dem Ausbilderkonto an, für das die Übung freigegeben wurde.');
+  if (requestedShareToken()) showSharedLogin();
+  window.addEventListener('hashchange', () => {
+    const token = requestedShareToken();
+    if (!token) return;
+    if (auth) void run(() => openSharedExercise(token));
+    else showSharedLogin();
+  });
+
   async function openWorkspace(list) {
     options(el('exercise'), list, 'Übung auswählen');
     el('login').hidden = true;
     el('logout').hidden = false;
     el('workspace').hidden = false;
     message('Als Ausbilder angemeldet.');
-    if (list.length) {
+    const shareToken = requestedShareToken();
+    if (shareToken) {
+      await openSharedExercise(shareToken);
+    } else if (list.length) {
       await switchExercise(list[0].id);
     }
     renderTemplateOptions(await rpc({ p_action: 'list_templates' }));
@@ -1465,6 +1785,8 @@
       for (const item of stationForms) loadCarForm(item);
       return;
     }
+    form.draftRaw = null;
+    form.draftBound = null;
     form.loadedNumber = form.select.value;
     const patients = carPatients(form);
     form.fields.reset();
@@ -1492,6 +1814,7 @@
     updateCarMoveChoices(form);
     form.baseline = JSON.stringify(carFormConfig(form));
     showCarDirtyState();
+    renderStationDrafts();
   }
 
   function fillCarSeat(row, config) {
@@ -1537,6 +1860,7 @@
     target.moveTarget.value = '';
     updateCarMoveChoices(form);
     showCarDirtyState();
+    persistStationDraft(form);
     target.profile.focus();
   }
 
@@ -1545,7 +1869,7 @@
       const patients = carPatients(form);
       const editing = patients.length > 0;
       const started = patients.some((patient) => patient.status !== 'ready');
-      form.start.hidden = editing;
+      form.start.hidden = editing || Boolean(form.draftBound);
       form.attach.hidden = !exercise || editing;
       form.save.hidden = !editing;
       form.save.disabled = busy || started;
@@ -1586,6 +1910,137 @@
     return form.baseline !== JSON.stringify(carFormConfig(form));
   }
 
+  function stationDraftKey(form) {
+    const accountId = trainerAccountId();
+    return accountId && exercise ? stationDraftPrefix + accountId + ':' + exercise.id + ':' + form.kind : null;
+  }
+
+  function readStationDraft(form) {
+    const key = stationDraftKey(form);
+    if (!key) return null;
+    try {
+      const raw = localStorage.getItem(key);
+      const draft = JSON.parse(raw);
+      if (typeof draft?.number === 'string' && /^\d{0,2}$/.test(draft.number)
+        && Number.isSafeInteger(draft.editVersion) && Array.isArray(draft.config?.occupants)
+        && draft.config.occupants.every((occupant) => typeof occupant?.seat === 'string')) return { ...draft, raw };
+    } catch {}
+    return null;
+  }
+
+  function hasStationDrafts() {
+    return stationForms.some(readStationDraft);
+  }
+
+  function clearStationDraft(form, raw = form.draftRaw) {
+    const key = stationDraftKey(form);
+    try {
+      if (key && raw && localStorage.getItem(key) === raw) localStorage.removeItem(key);
+    } catch {}
+    if (raw === form.draftRaw) form.draftRaw = null;
+  }
+
+  function persistStationDraft(form) {
+    const key = stationDraftKey(form);
+    if (!key) return;
+    if (!carFormIsDirty(form)) {
+      clearStationDraft(form);
+      if (form.draftBound) {
+        form.draftBound = null;
+        updateCarActions();
+      }
+    } else {
+      try {
+        const existing = localStorage.getItem(key);
+        if (!existing || existing === form.draftRaw) {
+          const raw = JSON.stringify({ number: form.loadedNumber, editVersion: form.editVersion, config: carFormConfig(form) });
+          localStorage.setItem(key, raw);
+          form.draftRaw = raw;
+        }
+      } catch {}
+    }
+    renderStationDrafts();
+  }
+
+  function canRestoreStationDraft(form, draft) {
+    if (carFormIsDirty(form)) return false;
+    if (!draft.number) return true;
+    const [patient] = carPatients(form, draft.number);
+    return Boolean(patient) && (patient.model.car_edit_version ?? 0) === draft.editVersion;
+  }
+
+  function restoreStationDraft(form, raw) {
+    const draft = readStationDraft(form);
+    if (busy) return;
+    if (draft?.raw !== raw || !canRestoreStationDraft(form, draft)) {
+      renderStationDrafts();
+      return;
+    }
+    form.select.value = draft.number;
+    loadCarForm(form);
+    form.draftRaw = raw;
+    form.draftBound = exercise.id;
+    const { config } = draft;
+    form.location.value = config.vehicle ?? '';
+    if (form.description) form.description.value = config.vehicle_description ?? '';
+    if (form.objectType) {
+      form.objectType.value = config.object_type;
+      form.objectPosition.value = config.object_position;
+    }
+    for (const row of form.rows) fillCarSeat(row, config.occupants.find((occupant) => occupant.seat === row.seat));
+    updateCarMoveChoices(form);
+    showCarDirtyState();
+    persistStationDraft(form);
+    showView('configuration');
+    form.card.open = true;
+    form.location.focus();
+    message('Stationsentwurf wiederhergestellt. Speichere ihn bei Bedarf in dieser Übung.');
+  }
+
+  function renderStationDrafts() {
+    const entries = [];
+    for (const form of stationForms) {
+      const draft = readStationDraft(form);
+      const pending = draft && draft.raw !== form.draftRaw;
+      form.card.inert = Boolean(pending) && !carFormIsDirty(form);
+      if (!pending) continue;
+      const entry = document.createElement('div');
+      const heading = document.createElement('h3');
+      heading.textContent = draft.number ? form.title + ' ' + draft.number.padStart(2, '0') : form.title + ' · neue Station';
+      const restore = document.createElement('button');
+      restore.type = 'button';
+      restore.textContent = 'Entwurf wiederherstellen';
+      restore.disabled = !canRestoreStationDraft(form, draft);
+      restore.addEventListener('click', () => restoreStationDraft(form, draft.raw));
+      const discard = document.createElement('button');
+      discard.type = 'button';
+      discard.textContent = 'Entwurf verwerfen';
+      discard.addEventListener('click', () => {
+        if (busy || !confirm('Diesen lokalen Stationsentwurf verwerfen?')) return;
+        clearStationDraft(form, draft.raw);
+        renderStationDrafts();
+      });
+      entry.append(heading, restore, discard);
+      if (restore.disabled) {
+        const reason = document.createElement('p');
+        reason.textContent = carFormIsDirty(form)
+          ? 'Schließe zuerst die aktuelle Bearbeitung dieser Stationsart ab.'
+          : 'Die ursprüngliche Station wurde geändert oder entfernt.';
+        const details = document.createElement('details');
+        const summary = document.createElement('summary');
+        summary.textContent = 'Entwurfsinhalt zum Kopieren';
+        const content = document.createElement('pre');
+        content.className = 'story-text';
+        content.textContent = JSON.stringify(draft.config, null, 2);
+        details.append(summary, content);
+        entry.append(reason, details);
+      }
+      entries.push(entry);
+    }
+    el('stationDrafts').replaceChildren(...entries);
+    el('stationDraftRecovery').hidden = !entries.length;
+  }
+
   function showCarDirtyState() {
     for (const form of stationForms) form.unsaved.hidden = !carFormIsDirty(form);
     if (stationForms.some(carFormIsDirty)) window.addEventListener('beforeunload', warnBeforeLeaving);
@@ -1598,6 +2053,7 @@
   }
 
   async function confirmCarChanges(forms = stationForms, discardNow = false) {
+    const discarded = [];
     for (const form of forms) {
       if (!carFormIsDirty(form)) continue;
       const dialog = el('carChangesDialog');
@@ -1614,8 +2070,12 @@
       });
       if (choice === 'save') await saveCar(form, Boolean(exercise));
       else if (choice !== 'discard') return false;
-      else if (discardNow) loadCarForm(form);
+      else if (discardNow) {
+        clearStationDraft(form);
+        loadCarForm(form);
+      } else discarded.push(form);
     }
+    for (const form of discarded) clearStationDraft(form);
     return true;
   }
 
@@ -1645,10 +2105,14 @@
       });
     });
 
-    form.fields.addEventListener('input', showCarDirtyState);
+    form.fields.addEventListener('input', () => {
+      showCarDirtyState();
+      persistStationDraft(form);
+    });
     form.fields.addEventListener('change', (event) => {
       if (event.target.classList.contains('seat-profile')) updateCarMoveChoices(form);
       showCarDirtyState();
+      persistStationDraft(form);
     });
 
     form.select.addEventListener('change', () => {
@@ -1671,12 +2135,16 @@
 
   async function saveCar(form, attach) {
     const editNumber = Number(form.loadedNumber);
+    if (form.draftBound && (form.draftBound !== exercise?.id || (!attach && !editNumber))) {
+      throw new Error('Dieser Stationsentwurf gehört zur ursprünglichen Übung.');
+    }
     const config = carFormConfig(form);
     if (!config.occupants.length) throw new Error(form.kind === 'object'
       ? 'Wähle ein Verletzungsprofil für die Person.' : 'Wähle mindestens einen besetzten Sitzplatz.');
     if (!form.fields.reportValidity()) throw new Error('Prüfe die Angaben im Formular.');
     if (editNumber) Object.assign(config, { car_number: editNumber, edit_version: form.editVersion });
     const next = await rpc({ p_config: config, p_session: attach || editNumber ? exercise.id : null }, api.bookCar);
+    clearStationDraft(form);
     if (editNumber) {
       renderExercise(next);
       resetPreview();
@@ -1795,6 +2263,10 @@
   window.addEventListener('online', poll);
   document.addEventListener('visibilitychange', poll);
   window.addEventListener('storage', (event) => {
+    if (event.key?.startsWith(stationDraftPrefix)) {
+      renderStationDrafts();
+      return;
+    }
     if ((event.key !== sessionKey && event.key !== null) || !persistentSession || !auth) return;
     if (readSession()?.id === auth.id) return;
     signedOut();
