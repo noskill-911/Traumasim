@@ -53,6 +53,16 @@ create table if not exists traumasim_private.bus_templates (
  briefing text not null,
  patients jsonb not null
 );
+create table if not exists traumasim_private.exercise_templates (
+ id uuid primary key default gen_random_uuid(),
+ trainer_id uuid not null references auth.users(id) on delete cascade,
+ title text not null,
+ case_key text not null,
+ patients jsonb not null,
+ created_at timestamptz not null default now(),
+ unique (trainer_id, title)
+);
+alter table traumasim_private.exercise_templates enable row level security;
 alter table traumasim_private.bus_templates enable row level security;
 alter table traumasim_private.trainers enable row level security;
 alter table traumasim_private.models enable row level security;
@@ -90,6 +100,13 @@ returns text language sql immutable strict set search_path = '' as $$
  );
 $$;
 
+create or replace function traumasim_private.preview_code(p_session uuid, p_patient text, p_signing_key uuid)
+returns text language sql immutable strict set search_path = '' as $$
+ select p_session::text || '.p' || split_part(
+   traumasim_private.patient_code(p_session, 'preview:' || p_patient, p_signing_key), '.', 2
+ );
+$$;
+
 create or replace function traumasim_private.join_exercise(p_code text)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
@@ -107,17 +124,7 @@ begin
    raise exception using errcode = '42501', message = 'Übungszugang ungültig oder abgelaufen';
  end if;
 
- return jsonb_build_object('case', exercise.case_key, 'title', exercise.title, 'expires_at', exercise.expires_at)
-   || case when exists (
-      select 1 from public.traumasim_patients p where p.session_id = exercise.id and p.scenario_model is not null
-   ) then jsonb_build_object('patients', coalesce((
-      select jsonb_agg(jsonb_build_object('id', p.patient_key, 'name', p.scenario_model->>'name') order by p.patient_key)
-      from public.traumasim_patients p
-      where p.session_id = exercise.id and p.patient_key not like 'car-%'
-   ), '[]'::jsonb)) else '{}'::jsonb end
-   || case when exists (
-      select 1 from public.traumasim_patients p where p.session_id = exercise.id and p.patient_key like 'car-%'
-   ) then '{"hidden_stations":true}'::jsonb else '{}'::jsonb end;
+ return jsonb_build_object('case', exercise.case_key, 'expires_at', exercise.expires_at);
 end;
 $$;
 
@@ -207,8 +214,10 @@ declare
  category text;
  triage_delay integer;
  condition_index integer;
+ exercise_access boolean := split_part(p_code, '.', 2) like 'j%';
+ preview_access boolean := split_part(p_code, '.', 2) like 'p%';
 begin
- if p_code is null or p_code !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.j?[0-9a-f]{64}$' then
+ if p_code is null or p_code !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[jp]?[0-9a-f]{64}$' then
    raise exception using errcode = '42501', message = 'Patientenzugang ungültig oder abgelaufen';
  end if;
 
@@ -218,15 +227,18 @@ begin
    and s.trainer_id is not null
    and s.expires_at > clock_timestamp();
  if not found or p_patient is null
-   or (p_patient like 'car-%' and strpos(p_code, '.j') = 37)
-   or sha256(convert_to(case when strpos(p_code, '.j') = 37
-        then traumasim_private.exercise_code(exercise.id, exercise.case_key, exercise.signing_key)
+   or sha256(convert_to(case
+        when exercise_access then traumasim_private.exercise_code(exercise.id, exercise.case_key, exercise.signing_key)
+        when preview_access then traumasim_private.preview_code(exercise.id, p_patient, exercise.signing_key)
         else traumasim_private.patient_code(exercise.id, p_patient, exercise.signing_key) end, 'UTF8'))
         <> sha256(convert_to(p_code, 'UTF8')) then
    raise exception using errcode = '42501', message = 'Patientenzugang ungültig oder abgelaufen';
  end if;
+ if exercise_access and p_patient like 'car-%' then
+   raise exception using errcode = 'P0002', message = 'Für diesen Patienten ist der einzelne Stations-QR erforderlich.';
+ end if;
 
- if p_start_revision is not null then
+ if p_start_revision is not null and not preview_access then
    -- Serialize starts with whole-exercise resets and instructor commands.
    perform 1 from public.traumasim_sessions s
    where s.id = exercise.id and s.expires_at > clock_timestamp() for update;
@@ -242,6 +254,9 @@ begin
  select p.* into patient from public.traumasim_patients p
  where p.session_id = exercise.id and p.patient_key = p_patient;
  if not found then
+   if exercise_access then
+     raise exception using errcode = 'P0002', message = 'Diese Station gehört nicht zu deiner Übung.';
+   end if;
    raise exception using errcode = '42501', message = 'Patientenzugang ungültig oder abgelaufen';
  end if;
  model := patient.scenario_model;
@@ -371,6 +386,8 @@ create or replace function traumasim_private.trainer(
 declare
  trainer uuid := traumasim_private.require_trainer();
  exercise public.traumasim_sessions%rowtype;
+ template traumasim_private.exercise_templates%rowtype;
+ new_session_id uuid;
  snapshot_time timestamptz;
  result jsonb;
 begin
@@ -384,10 +401,32 @@ begin
    return result;
  end if;
 
- if p_action = 'create' then
-   if p_title is null or length(btrim(p_title)) not between 1 and 120 then
-     raise exception using errcode = '22023', message = 'Übungstitel muss 1 bis 120 Zeichen enthalten';
+ if p_action = 'list_templates' then
+   select coalesce(jsonb_agg(jsonb_build_object('id', t.id, 'title', t.title)
+     order by t.created_at desc), '[]'::jsonb) into result
+   from traumasim_private.exercise_templates t where t.trainer_id = trainer;
+   return result;
+ end if;
+
+ if p_action in ('create', 'save_template') and (p_title is null or length(btrim(p_title)) not between 1 and 120) then
+   raise exception using errcode = '22023', message = 'Der Titel muss 1 bis 120 Zeichen enthalten.';
+ end if;
+
+ if p_action = 'start_template' then
+   select t.* into template from traumasim_private.exercise_templates t
+   where t.id = p_session and t.trainer_id = trainer;
+   if not found then
+     raise exception using errcode = '42501', message = 'Vorlage nicht verfügbar.';
    end if;
+   new_session_id := gen_random_uuid();
+   insert into public.traumasim_sessions (id, title, trainer_id, case_key)
+   values (new_session_id, template.title, trainer, case when template.case_key like 'custom-%'
+     then 'custom-' || new_session_id::text else template.case_key end)
+   returning * into exercise;
+   insert into public.traumasim_patients (session_id, patient_key, scenario_model)
+   select exercise.id, p.patient_key, p.scenario_model
+   from jsonb_to_recordset(template.patients) as p(patient_key text, scenario_model jsonb);
+ elsif p_action = 'create' then
    insert into public.traumasim_sessions (title, trainer_id)
    values (btrim(p_title), trainer) returning * into exercise;
    insert into public.traumasim_patients (session_id, patient_key)
@@ -409,6 +448,17 @@ begin
    snapshot_time := clock_timestamp();
    case p_action
      when 'status' then null;
+     when 'save_template' then
+       insert into traumasim_private.exercise_templates (trainer_id, title, case_key, patients)
+       select trainer, btrim(p_title), exercise.case_key,
+         jsonb_agg(jsonb_build_object('patient_key', p.patient_key, 'scenario_model', p.scenario_model))
+       from public.traumasim_patients p where p.session_id = exercise.id
+       on conflict (trainer_id, title) do nothing
+       returning * into template;
+       if not found then
+         raise exception using errcode = '22023', message = 'Eine Vorlage mit diesem Namen ist bereits vorhanden.';
+       end if;
+       return jsonb_build_object('id', template.id, 'title', template.title);
      when 'close' then
        update public.traumasim_sessions set expires_at = snapshot_time where id = exercise.id;
        return jsonb_build_object('id', exercise.id, 'closed', true);
@@ -442,6 +492,7 @@ begin
  select jsonb_agg(jsonb_build_object(
    'id', p.patient_key,
    'code', traumasim_private.patient_code(exercise.id, p.patient_key, exercise.signing_key),
+   'preview_code', traumasim_private.preview_code(exercise.id, p.patient_key, exercise.signing_key),
    'model', patient_model.model,
    'custom', p.scenario_model is not null,
    'elapsed', floor(t.seconds),

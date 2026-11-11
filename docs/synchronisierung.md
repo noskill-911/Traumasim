@@ -16,8 +16,16 @@
    speichert nur den Übungszugang.
    Ein separat kopierter Patientenlink gilt weiterhin nur für den jeweiligen
    Patienten dieser Übung und funktioniert auch ohne vorherigen Beitritt.
+   Neu erzeugte Stations-QRs enthalten diesen eindeutigen Patientenzugang.
+   Für ältere allgemeine Stations-QRs gilt der Übungsbeitritt im selben
+   Browser. Wenn eine Station zu einer anderen Übung gehört, bleibt ein
+   gültiger Übungszugang gespeichert.
 3. Beim ersten gültigen Aufruf setzt PostgreSQL die gemeinsame Startzeit. Geöffnete
    Patientenansichten fragen den Server im Vordergrund alle zwei Sekunden ab.
+   Bei einer kurzen Unterbrechung bleibt der zuletzt empfangene Stand mit
+   Uhrzeit sichtbar. Unter **Patient im Detail** können Ausbilder die
+   **Schüler-Vorschau** öffnen und den angezeigten Stand lesen, ohne einen
+   Patienten zu starten.
 4. Beim Zurücksetzen bleibt der Zugangscode gültig. Bereits geöffnete Geräte
    zeigen „Wartet auf Start“. Ein erneuter Aufruf oder „Patient starten“ startet
    die neue Runde. Einzelreset und Übungsreset ändern den zentralen Zustand.
@@ -35,6 +43,12 @@
    den Live-Verlauf nicht.
 
 ## Eigene Szenarien
+
+Unter **Konfiguration → Weitere Übungsstarts → Übungsvorlagen** kann
+die aktive Zusammenstellung als benannte Vorlage gespeichert werden. Eine
+Vorlage enthält die Besetzung und Patientenprofile und bleibt für den
+Ausbilder verfügbar. Ein Start aus der Vorlage legt einen eigenen
+Durchlauf mit 24 Stunden Gültigkeit und frischen QR-Zugängen an.
 
 Im Szenarioeditor Patienten, Texte, Gehfähigkeit und Vitalverläufe pflegen.
 Danach den gespeicherten Entwurf oder eine exportierte JSON-Datei in der

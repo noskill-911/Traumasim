@@ -19,18 +19,30 @@
   el('caseTitle').textContent = scenario?.title ?? 'TraumaSim';
   el('patientTitle').textContent = preset?.name ?? 'Übungspatient';
   const storageKey = 'traumasim-access:' + caseId + ':' + patientId;
-  const linkCode = new URLSearchParams(location.hash.slice(1)).get('code');
-  if (linkCode) {
-    history.replaceState({ traumasimPatientCode: linkCode }, '', location.pathname + location.search);
+  function readLinkFragment() {
+    const fragment = new URLSearchParams(location.hash.slice(1));
+    const linkCode = fragment.get('preview') || fragment.get('code');
+    if (!linkCode) return false;
+    history.replaceState({ traumasimPatientCode: linkCode, preview: fragment.has('preview') }, '', location.pathname + location.search);
+    return true;
   }
+  readLinkFragment();
+  window.addEventListener('hashchange', () => {
+    if (readLinkFragment()) location.reload();
+  });
   // A direct link keeps its exercise on reload. A new station scan uses the joined exercise.
   const directCode = history.state?.traumasimPatientCode;
+  const preview = history.state?.preview === true;
+  el('previewBanner').hidden = !preview;
   const exerciseCode = directCode || carStation ? null : api.exerciseCode(caseId);
   let code = directCode || exerciseCode;
   if (!carStation) {
     try { code ||= sessionStorage.getItem(storageKey); } catch {}
   }
-  let openPending = Boolean(code);
+  let openPending = Boolean(code) && !preview;
+  let pendingStartRevision;
+  let connectionInterrupted = false;
+  let lastReceived = null;
   const showJoinHint = () => {
     if (carStation) el('joinHint').textContent = 'Scanne den einzelnen QR-Code dieser Person am Pkw.';
     el('joinHint').hidden = false;
@@ -69,7 +81,7 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     const now = performance.now();
     if (snapshot) {
       // Advance one tick between server reads. The server owns pauses and resets.
-      const tick = snapshot.status === 'running' && now - snapshotReceivedAt >= 1000 ? 1 : 0;
+      const tick = !connectionInterrupted && snapshot.status === 'running' && now - snapshotReceivedAt >= 1000 ? 1 : 0;
       const elapsed = api.clock(snapshot.elapsed + tick);
       el('elapsed').textContent = elapsed;
       const monitorElapsed = el('monitorElapsed');
@@ -83,6 +95,13 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     clock.textContent = berlinClock.format(wallTime);
   }
 
+  function receiveSnapshot(data) {
+    snapshot = data;
+    snapshotReceivedAt = performance.now();
+    serverClockOffset = Date.parse(data.server_time) - snapshotReceivedAt;
+    lastReceived = new Date();
+  }
+
   function render() {
     const brief = snapshot && (snapshot.brief ?? preset);
     el('caseTitle').textContent = brief?.title ?? scenario?.title ?? 'TraumaSim';
@@ -91,13 +110,11 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     el('story').textContent = brief?.story ?? '';
     el('questions').textContent = brief?.questions ?? '';
     el('storyPanel').hidden = !snapshot;
-    el('startPatient').hidden = snapshot?.status !== 'ready';
+    el('startPatient').hidden = preview || snapshot?.status !== 'ready';
     el('triagePanel').hidden = !snapshot?.triage;
     monitor = snapshot?.monitor ?? (snapshot?.vitals && { ...snapshot.vitals, ecg: true });
     el('vitalsPanel').hidden = !monitor;
     el('clockPanel').hidden = !snapshot || Boolean(monitor && el('monitorElapsed'));
-    snapshotReceivedAt = performance.now();
-    serverClockOffset = Date.parse(snapshot?.server_time) - snapshotReceivedAt;
     drawClocks();
     if (!snapshot) return;
 
@@ -149,32 +166,57 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
     if (!code || busy) return;
     busy = true;
     el('startPatient').disabled = true;
+    el('retryConnection').disabled = true;
     const query = { p_case: caseId, p_patient: patientId, p_code: code };
     try {
-      if (revision !== undefined) query.p_start_revision = revision;
-      snapshot = await api.student(query);
+      if (revision !== undefined && !preview) pendingStartRevision = revision;
+      if (pendingStartRevision !== undefined) query.p_start_revision = pendingStartRevision;
+      receiveSnapshot(await api.student(query));
+      pendingStartRevision = undefined;
       const firstVisit = openPending;
       openPending = false;
       if (firstVisit && snapshot.status === 'ready') {
-        snapshot = await api.student({ ...query, p_start_revision: snapshot.revision });
+        pendingStartRevision = snapshot.revision;
+        receiveSnapshot(await api.student({ ...query, p_start_revision: pendingStartRevision }));
+        pendingStartRevision = undefined;
       }
-      if (!exerciseCode && !carStation) {
+      if (!preview && !exerciseCode && !carStation) {
         try { sessionStorage.setItem(storageKey, code); } catch {}
       }
+      connectionInterrupted = false;
+      el('connectionNotice').hidden = true;
+      el('retryConnection').hidden = true;
       render();
     } catch (error) {
+      if (error.status == null || error.status === 429 || error.status >= 500) {
+        connectionInterrupted = true;
+        render();
+        el('connectionNotice').textContent = lastReceived
+          ? 'Verbindung unterbrochen. Letzter empfangener Stand um ' + berlinClock.format(lastReceived) + ' Uhr.'
+          : 'Verbindung unterbrochen. Der Patient wird geladen, sobald die Verbindung wieder da ist.';
+        el('connectionNotice').hidden = false;
+        el('retryConnection').hidden = false;
+        return;
+      }
+      pendingStartRevision = undefined;
+      connectionInterrupted = false;
+      el('connectionNotice').hidden = true;
+      el('retryConnection').hidden = true;
       if (error.code === '42501') {
         if (exerciseCode) api.clearExerciseCode(caseId, exerciseCode);
         if (directCode) history.replaceState(null, '');
         try { sessionStorage.removeItem(storageKey); } catch {}
         code = null;
-        showJoinHint();
+        if (!preview) showJoinHint();
+      } else if (error.code === 'P0002') {
+        code = null;
       }
       snapshot = null;
       render();
       el('syncStatus').textContent = error.message;
     } finally {
-      el('startPatient').disabled = false;
+      el('startPatient').disabled = pendingStartRevision !== undefined;
+      el('retryConnection').disabled = false;
       busy = false;
     }
   }
@@ -182,6 +224,7 @@ function wavePath(kind,phase){let out='';const width=600;for(let x=0;x<=width;x+
   el('startPatient').addEventListener('click', () => {
     if (snapshot?.status === 'ready') void synchronize({ revision: snapshot.revision });
   });
+  el('retryConnection').addEventListener('click', () => { void synchronize(); });
   if (code) {
     void synchronize();
   } else {

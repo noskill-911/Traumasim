@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=trainer-header">
+  <link rel="stylesheet" href="style.css?v=exercise-reliability">
 </head>
 <body><main>
   <section class="panel">
@@ -108,6 +108,19 @@
       </section>
       <section class="panel">
         <h2>Weitere Übungsstarts</h2>
+        <details>
+          <summary>Übungsvorlagen</summary>
+          <p class="muted small">Eine Vorlage speichert die Besetzung und Patientenprofile. Jeder Start erzeugt eine neue Übung mit eigenen QR-Zugängen für 24 Stunden.</p>
+          <p id="noTemplates" class="muted small">Du hast noch keine Übungsvorlage gespeichert.</p>
+          <form id="startTemplateForm" hidden>
+            <label>Vorlage <select id="exerciseTemplate" required></select></label>
+            <button type="submit">Vorlage als neue Übung starten</button>
+          </form>
+          <form id="saveTemplateForm" hidden>
+            <label>Name der Vorlage <input id="templateTitle" maxlength="120" required></label>
+            <button type="submit">Aktive Übung als Vorlage speichern</button>
+          </form>
+        </details>
         <form id="create">
           <label>Titel für neue Übung <input id="exerciseTitle" maxlength="120" required></label>
           <button>Beispielübung anlegen</button>
@@ -151,13 +164,15 @@
         <p class="muted small">Nach dem Zurücksetzen wartet der Patient auf einen neuen Aufruf oder auf „Patient starten“.</p>
         <details>
           <summary>Patientenlink und Stations-QR</summary>
-          <p><a id="openPatientLink" class="action" target="_blank" rel="noopener noreferrer">Patientenlink öffnen</a>
+          <p><a id="previewPatientLink" class="action" target="_blank" rel="noopener noreferrer" hidden>Schüler-Vorschau öffnen</a>
+          <a id="openPatientLink" class="action" target="_blank" rel="noopener noreferrer">Patientenlink öffnen</a>
           <button id="copyLink">Patientenlink kopieren</button></p>
+          <p class="muted small">Der Patientenlink kann beim ersten Öffnen die Patientenuhr starten.</p>
           <input id="patientLink" aria-label="Patientenlink zum manuellen Kopieren" readonly hidden>
           <div id="station" hidden>
             <h3 id="stationTitle">Stations-QR für diesen Patienten</h3>
             <div id="stationQr" class="exercise-qr"></div>
-            <a id="stationDownload" download hidden>QR-Code als SVG speichern</a>
+            <button id="stationDownload" type="button" hidden>QR-Code als SVG speichern</button>
           </div>
         </details>
       </section>
@@ -183,6 +198,6 @@
 <script src="supabase-config.js"></script>
 <script src="sync.js?v=car"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
-<script src="trainer.js?v=car-edit"></script>
+<script src="trainer.js?v=exercise-reliability"></script>
 </body>
 </html>

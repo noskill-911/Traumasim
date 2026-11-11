@@ -5,7 +5,7 @@
 
 [hidden] { display: none !important; }
 button:disabled { opacity: .55; cursor: default; }
-#joinLink, #patientLink, #email, #password, #exerciseTitle {
+#joinLink, #patientLink, #email, #password, #exerciseTitle, #templateTitle {
   width: 100%;
   max-width: 42rem;
   padding: .65rem;
@@ -20,7 +20,7 @@ button:disabled { opacity: .55; cursor: default; }
 .trainer-views button { margin: 0; }
 .trainer-views button,
 .patient-overview button { border: 1px solid transparent; }
-#exercise, #choose, .car-seat select { max-width: 100%; }
+#exercise, #exerciseTemplate, #choose, .car-seat select { max-width: 100%; }
 .trainer-views button[aria-pressed="true"],
 .patient-overview button[aria-pressed="true"] { background: #29465e; border-color: #a4cced; }
 .patient-overview button {

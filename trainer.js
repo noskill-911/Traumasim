@@ -193,6 +193,7 @@
     el('live').hidden = !next;
     el('patientControls').hidden = !next;
     el('exerciseToolbar').hidden = !next;
+    el('saveTemplateForm').hidden = !next;
     el('preview').hidden = !next;
     renderJoin(next?.join_code);
     el('attachBus').hidden = !next;
@@ -210,6 +211,8 @@
       el('patientLink').value = '';
       el('patientLink').hidden = true;
       el('openPatientLink').removeAttribute('href');
+      el('previewPatientLink').removeAttribute('href');
+      el('previewPatientLink').hidden = true;
       renderStation(null);
       resetPreview();
       return;
@@ -265,12 +268,8 @@
     container.dataset.url = url;
   }
 
-  function renderStation(url, downloadPath) {
+  function renderStation(url) {
     const target = el('stationQr');
-    const download = el('stationDownload');
-    download.hidden = !downloadPath;
-    if (downloadPath) download.href = downloadPath;
-    else download.removeAttribute('href');
     el('station').hidden = !url;
     if (!url) {
       target.replaceChildren();
@@ -278,7 +277,20 @@
     } else {
       drawQr(target, url, 'Stations-QR für diesen Patienten');
     }
+    el('stationDownload').hidden = !target.querySelector('svg');
   }
+
+  el('stationDownload').addEventListener('click', () => {
+    const svg = el('stationQr').querySelector('svg');
+    const patient = selectedPatient();
+    if (!svg || !patient) return;
+    const url = URL.createObjectURL(new Blob([svg.outerHTML], { type: 'image/svg+xml' }));
+    const download = document.createElement('a');
+    download.href = url;
+    download.download = patient.id + '-station.svg';
+    download.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
 
   function stationUrl(patient) {
     const url = new URL('patient.html', location.href);
@@ -322,8 +334,7 @@
     const groups = new Map();
     for (const patient of exercise.patients) {
       const label = printLabel(patient);
-      const url = stationUrl(patient);
-      const qrUrl = patient.model?.car_number != null ? patientLink(url, patient) : url.href;
+      const qrUrl = patientLink(stationUrl(patient), patient);
       if (!groups.has(label.group)) groups.set(label.group, []);
       groups.get(label.group).push({ ...label, qrUrl });
     }
@@ -416,8 +427,16 @@
     const link = patientLink(station, patient);
     const carPatient = patient.model?.car_number != null;
     el('stationTitle').textContent = carPatient ? patientName(patient.id) : 'Stations-QR für diesen Patienten';
-    const downloadPath = patient.custom ? null : 'qr/' + encodeURIComponent(exercise.case + '-' + patient.id) + '.svg';
-    renderStation(carPatient ? link : station, downloadPath);
+    renderStation(link);
+    const previewLink = el('previewPatientLink');
+    previewLink.hidden = !patient.preview_code;
+    if (patient.preview_code) {
+      const url = new URL(station);
+      url.hash = new URLSearchParams({ preview: patient.preview_code });
+      previewLink.href = url.href;
+    } else {
+      previewLink.removeAttribute('href');
+    }
     const linkField = el('patientLink');
     if (linkField.value !== link) {
       linkField.value = link;
@@ -518,6 +537,7 @@
     actionVersion++;
     renderExercise(null);
     el('exercise').replaceChildren();
+    renderTemplateOptions([]);
     el('workspace').hidden = true;
     showView(false);
     el('logout').hidden = true;
@@ -529,12 +549,22 @@
     if (error.status === 401 || (error.code === '42501'
       && error.message === 'Konto nicht für die Ausbilderansicht freigegeben')) {
       signedOut();
-    } else if (error.code === '42501' && error.message === 'Übung nicht verfügbar oder abgelaufen') {
+    } else if (exerciseUnavailable(error)) {
       el('exercise').selectedOptions[0]?.remove();
       el('exercise').value = '';
       renderExercise(null);
     }
     message(error.message);
+  }
+
+  function exerciseUnavailable(error) {
+    return error.code === '42501' && error.message === 'Übung nicht verfügbar oder abgelaufen';
+  }
+
+  function renderTemplateOptions(templates) {
+    options(el('exerciseTemplate'), templates, 'Vorlage auswählen');
+    el('startTemplateForm').hidden = !templates.length;
+    el('noTemplates').hidden = Boolean(templates.length);
   }
 
   async function openWorkspace(list) {
@@ -544,10 +574,9 @@
     el('workspace').hidden = false;
     message('Als Ausbilder angemeldet.');
     if (list.length) {
-      el('exercise').value = list[0].id;
-      renderExercise(await rpc({ p_action: 'status', p_session: list[0].id }));
-      showView(true);
+      await switchExercise(list[0].id);
     }
+    renderTemplateOptions(await rpc({ p_action: 'list_templates' }));
   }
 
   async function run(work) {
@@ -602,9 +631,47 @@
   });
   el('exercise').addEventListener('change', () => {
     const id = el('exercise').value;
+    el('exercise').value = exercise?.id ?? '';
+    void run(() => switchExercise(id));
+  });
+  async function switchExercise(id) {
+    const select = el('exercise');
+    let next;
+    try {
+      next = id ? await rpc({ p_action: 'status', p_session: id }) : null;
+    } catch (error) {
+      if (!exerciseUnavailable(error)) throw error;
+      Array.from(select.options).find((option) => option.value === id)?.remove();
+      message(error.message);
+      return;
+    }
+    select.value = next?.id ?? '';
+    renderExercise(next);
+    showView(Boolean(next));
+  }
+
+  el('saveTemplateForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!exercise) return;
     void run(async () => {
-      renderExercise(id ? await rpc({ p_action: 'status', p_session: id }) : null);
-      showView(Boolean(id));
+      const template = await rpc({ p_action: 'save_template', p_session: exercise.id, p_title: el('templateTitle').value });
+      const select = el('exerciseTemplate');
+      select.add(new Option(template.title, template.id), 1);
+      select.value = template.id;
+      el('startTemplateForm').hidden = false;
+      el('noTemplates').hidden = true;
+      el('templateTitle').value = '';
+      message('Übungsvorlage gespeichert.');
+    });
+  });
+
+  el('startTemplateForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const id = el('exerciseTemplate').value;
+    if (!id) return;
+    void run(async () => {
+      openCreatedExercise(await rpc({ p_action: 'start_template', p_session: id }));
+      showView(true);
     });
   });
   el('create').addEventListener('submit', (event) => {
@@ -871,8 +938,8 @@
       const patient = selectedPatient();
       if (!exercise || !patient || busy) return;
       if (action.startsWith('reset') && !confirm(action === 'reset_all'
-        ? 'Alle Patienten dieser Übung zurücksetzen?' : patientName(patient.id) + ' zurücksetzen?')) return;
-      if (action === 'close' && !confirm('Übung beenden und alle Zugänge schließen?')) return;
+        ? 'Alle Patienten der Übung „' + exercise.title + '“ zurücksetzen?' : patientName(patient.id) + ' zurücksetzen?')) return;
+      if (action === 'close' && !confirm('Übung „' + exercise.title + '“ beenden und alle Zugänge schließen?')) return;
       void run(async () => {
         const next = await rpc({ p_action: action, p_session: exercise.id, p_patient: patient.id });
         if (next.closed) {
