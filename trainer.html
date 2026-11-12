@@ -6,11 +6,15 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=trainer-enrollment">
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="style.css?v=dark-mode">
 </head>
 <body><main class="trainer-shell">
   <section class="panel page-banner trainer-banner">
-    <div class="muted">TRAUMASIM · AUSBILDER</div>
+    <div class="banner-topline">
+      <span class="banner-label muted">TRAUMASIM · AUSBILDER</span>
+      <button type="button" class="theme-toggle" data-theme-toggle hidden></button>
+    </div>
     <h1>Ausbilderansicht</h1>
     <p id="message" role="status">Bitte mit einem freigegebenen Ausbilderkonto anmelden.</p>
     <a id="trainerLoginLink" class="trainer-login-qr" href="trainer.html" target="_blank" rel="noopener"
