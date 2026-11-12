@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=primary-survey">
+  <link rel="stylesheet" href="style.css?v=station-heading">
 </head>
 <body><main class="trainer-shell">
   <section class="panel page-banner trainer-banner">
@@ -308,8 +308,8 @@
         </section>
         <div id="patientDetail" class="patient-detail" role="region" aria-labelledby="patientDetailTitle" hidden>
           <section id="patientControls" class="panel" hidden>
-            <h2 id="patientDetailTitle" tabindex="-1"></h2>
-            <p id="patientIdentityDetails" class="muted small" hidden></p>
+            <h2 id="patientDetailTitle" class="patient-station-title" tabindex="-1"></h2>
+            <p id="patientIdentityDetails" class="patient-identity-details muted small" hidden></p>
             <button id="backToPatients" class="action-secondary patient-back" type="button">Zur Patientenliste</button>
             <select id="choose" aria-label="Ausgewählter Patient" hidden></select>
             <p id="patientStatus" aria-live="off"></p>
@@ -462,9 +462,9 @@
 <div id="exercisePrint" class="exercise-print"></div>
 <script src="patients.js?v=verkehrsunfall"></script>
 <script src="supabase-config.js"></script>
-<script src="sync.js?v=primary-survey"></script>
+<script src="sync.js?v=station-heading"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
 <script src="scenario-validation.js?v=triage"></script>
-<script src="trainer.js?v=primary-survey"></script>
+<script src="trainer.js?v=station-heading"></script>
 </body>
 </html>

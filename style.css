@@ -213,7 +213,7 @@ button:disabled { opacity: .55; cursor: default; }
 .patient-groups, .patient-overview { list-style: none; padding: 0; }
 .patient-overview { margin: 0; }
 .patient-group { margin-bottom: .95rem; padding-top: .65rem; border-top: 1px solid var(--line); }
-.patient-group h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .75rem; margin: 0 0 .45rem; font-size: 1rem; }
+.patient-group h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .75rem; margin: 0 0 .45rem; font-size: 1.125rem; }
 .patient-group h3 .small { font-weight: 400; }
 .station-group-context { margin: 0 0 .45rem; font-weight: 600; overflow-wrap: anywhere; }
 .overview-fields {
@@ -341,13 +341,14 @@ button:disabled { opacity: .55; cursor: default; }
 }
 .overview-sync[data-stale="true"] { border-color: #946300; background: #fff4d5; color: #593900; }
 .patient-workspace > *, .patient-detail { min-width: 0; }
-.patient-detail h2 { overflow-wrap: anywhere; }
+.patient-station-title { margin: .15rem 0 .35rem; font-size: clamp(1.45rem, 4vw, 1.75rem); line-height: 1.2; overflow-wrap: anywhere; }
+.patient-identity-details { margin: 0 0 .7rem; overflow-wrap: anywhere; }
 .patient-back { margin: 0 0 .75rem; }
 .patient-action-buttons { display: flex; flex-wrap: wrap; gap: .35rem; }
 .patient-action-buttons button { margin: 0; }
 #patientFeedback:empty, #patientLinkFeedback:empty { margin: 0; }
 .patient-workspace .patient-overview button { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.patient-workspace .patient-overview strong { grid-column: 1 / -1; }
+.patient-workspace .patient-row-heading { grid-column: 1 / -1; }
 @media (min-width: 900px) {
   .patient-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 1rem; }
   .patient-back { display: none; }
@@ -371,8 +372,9 @@ button:disabled { opacity: .55; cursor: default; }
 }
 .patient-overview button:not(:disabled):hover,
 .patient-overview button[aria-pressed="true"] { background: #e0edf7; border-color: var(--blue); }
-.patient-overview strong { overflow-wrap: anywhere; }
-.patient-station-label { display: block; font-weight: 400; }
+.patient-row-heading { overflow-wrap: anywhere; }
+.patient-row-heading strong { font-size: 1.0625rem; }
+.patient-secondary-name { display: block; font-weight: 400; }
 .patient-name-source { margin: .75rem 0 0; opacity: .85; overflow-wrap: anywhere; }
 .primary-survey dl { margin: 0; }
 .primary-survey dl > div { padding: .45rem .65rem; border-inline-start: .2rem solid transparent; }
@@ -389,7 +391,7 @@ button:disabled { opacity: .55; cursor: default; }
 .patient-triage-timing button { margin: 0; }
 @media (max-width: 620px) {
   .patient-overview button { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .patient-overview strong { grid-column: 1 / -1; }
+  .patient-row-heading { grid-column: 1 / -1; }
 }
 input#caseTitle, #name, textarea { width: 100%; padding: .55rem; }
 .curve-table { overflow-x: auto; }

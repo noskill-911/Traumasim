@@ -90,7 +90,7 @@
     signUp: (email, password, redirect) => request('/auth/v1/signup?redirect_to=' + encodeURIComponent(redirect), { email, password }),
     refresh: (refresh_token) => request('/auth/v1/token?grant_type=refresh_token', { refresh_token }),
     signOut: (token) => request('/auth/v1/logout?scope=local', {}, token),
-    identityDetails: (identity) => identity ? identity.age + ' Jahre · ' + identity.gender : '',
+    identityDetails: (identity) => identity ? [identity.name, identity.age + ' Jahre', identity.gender].join(' · ') : '',
     identitySource: (identity) => identity
       ? ['Namensbezug', identity.name_source, identity.name_locality, identity.name_background].filter(Boolean).join(' · ')
       : '',

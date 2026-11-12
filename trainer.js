@@ -88,7 +88,15 @@
 
   function patientOptionLabel(patient) {
     const station = patientName(patient.id);
-    return patient.identity ? patient.identity.name + ' · ' + station : station;
+    return patient.identity ? station + ' · ' + patient.identity.name : station;
+  }
+
+  function appendPatientIdentity(element, identity) {
+    if (!identity?.name) return;
+    const name = document.createElement('span');
+    name.className = 'patient-secondary-name muted small';
+    name.textContent = identity.name;
+    element.append(name);
   }
 
   function carSeatName(model) {
@@ -651,15 +659,12 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.setAttribute('aria-controls', 'patientDetail');
-      const name = document.createElement('strong');
-      const station = patientName(patient.id);
-      name.textContent = patient.identity?.name ?? station;
-      if (patient.identity) {
-        const stationLabel = document.createElement('span');
-        stationLabel.className = 'patient-station-label muted small';
-        stationLabel.textContent = station;
-        name.append(stationLabel);
-      }
+      const rowHeading = document.createElement('span');
+      rowHeading.className = 'patient-row-heading';
+      const station = document.createElement('strong');
+      station.textContent = patientName(patient.id);
+      rowHeading.append(station);
+      appendPatientIdentity(rowHeading, patient.identity);
       const category = document.createElement('span');
       const status = document.createElement('span');
       status.className = 'patient-runtime';
@@ -667,7 +672,7 @@
       forecast.className = 'patient-forecast muted';
       const firstTriage = document.createElement('span');
       firstTriage.className = 'patient-first-triage';
-      button.append(name, category, status, forecast, firstTriage);
+      button.append(rowHeading, category, status, forecast, firstTriage);
       button.addEventListener('click', () => {
         if (busy) return;
         const changed = el('choose').value !== patient.id;
@@ -742,11 +747,10 @@
     const title = el('patientDetailTitle');
     const stationName = patientName(patient.id);
     const identity = patient.identity;
-    const name = identity?.name ?? stationName;
-    if (title.textContent !== name) title.textContent = name;
+    if (title.textContent !== stationName) title.textContent = stationName;
     const details = el('patientIdentityDetails');
-    details.textContent = identity ? api.identityDetails(identity) + ' · ' + stationName : '';
-    details.hidden = !identity;
+    details.textContent = api.identityDetails(identity);
+    details.hidden = !details.textContent;
     const source = el('patientIdentitySource');
     source.textContent = api.identitySource(identity);
     source.hidden = !identity;
@@ -1039,13 +1043,14 @@
     return Number.isFinite(time) ? archiveDate.format(time) : '';
   }
 
-  function archivePatientCard(name, badge, fields) {
+  function archivePatientCard(patient, badge, fields) {
     const card = document.createElement('li');
     card.className = 'archive-patient-card';
     const header = document.createElement('div');
     header.className = 'archive-patient-heading';
     const title = document.createElement('h3');
-    title.textContent = name;
+    title.textContent = patient.name;
+    appendPatientIdentity(title, patient.identity);
     const category = badge.cloneNode(true);
     if (!category.classList.contains('triage')) category.textContent = 'Keine Sichtungskategorie';
     header.append(title, category);
@@ -1086,8 +1091,8 @@
       const row = document.createElement('tr');
       const name = document.createElement('th');
       name.scope = 'row';
-      const labelText = patient.identity ? patient.identity.name + ' · ' + patient.name : patient.name;
-      name.textContent = labelText;
+      name.textContent = patient.name;
+      appendPatientIdentity(name, patient.identity);
       const category = document.createElement('td');
       const label = categoryLabels[patient.category];
       const badge = document.createElement('span');
@@ -1106,7 +1111,7 @@
         row.append(cell);
       }
       rows.push(row);
-      cards.push(archivePatientCard(labelText, badge, fields));
+      cards.push(archivePatientCard(patient, badge, fields));
     }
     el('archiveReportPatients').replaceChildren(...rows);
     el('archiveReportCards').replaceChildren(...cards);
