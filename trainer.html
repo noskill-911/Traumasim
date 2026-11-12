@@ -81,11 +81,11 @@
           <p id="exerciseNameFeedback" class="trainer-feedback" role="status"></p>
         </section>
         <nav class="trainer-views" aria-label="Ausbilderbereiche">
-          <button id="showManagement" type="button" aria-controls="managementView" aria-pressed="false">
+          <button id="showManagement" type="button" aria-controls="managementView" aria-pressed="true">
             <svg class="trainer-view-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg?v=trainer-usability#overview"></use></svg>
             <strong>Übersicht</strong>
           </button>
-          <button id="showConfiguration" type="button" aria-controls="configurationView" aria-pressed="true">
+          <button id="showConfiguration" type="button" aria-controls="configurationView" aria-pressed="false">
             <svg class="trainer-view-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg?v=trainer-usability#configuration"></use></svg>
             <strong>Konfiguration</strong>
           </button>
@@ -117,12 +117,26 @@
         <p id="exerciseFeedback" class="trainer-feedback" role="status"></p>
       </div>
     </section>
-    <section id="stationDraftRecovery" class="panel" aria-labelledby="stationDraftTitle" hidden>
-      <h2 id="stationDraftTitle">Ungespeicherte Stationsentwürfe</h2>
-      <p>Diese Entwürfe wurden in diesem Browser für die ausgewählte Übung gesichert.</p>
-      <div id="stationDrafts"></div>
-    </section>
-    <div id="managementView" hidden>
+    <div id="managementView">
+      <section class="panel" aria-labelledby="newExerciseTitle">
+        <h2 id="newExerciseTitle">Neue Übung</h2>
+        <form id="create">
+          <label>Übungsname <input id="exerciseTitle" maxlength="120" required></label>
+          <div class="booking-actions">
+            <button id="createEmptyExercise" type="submit" value="create_empty">Übung anlegen</button>
+            <button class="action-secondary" type="submit" value="create">Beispielübung anlegen</button>
+          </div>
+          <p id="createFeedback" class="trainer-feedback" role="status"></p>
+        </form>
+        <details>
+          <summary>Eigenes Szenario starten</summary>
+          <p>Verwende deinen zuletzt gespeicherten Entwurf aus dem <a href="editor.html">Szenarioeditor</a> oder lade dessen JSON-Datei hoch.</p>
+          <label>JSON-Datei (optional) <input id="scenarioFile" type="file" accept="application/json,.json"></label>
+          <button id="createCustom" type="button">Eigenes Szenario starten</button>
+          <p id="scenarioIssue" class="warning" role="status" hidden></p>
+          <p id="customFeedback" class="trainer-feedback" role="status"></p>
+        </details>
+      </section>
       <section class="panel" aria-labelledby="managementTitle">
         <div class="management-heading">
           <h2 id="managementTitle">Übungsübersicht</h2>
@@ -145,164 +159,163 @@
             <h3 id="exerciseTemplatesTitle">Gespeicherte Vorlagen</h3>
             <p id="exerciseTemplatesEmpty" class="muted small" hidden>Keine gespeicherten Vorlagen.</p>
             <ul id="exerciseTemplates" class="management-list"></ul>
+            <details id="templateSettings" hidden>
+              <summary>Durchlauf aus Vorlage anlegen</summary>
+              <form id="startTemplateForm">
+                <label>Vorlage <select id="exerciseTemplate" required></select></label>
+                <label>Name des Durchlaufs <input id="templateRunTitle" maxlength="120" required></label>
+                <button type="submit">Durchlauf anlegen</button>
+                <p id="templateStartFeedback" class="trainer-feedback" role="status"></p>
+              </form>
+            </details>
+            <details id="templateManagement" hidden>
+              <summary>Aus aktiver Übung als Vorlage speichern</summary>
+              <p class="muted small">Speichere Patientenprofile, Besetzung und Sichtungseinstellung der ausgewählten Übung zur Wiederverwendung.</p>
+              <form id="saveTemplateForm">
+                <label>Name der Vorlage <input id="templateTitle" maxlength="120" required></label>
+                <button type="submit">Vorlage speichern</button>
+              </form>
+              <form id="updateTemplateForm" hidden>
+                <label>Vorhandene Vorlage <select id="templateToUpdate" required></select></label>
+                <button id="updateTemplate" class="action-secondary" type="submit">Vorlage aktualisieren</button>
+              </form>
+              <p id="templateFeedback" class="trainer-feedback" role="status"></p>
+            </details>
           </section>
         </div>
       </section>
     </div>
-    <div id="configurationView">
-      <section class="panel">
-        <h2>Fahrzeuge zusammenstellen</h2>
-        <p class="muted small">Starte mit einem Fahrzeug eine neue Übung oder ergänze die oben ausgewählte Übung.</p>
-        <details class="booking-card" id="carBooking">
-          <summary><span class="station-heading"><svg class="station-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg#car"></use></svg>Pkw mit Insassen</span><span class="muted small">Bis zu 5 Sitzplätze</span></summary>
-          <div class="booking-fields">
-            <p>Lege je besetztem Sitzplatz das Verletzungsprofil und die Befreiungslage fest. Wähle „Leer“, um einen Insassen zu entfernen. Beim Bearbeiten kannst du Insassen auch umsetzen.</p>
-            <p class="muted small">Bei <strong>Eingeschlossen</strong> ist der Ausstieg versperrt. Bei <strong>Eingeklemmt</strong> steckt ein Körperteil fest, etwa im Fußraum.</p>
-            <label id="editCarChoice" hidden>Pkw auswählen
-              <select id="editCar"></select>
-            </label>
-            <p id="carEditStatus" class="muted small" role="status" hidden></p>
-            <p id="carUnsaved" class="warning small" hidden>Ungespeicherte Pkw-Änderungen</p>
-            <form id="carForm">
-              <div class="vehicle-fields">
-                <label>Fahrzeug (optional)
-                  <input id="carDescription" maxlength="120" placeholder="z. B. roter Volvo">
-                </label>
-                <label>Lage (optional)
-                  <input id="carSituation" maxlength="200" placeholder="z. B. Seitenlage, Fahrertür deformiert">
-                </label>
-              </div>
-              <div id="carSeats"></div>
-              <div class="booking-actions">
-                <button id="attachCar" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
-                <button id="saveCar" type="submit" hidden>Änderungen speichern</button>
-                <button id="startCar" type="submit">Als neue Übung starten</button>
-              </div>
-              <p id="carFeedback" class="trainer-feedback" role="status"></p>
-            </form>
-          </div>
-        </details>
-        <details class="booking-card" id="busBooking">
-          <summary><span class="station-heading"><svg class="station-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg#bus"></use></svg>Busunfall</span><span class="muted small">5 oder 10 Personen</span></summary>
-          <div class="booking-fields">
-            <p>Wähle eine vorbereitete Busbesetzung mit eigenen Patientenrollen und Auffindeorten.</p>
-            <label>Busbesetzung einschließlich Fahrer
-              <select id="busCapacity">
-                <option value="5">Bus mit 5 Personen</option>
-                <option value="10">Bus mit 10 Personen</option>
-              </select>
-            </label>
-            <div class="booking-actions">
-              <button id="attachBus" type="button" hidden>Zur aktiven Übung hinzufügen</button>
-              <button id="startBus" type="button">Als neue Übung starten</button>
-            </div>
-            <p id="busFeedback" class="trainer-feedback" role="status"></p>
-          </div>
-        </details>
-        <details class="booking-card" id="truckBooking">
-          <summary><span class="station-heading"><svg class="station-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg#truck"></use></svg>Lkw mit Insassen</span><span class="muted small">Fahrer- und Beifahrerplatz</span></summary>
-          <div class="booking-fields">
-            <label id="editTruckChoice" hidden>Lkw auswählen
-              <select id="editTruck"></select>
-            </label>
-            <p id="truckEditStatus" class="muted small" role="status" hidden></p>
-            <p id="truckUnsaved" class="warning small" hidden>Ungespeicherte Lkw-Änderungen</p>
-            <form id="truckForm">
-              <div class="vehicle-fields">
-                <label>Fahrzeug (optional)
-                  <input id="truckDescription" maxlength="120" placeholder="z. B. weißer MAN">
-                </label>
-                <label>Lage (optional)
-                  <input id="truckSituation" maxlength="200" placeholder="z. B. Seitenlage am Straßenrand">
-                </label>
-              </div>
-              <div id="truckSeats"></div>
-              <div class="booking-actions">
-                <button id="attachTruck" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
-                <button id="saveTruck" type="submit" hidden>Änderungen speichern</button>
-                <button id="startTruck" type="submit">Als neue Übung starten</button>
-              </div>
-              <p id="truckFeedback" class="trainer-feedback" role="status"></p>
-            </form>
-          </div>
-        </details>
+    <div id="configurationView" hidden>
+      <section id="noConfigurationExercise" class="panel">
+        <h2>Keine Übung ausgewählt</h2>
+        <p>Wähle eine aktive Übung oder lege in der Übersicht eine neue an.</p>
+        <button id="overviewFromConfiguration" class="action-secondary" type="button">Zur Übersicht</button>
       </section>
-      <section class="panel">
-        <h2>Weitere Einsatzstellen</h2>
-        <details class="booking-card" id="objectBooking">
-          <summary><span class="station-heading"><svg class="station-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg#entrapment"></use></svg>Einklemmung unter oder zwischen Gegenständen</span></summary>
-          <div class="booking-fields">
-            <label id="editObjectChoice" hidden>Klemmstelle auswählen
-              <select id="editObject"></select>
-            </label>
-            <p id="objectEditStatus" class="muted small" role="status" hidden></p>
-            <p id="objectUnsaved" class="warning small" hidden>Ungespeicherte Änderungen an der Klemmstelle</p>
-            <form id="objectForm">
-              <label>Gegenstand <select id="objectType" required></select></label>
-              <label>Klemmlage <select id="objectPosition" required></select></label>
-              <label>Auffindeort oder Lage (optional)
-                <input id="objectSituation" maxlength="200" placeholder="z. B. neben der Werkstatttür">
+      <div id="configurationEditor" hidden>
+        <section id="stationDraftRecovery" class="panel" aria-labelledby="stationDraftTitle" hidden>
+          <h2 id="stationDraftTitle">Ungespeicherte Stationsentwürfe</h2>
+          <p>Diese Entwürfe wurden in diesem Browser für die ausgewählte Übung gesichert.</p>
+          <div id="stationDrafts"></div>
+        </section>
+
+        <section class="panel">
+          <h2 id="configurationTitle" tabindex="-1">Fahrzeuge zusammenstellen</h2>
+          <p class="muted small">Ergänze oder bearbeite Fahrzeuge in der ausgewählten Übung.</p>
+          <details class="booking-card" id="carBooking">
+            <summary><span class="station-heading"><svg class="station-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg#car"></use></svg>Pkw mit Insassen</span><span class="muted small">Bis zu 5 Sitzplätze</span></summary>
+            <div class="booking-fields">
+              <p>Lege je besetztem Sitzplatz das Verletzungsprofil und die Befreiungslage fest. Wähle „Leer“, um einen Insassen zu entfernen. Beim Bearbeiten kannst du Insassen auch umsetzen.</p>
+              <p class="muted small">Bei <strong>Eingeschlossen</strong> ist der Ausstieg versperrt. Bei <strong>Eingeklemmt</strong> steckt ein Körperteil fest, etwa im Fußraum.</p>
+              <label id="editCarChoice" hidden>Pkw auswählen
+                <select id="editCar"></select>
               </label>
-              <div id="objectSeats"></div>
+              <p id="carEditStatus" class="muted small" role="status" hidden></p>
+              <p id="carUnsaved" class="warning small" hidden>Ungespeicherte Pkw-Änderungen</p>
+              <form id="carForm">
+                <div class="vehicle-fields">
+                  <label>Fahrzeug (optional)
+                    <input id="carDescription" maxlength="120" placeholder="z. B. roter Volvo">
+                  </label>
+                  <label>Lage (optional)
+                    <input id="carSituation" maxlength="200" placeholder="z. B. Seitenlage, Fahrertür deformiert">
+                  </label>
+                </div>
+                <div id="carSeats"></div>
+                <div class="booking-actions">
+                  <button id="attachCar" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
+                  <button id="saveCar" type="submit" hidden>Änderungen speichern</button>
+                </div>
+                <p id="carFeedback" class="trainer-feedback" role="status"></p>
+              </form>
+            </div>
+          </details>
+          <details class="booking-card" id="busBooking">
+            <summary><span class="station-heading"><svg class="station-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg#bus"></use></svg>Busunfall</span><span class="muted small">5 oder 10 Personen</span></summary>
+            <div class="booking-fields">
+              <p>Wähle eine vorbereitete Busbesetzung mit eigenen Patientenrollen und Auffindeorten.</p>
+              <label>Busbesetzung einschließlich Fahrer
+                <select id="busCapacity">
+                  <option value="5">Bus mit 5 Personen</option>
+                  <option value="10">Bus mit 10 Personen</option>
+                </select>
+              </label>
               <div class="booking-actions">
-                <button id="attachObject" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
-                <button id="saveObject" type="submit" hidden>Änderungen speichern</button>
-                <button id="startObject" type="submit">Als neue Übung starten</button>
+                <button id="attachBus" type="button" hidden>Zur aktiven Übung hinzufügen</button>
               </div>
-              <p id="objectFeedback" class="trainer-feedback" role="status"></p>
-            </form>
-          </div>
-        </details>
-      </section>
-      <section id="triageSettings" class="panel" hidden>
-        <h2>Sichtung in der Schüleransicht</h2>
-        <form id="triageSettingsForm">
-          <label for="triageMode">Wann erscheint die Sichtungskategorie?</label>
-          <select id="triageMode">
-            <option value="automatic">Automatisch nach der Wartezeit</option>
-            <option value="choose">Eigene Sichtung vor Auflösung</option>
-          </select>
-          <button type="submit">Sichtungseinstellung speichern</button>
-          <p id="triageSettingsFeedback" class="trainer-feedback" role="status"></p>
-        </form>
-      </section>
-      <section class="panel">
-        <h2>Weitere Übungsstarts</h2>
-        <details id="templateSettings">
-          <summary>Übungsvorlagen</summary>
-          <p class="muted small">Eine Vorlage speichert die Besetzung und Patientenprofile. Jeder Start erzeugt eine neue Übung mit eigenen QR-Zugängen für 24 Stunden.</p>
-          <p id="noTemplates" class="muted small">Du hast noch keine Übungsvorlage gespeichert.</p>
-          <form id="startTemplateForm" hidden>
-            <label>Vorlage <select id="exerciseTemplate" required></select></label>
-            <label>Name des Durchlaufs <input id="templateRunTitle" maxlength="120" required></label>
-            <button type="submit">Vorlage als neue Übung starten</button>
-            <button id="updateTemplate" class="action-secondary" type="button" hidden>Vorlage mit aktiver Besetzung aktualisieren</button>
+              <p id="busFeedback" class="trainer-feedback" role="status"></p>
+            </div>
+          </details>
+          <details class="booking-card" id="truckBooking">
+            <summary><span class="station-heading"><svg class="station-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg#truck"></use></svg>Lkw mit Insassen</span><span class="muted small">Fahrer- und Beifahrerplatz</span></summary>
+            <div class="booking-fields">
+              <label id="editTruckChoice" hidden>Lkw auswählen
+                <select id="editTruck"></select>
+              </label>
+              <p id="truckEditStatus" class="muted small" role="status" hidden></p>
+              <p id="truckUnsaved" class="warning small" hidden>Ungespeicherte Lkw-Änderungen</p>
+              <form id="truckForm">
+                <div class="vehicle-fields">
+                  <label>Fahrzeug (optional)
+                    <input id="truckDescription" maxlength="120" placeholder="z. B. weißer MAN">
+                  </label>
+                  <label>Lage (optional)
+                    <input id="truckSituation" maxlength="200" placeholder="z. B. Seitenlage am Straßenrand">
+                  </label>
+                </div>
+                <div id="truckSeats"></div>
+                <div class="booking-actions">
+                  <button id="attachTruck" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
+                  <button id="saveTruck" type="submit" hidden>Änderungen speichern</button>
+                </div>
+                <p id="truckFeedback" class="trainer-feedback" role="status"></p>
+              </form>
+            </div>
+          </details>
+        </section>
+        <section class="panel">
+          <h2>Weitere Einsatzstellen</h2>
+          <details class="booking-card" id="objectBooking">
+            <summary><span class="station-heading"><svg class="station-icon" aria-hidden="true" focusable="false"><use href="station-icons.svg#entrapment"></use></svg>Einklemmung unter oder zwischen Gegenständen</span></summary>
+            <div class="booking-fields">
+              <label id="editObjectChoice" hidden>Klemmstelle auswählen
+                <select id="editObject"></select>
+              </label>
+              <p id="objectEditStatus" class="muted small" role="status" hidden></p>
+              <p id="objectUnsaved" class="warning small" hidden>Ungespeicherte Änderungen an der Klemmstelle</p>
+              <form id="objectForm">
+                <label>Gegenstand <select id="objectType" required></select></label>
+                <label>Klemmlage <select id="objectPosition" required></select></label>
+                <label>Auffindeort oder Lage (optional)
+                  <input id="objectSituation" maxlength="200" placeholder="z. B. neben der Werkstatttür">
+                </label>
+                <div id="objectSeats"></div>
+                <div class="booking-actions">
+                  <button id="attachObject" type="submit" hidden>Zur aktiven Übung hinzufügen</button>
+                  <button id="saveObject" type="submit" hidden>Änderungen speichern</button>
+                </div>
+                <p id="objectFeedback" class="trainer-feedback" role="status"></p>
+              </form>
+            </div>
+          </details>
+        </section>
+        <section id="triageSettings" class="panel" hidden>
+          <h2>Sichtung in der Schüleransicht</h2>
+          <form id="triageSettingsForm">
+            <label for="triageMode">Wann erscheint die Sichtungskategorie?</label>
+            <select id="triageMode">
+              <option value="automatic">Automatisch nach der Wartezeit</option>
+              <option value="choose">Eigene Sichtung vor Auflösung</option>
+            </select>
+            <button type="submit">Sichtungseinstellung speichern</button>
+            <p id="triageSettingsFeedback" class="trainer-feedback" role="status"></p>
           </form>
-          <p id="templateFeedback" class="trainer-feedback" role="status"></p>
-          <form id="saveTemplateForm" hidden>
-            <label>Name der Vorlage <input id="templateTitle" maxlength="120" required></label>
-            <button type="submit">Aktive Übung als Vorlage speichern</button>
-          </form>
-        </details>
-        <form id="create">
-          <label>Titel für neue Übung <input id="exerciseTitle" maxlength="120" required></label>
-          <button>Beispielübung anlegen</button>
-          <p id="createFeedback" class="trainer-feedback" role="status"></p>
-        </form>
-        <details>
-          <summary>Eigenes Szenario als Übung starten</summary>
-          <p>Verwende deinen zuletzt gespeicherten Entwurf aus dem <a href="editor.html">Szenarioeditor</a> oder lade dessen JSON-Datei hoch.</p>
-          <label>JSON-Datei (optional) <input id="scenarioFile" type="file" accept="application/json,.json"></label>
-          <button id="createCustom" type="button">Eigenes Szenario starten</button>
-          <p id="scenarioIssue" class="warning" role="status" hidden></p>
-          <p id="customFeedback" class="trainer-feedback" role="status"></p>
-        </details>
-      </section>
+        </section>
+      </div>
     </div>
     <div id="exerciseView" hidden>
       <section id="noExercise" class="panel">
         <h2 id="noExercisePatientsTitle" tabindex="-1">Patientenübersicht</h2>
-        <p>Wähle oben eine Übung aus oder lege eine in der Konfiguration an.</p>
+        <p>Wähle oben eine Übung aus oder lege eine in der Übersicht an.</p>
       </section>
       <div id="patientWorkspace" class="patient-workspace" data-detail-open="false">
         <section id="live" class="panel" hidden>
@@ -319,7 +332,11 @@
             <div><dt>Einklemmungsstellen</dt><dd id="compositionObjects">0</dd></div>
             <div><dt>Personen</dt><dd id="compositionPatients">0</dd></div>
           </dl>
-          <details>
+          <p id="emptyPatientOverview" hidden>
+            Die Übung enthält noch keine Patienten.
+            <button id="configureEmptyExercise" class="action-secondary" type="button">Zur Konfiguration</button>
+          </p>
+          <details id="stationPrintOptions">
             <summary>QR-Druckliste (A4)</summary>
             <div class="overview-fields">
               <label>Fahrzeug oder Station für den Druck <select id="printVehicle"></select></label>
@@ -496,6 +513,6 @@
 <script src="sync.js?v=trainer-enrollment"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
 <script src="scenario-validation.js?v=triage"></script>
-<script src="trainer.js?v=trainer-enrollment"></script>
+<script src="trainer.js?v=overview-starts"></script>
 </body>
 </html>

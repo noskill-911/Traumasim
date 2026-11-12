@@ -12,8 +12,12 @@
    beendet sie auch in weiteren Ausbilder-Tabs desselben Profils.
    Der **Ausbilder-QR** in der Kopfzeile öffnet die Anmeldeseite auf einem
    anderen Gerät. Dort meldet sich der Kollege mit seinem Ausbilderkonto an.
-2. In **Konfiguration** eine Übung anlegen und Stationen zusammenstellen
-   oder oben bei **Aktive Übung** eine vorhandene Übung auswählen.
+2. Unter **Übersicht → Neue Übung** einen Namen vergeben und eine leere
+   Übung oder die Beispielübung anlegen. Eigene Szenarien lassen sich dort
+   aus dem Szenarioeditor oder einer JSON-Datei starten. Über **Gespeicherte
+   Vorlagen** lässt sich ein neuer Durchlauf aus einer Vorlage anlegen.
+   Nach dem Anlegen öffnet sich die **Konfiguration** der ausgewählten
+   Übung. Dort lassen sich Fahrzeuge, Patienten und Einsatzstellen ergänzen.
    Die Navigation wechselt zwischen **Übersicht**, **Konfiguration** und
    **Live-Übung**. Die **Übersicht** zeigt aktive und inaktive Übungen sowie Vorlagen
    mit Besetzung und Sichtungskategorien. Von dort lassen sich Übungen
@@ -98,13 +102,14 @@ Standardmäßig erscheint die hinterlegte Kategorie weiterhin automatisch.
 
 ## Eigene Szenarien
 
-Unter **Konfiguration → Weitere Übungsstarts → Übungsvorlagen** kann
+Unter **Übersicht → Gespeicherte Vorlagen → Aus aktiver Übung als Vorlage speichern** kann
 die aktive Zusammenstellung als benannte Vorlage gespeichert werden. Eine
 Vorlage enthält die Besetzung, Patientenprofile und Sichtungseinstellung und bleibt für den
 Ausbilder verfügbar. Ein Start aus der Vorlage legt einen eigenen
 Durchlauf mit 24 Stunden Gültigkeit und frischen QR-Zugängen an.
-Der Durchlauf kann einen eigenen Namen bekommen. Eine bestehende Vorlage
-lässt sich mit der Besetzung der aktiven Übung aktualisieren.
+Unter **Übersicht → Gespeicherte Vorlagen** bekommt der Durchlauf einen
+eigenen Namen. Dort lässt sich auch eine bestehende Vorlage mit der
+Besetzung der ausgewählten Übung aktualisieren.
 
 Im Szenarioeditor Patienten, Texte, Gehfähigkeit und Vitalverläufe pflegen.
 Für **SK B · Betroffene** und **SK Schwarz** kann die Kategorie fest
@@ -123,9 +128,9 @@ aus eigenen Szenarien sind nur in der Ausbilderansicht verfügbar.
 
 ## Busunfall buchen
 
-In der Ausbilderansicht unter **Übungselement Busunfall** die Variante mit
-5 oder 10 Personen einschließlich Fahrer auswählen. Den Bus als eigene
-Übung starten oder zur aktiven Übung als zusätzliche Lage hinzufügen.
+In der Ausbilderansicht unter **Konfiguration → Busunfall** die Variante
+mit 5 oder 10 Personen einschließlich Fahrer auswählen und zur ausgewählten
+Übung hinzufügen. Für eine reine Busübung zuerst eine leere Übung anlegen.
 Jede Busvariante enthält eine unverletzte, betreuungsbedürftige Person.
 Die Rolle erscheint als **SK B · Betroffene** und hat keine simulierte
 Monitoranzeige. Die bestehenden Stationslinks einer laufenden Übung bleiben gültig.
@@ -188,8 +193,9 @@ Die Standardstory verwendet die gewählte Körperregion und Klemmlage.
 In der Verlaufsvorschau lässt sich die Geschichte vor und nach einem
 Kategorienwechsel prüfen.
 
-Lkw und Einklemmungsstellen lassen sich zu einer vorhandenen Übung
-hinzufügen oder als eigene Übung starten. Jede Person hat einen eigenen
+Lkw und Einklemmungsstellen lassen sich in der Konfiguration zur ausgewählten
+Übung hinzufügen. Für eine eigene Übung zuerst unter **Übersicht** eine
+leere Übung anlegen. Jede Person hat einen eigenen
 Stations-QR. Die Übersicht zählt beide Typen getrennt und die A4-Druckliste
 kann auf einen Lkw oder eine Einklemmungsstelle eingegrenzt werden.
 

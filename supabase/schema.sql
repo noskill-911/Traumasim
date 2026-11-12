@@ -1102,7 +1102,7 @@ begin
    return result;
  end if;
 
- if (p_action in ('create', 'save_template') or (p_action = 'start_template' and p_title is not null))
+ if (p_action in ('create', 'create_empty', 'save_template') or (p_action = 'start_template' and p_title is not null))
     and (p_title is null or length(btrim(p_title)) not between 1 and 120) then
    raise exception using errcode = '22023', message = 'Der Titel muss 1 bis 120 Zeichen enthalten.';
  end if;
@@ -1121,6 +1121,11 @@ begin
    insert into public.traumasim_patients (session_id, patient_key, scenario_model)
    select exercise.id, p.patient_key, p.scenario_model
    from jsonb_to_recordset(template.patients) as p(patient_key text, scenario_model jsonb);
+ elsif p_action = 'create_empty' then
+   new_session_id := gen_random_uuid();
+   insert into public.traumasim_sessions (id, title, trainer_id, case_key)
+   values (new_session_id, btrim(p_title), trainer, 'custom-' || new_session_id::text)
+   returning * into exercise;
  elsif p_action = 'create' then
    insert into public.traumasim_sessions (title, trainer_id)
    values (btrim(p_title), trainer) returning * into exercise;
@@ -1343,7 +1348,7 @@ begin
  ) live_survey
  where p.session_id = exercise.id;
  return jsonb_build_object('id', exercise.id, 'title', exercise.title, 'case', exercise.case_key,
-   'expires_at', exercise.expires_at, 'patients', result, 'triage_mode', exercise.triage_mode,
+   'expires_at', exercise.expires_at, 'patients', coalesce(result, '[]'::jsonb), 'triage_mode', exercise.triage_mode,
    'arrived_at', exercise.arrived_at, 'server_time', snapshot_time,
    'join_code', traumasim_private.exercise_code(exercise.id, exercise.case_key, exercise.signing_key));
 end;

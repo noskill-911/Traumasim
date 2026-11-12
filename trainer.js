@@ -74,6 +74,14 @@
 
   el('showConfiguration').addEventListener('click', () => showView('configuration'));
   el('showExercise').addEventListener('click', () => showView('exercise'));
+  el('configureEmptyExercise').addEventListener('click', () => {
+    showView('configuration');
+    el('configurationTitle').focus();
+  });
+  el('overviewFromConfiguration').addEventListener('click', () => {
+    el('showManagement').click();
+    el('exerciseTitle').focus();
+  });
 
   function selectedPatient() {
     return exercise?.patients.find((patient) => patient.id === el('choose').value);
@@ -230,6 +238,9 @@
         'busFeedback', 'truckFeedback', 'objectFeedback', 'triageSettingsFeedback']) message('', id);
     }
     syncArrivalClock(next, changed);
+    const hasPatients = Boolean(next?.patients.length);
+    el('configurationEditor').hidden = !next;
+    el('noConfigurationExercise').hidden = Boolean(next);
     el('triageSettings').hidden = !next;
     const activeTitle = el('activeExerciseTitle');
     const title = next?.title ?? 'Keine Übung ausgewählt';
@@ -247,12 +258,12 @@
     el('live').hidden = !next;
     el('patientControls').hidden = !next;
     updateExerciseToolbar();
-    el('saveTemplateForm').hidden = !next;
-    el('updateTemplate').hidden = !next;
+    el('templateManagement').hidden = !hasPatients;
+    el('emptyPatientOverview').hidden = !next || hasPatients;
+    el('stationPrintOptions').hidden = !hasPatients;
     el('preview').hidden = !next;
     renderJoin(next?.join_code);
     el('attachBus').hidden = !next;
-    el('startBus').classList.toggle('action-secondary', Boolean(next));
     if (changed || el('choose').options.length !== (next?.patients.length ?? 0)) updateCarChoices(changed);
     updateCarActions();
     const briefing = next?.patients.find((patient) => patient.model?.bus_briefing)?.model.bus_briefing;
@@ -935,7 +946,7 @@
     el('workspace').hidden = true;
     el('trainerAccess').hidden = true;
     clearTrainerInvitation();
-    showView('configuration');
+    showView('management');
     el('logout').hidden = true;
     el('login').hidden = false;
     el('requestTrainer').hidden = false;
@@ -972,8 +983,12 @@
     options(select, templates, 'Vorlage auswählen');
     if (templates.some((template) => template.id === selected)) select.value = selected;
     else el('templateRunTitle').value = '';
-    el('startTemplateForm').hidden = !templates.length;
-    el('noTemplates').hidden = Boolean(templates.length);
+    el('templateSettings').hidden = !templates.length;
+    const update = el('templateToUpdate');
+    const previousUpdate = keepSelection ? update.value : '';
+    options(update, templates, 'Vorlage auswählen');
+    if (templates.some((template) => template.id === previousUpdate)) update.value = previousUpdate;
+    el('updateTemplateForm').hidden = !templates.length;
   }
 
   function managementCard(item, kind) {
@@ -1277,7 +1292,6 @@
       select.value = item.id;
       select.dispatchEvent(new Event('change'));
       el('templateSettings').open = true;
-      showView('configuration');
       el('templateRunTitle').focus();
       return;
     }
@@ -1474,6 +1488,10 @@
       await openSharedExercise(shareToken);
     } else if (list.length) {
       await switchExercise(list[0].id);
+    } else {
+      showView('management');
+      await refreshManagement();
+      return;
     }
     renderTemplateOptions(await rpc({ p_action: 'list_templates' }));
   }
@@ -1483,7 +1501,7 @@
     if (region) message('', region);
     busy = true;
     actionVersion++;
-    const controls = document.querySelectorAll('form button, #logout, #exercise, #editExerciseTitle, #createCustom, #startBus, #attachBus, #editCar, #editTruck, #editObject, #triageMode, #showManagement, #refreshManagement, [data-management-action]');
+    const controls = document.querySelectorAll('form button, #logout, #exercise, #editExerciseTitle, #createCustom, #attachBus, #editCar, #editTruck, #editObject, #triageMode, #showManagement, #refreshManagement, [data-management-action]');
     for (const control of controls) control.disabled = true;
     renderPatient();
     try {
@@ -1679,10 +1697,10 @@
     el('exercise').value = exercise?.id ?? '';
     void run(async () => {
       if (id === exercise?.id || !await confirmCarChanges()) return;
-      await switchExercise(id);
+      await switchExercise(id, el('configurationView').hidden ? 'exercise' : 'configuration');
     });
   });
-  async function switchExercise(id) {
+  async function switchExercise(id, view = 'exercise') {
     const select = el('exercise');
     let next;
     try {
@@ -1695,7 +1713,7 @@
       return;
     }
     selectExercise(next);
-    showView(next ? 'exercise' : 'configuration');
+    showView(next ? view : 'configuration');
   }
 
   function selectExercise(next) {
@@ -1711,13 +1729,12 @@
     event.preventDefault();
     if (!exercise) return;
     void run(async () => {
+      if (!await confirmCarChanges(stationForms, true)) return;
       const template = await rpc({ p_action: 'save_template', p_session: exercise.id, p_title: el('templateTitle').value });
-      const select = el('exerciseTemplate');
-      select.add(new Option(template.title, template.id), 1);
-      select.value = template.id;
-      el('templateRunTitle').value = template.title;
-      el('startTemplateForm').hidden = false;
-      el('noTemplates').hidden = true;
+      for (const id of ['exerciseTemplate', 'templateToUpdate']) el(id).add(new Option(template.title, template.id), 1);
+      el('templateToUpdate').value = template.id;
+      el('templateSettings').hidden = false;
+      el('updateTemplateForm').hidden = false;
       el('templateTitle').value = '';
       message('Übungsvorlage gespeichert.', 'templateFeedback');
     }, 'templateFeedback');
@@ -1728,15 +1745,16 @@
     el('templateRunTitle').value = select.value ? select.selectedOptions[0].textContent : '';
   });
 
-  el('updateTemplate').addEventListener('click', () => {
-    const select = el('exerciseTemplate');
+  el('updateTemplateForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const select = el('templateToUpdate');
     if (!exercise || !select.value) {
       message('Wähle zuerst eine Vorlage aus.', 'templateFeedback');
       return;
     }
     if (!confirm('Vorlage „' + select.selectedOptions[0].textContent + '“ mit der Besetzung aus „' + exercise.title + '“ aktualisieren?')) return;
     void run(async () => {
-      if (!await confirmCarChanges()) return;
+      if (!await confirmCarChanges(stationForms, true)) return;
       await rpc({ p_action: 'update_template', p_session: exercise.id, p_patient: select.value });
       message('Übungsvorlage aktualisiert.', 'templateFeedback');
     }, 'templateFeedback');
@@ -1748,22 +1766,24 @@
     if (!id) return;
     void run(async () => {
       if (!await confirmCarChanges()) return;
-      openCreatedExercise(await rpc({ p_action: 'start_template', p_session: id, p_title: el('templateRunTitle').value }), 'exerciseFeedback');
-      showView('exercise');
-    }, 'templateFeedback');
+      openCreatedExercise(await rpc({ p_action: 'start_template', p_session: id, p_title: el('templateRunTitle').value }));
+    }, 'templateStartFeedback');
   });
   el('create').addEventListener('submit', (event) => {
     event.preventDefault();
+    const action = event.submitter?.value === 'create' ? 'create' : 'create_empty';
     void run(async () => {
       if (!await confirmCarChanges()) return;
-      const created = await rpc({ p_action: 'create', p_title: el('exerciseTitle').value });
-      openCreatedExercise(created, 'createFeedback');
+      const created = await rpc({ p_action: action, p_title: el('exerciseTitle').value });
+      openCreatedExercise(created);
       el('exerciseTitle').value = '';
     }, 'createFeedback');
   });
-  function openCreatedExercise(created, region) {
+  function openCreatedExercise(created) {
     selectExercise(created);
-    message('Übung „' + created.title + '“ angelegt.', region);
+    showView('configuration');
+    message('Übung „' + created.title + '“ angelegt.', 'exerciseNameFeedback');
+    el('configurationTitle').focus();
   }
 
   el('createCustom').addEventListener('click', () => {
@@ -1785,26 +1805,19 @@
         return;
       }
       if (!await confirmCarChanges()) return;
-      openCreatedExercise(await rpc(draft, api.createCustom), 'customFeedback');
+      openCreatedExercise(await rpc(draft, api.createCustom));
       input.value = '';
     }, 'customFeedback');
   });
-  for (const [button, attach] of [['startBus', false], ['attachBus', true]]) {
-    el(button).addEventListener('click', () => {
-      void run(async () => {
-        if (!attach && !await confirmCarChanges()) return;
-        const capacity = Number(el('busCapacity').value);
-        const params = { p_capacity: capacity, p_session: attach ? exercise.id : null };
-        const next = await rpc(params, api.bookBus);
-        if (attach) {
-          renderExercise(next);
-          message('Bus mit ' + capacity + ' Personen hinzugefügt.', 'busFeedback');
-        } else {
-          openCreatedExercise(next, 'busFeedback');
-        }
-      }, 'busFeedback');
-    });
-  }
+  el('attachBus').addEventListener('click', () => {
+    if (!exercise) return;
+    void run(async () => {
+      const capacity = Number(el('busCapacity').value);
+      const next = await rpc({ p_capacity: capacity, p_session: exercise.id }, api.bookBus);
+      renderExercise(next);
+      message('Bus mit ' + capacity + ' Personen hinzugefügt.', 'busFeedback');
+    }, 'busFeedback');
+  });
   const objectTypeLabels = {
     beam: 'Betonträger', skip: 'Mulde', car: 'Pkw', 'car-bike': 'Pkw und Fahrrad',
     truck: 'Lkw', bus: 'Bus', machine: 'Maschine'
@@ -1833,7 +1846,7 @@
       kind, title, loadedNumber: '', baseline: '', editVersion: 0,
       card: el(prefix + 'Booking'), fields: el(prefix + 'Form'),
       choiceLabel: el('edit' + suffix + 'Choice'), select: el('edit' + suffix),
-      start: el('start' + suffix), attach: el('attach' + suffix), save: el('save' + suffix),
+      attach: el('attach' + suffix), save: el('save' + suffix),
       location: el(prefix + 'Situation'), status: el(prefix + 'EditStatus'), unsaved: el(prefix + 'Unsaved')
     };
     if (kind === 'object') {
@@ -2091,8 +2104,6 @@
       const patients = carPatients(form);
       const editing = patients.length > 0;
       const started = patients.some((patient) => patient.status !== 'ready');
-      form.start.hidden = editing || Boolean(form.draftBound);
-      form.start.classList.toggle('action-secondary', Boolean(exercise));
       form.attach.hidden = !exercise || editing;
       form.save.hidden = !editing;
       form.save.disabled = busy || started;
@@ -2292,7 +2303,7 @@
         dialog.addEventListener('close', () => resolve(dialog.returnValue), { once: true });
         dialog.showModal();
       });
-      if (choice === 'save') await saveCar(form, Boolean(exercise));
+      if (choice === 'save') await saveCar(form);
       else if (choice !== 'discard') return false;
       else if (discardNow) {
         clearStationDraft(form);
@@ -2351,15 +2362,15 @@
 
     form.fields.addEventListener('submit', (event) => {
       event.preventDefault();
-      const attach = event.submitter === form.attach;
       if (form.loadedNumber && form.save.disabled) return;
-      void run(() => saveCar(form, attach), form.kind + 'Feedback');
+      void run(() => saveCar(form), form.kind + 'Feedback');
     });
   }
 
-  async function saveCar(form, attach) {
+  async function saveCar(form) {
     const editNumber = Number(form.loadedNumber);
-    if (form.draftBound && (form.draftBound !== exercise?.id || (!attach && !editNumber))) {
+    if (!exercise) throw new Error('Wähle zuerst eine aktive Übung.');
+    if (form.draftBound && form.draftBound !== exercise.id) {
       throw new Error('Dieser Stationsentwurf gehört zur ursprünglichen Übung.');
     }
     const config = carFormConfig(form);
@@ -2367,7 +2378,7 @@
       ? 'Wähle ein Verletzungsprofil für die Person.' : 'Wähle mindestens einen besetzten Sitzplatz.');
     if (!form.fields.reportValidity()) throw new Error('Prüfe die Angaben im Formular.');
     if (editNumber) Object.assign(config, { car_number: editNumber, edit_version: form.editVersion });
-    const next = await rpc({ p_config: config, p_session: attach || editNumber ? exercise.id : null }, api.bookCar);
+    const next = await rpc({ p_config: config, p_session: exercise.id }, api.bookCar);
     clearStationDraft(form);
     if (editNumber) {
       renderExercise(next);
@@ -2377,19 +2388,15 @@
         : 'Änderungen am ' + form.title + ' gespeichert.', form.kind + 'Feedback');
       return;
     }
-    if (attach) {
-      renderExercise(next);
-      const patients = stationPatients(form);
-      const number = Math.max(...patients.map(({model}) => model.car_number));
-      const first = patients.find(({model}) => model.car_number === number);
-      el('choose').value = first.id;
-      renderOverview();
-      renderPatient();
-      resetPreview();
-      message(form.title + ' ' + String(number).padStart(2, '0') + ' hinzugefügt.', form.kind + 'Feedback');
-    } else {
-      openCreatedExercise(next, form.kind + 'Feedback');
-    }
+    renderExercise(next);
+    const patients = stationPatients(form);
+    const number = Math.max(...patients.map(({model}) => model.car_number));
+    const first = patients.find(({model}) => model.car_number === number);
+    el('choose').value = first.id;
+    renderOverview();
+    renderPatient();
+    resetPreview();
+    message(form.title + ' ' + String(number).padStart(2, '0') + ' hinzugefügt.', form.kind + 'Feedback');
     loadCarForm(form);
   }
   el('choose').addEventListener('change', () => {
