@@ -72,6 +72,10 @@ main { max-width: 49rem; margin: auto; }
 .trainer-banner #message { grid-area: 3 / 1 / 4 / 3; margin: .25rem 0; }
 .trainer-banner #login { grid-column: 1 / -1; }
 .trainer-banner #logout { grid-column: 1; justify-self: start; }
+.trainer-access-list { padding: 0; list-style: none; }
+.trainer-access-list li { padding: .55rem 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.trainer-access-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+#trainerInviteLink { width: 100%; }
 .trainer-login-qr {
   grid-area: 1 / 2 / 3 / 3;
   display: grid;

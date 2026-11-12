@@ -907,6 +907,19 @@ begin
 end;
 $$;
 
+create table if not exists traumasim_private.trainer_access_requests (
+ email text primary key,
+ requested_at timestamptz not null default now(),
+ invite_hash text unique,
+ expires_at timestamptz,
+ activation_id uuid,
+ activation_until timestamptz,
+ completed_at timestamptz,
+ activated_user_id uuid references auth.users(id) on delete cascade
+);
+alter table traumasim_private.trainer_access_requests enable row level security;
+revoke all on traumasim_private.trainer_access_requests from public, anon, authenticated;
+
 create or replace function traumasim_private.require_trainer()
 returns uuid language plpgsql stable set search_path = '' as $$
 declare
@@ -915,7 +928,12 @@ begin
  if not exists (
    select 1 from auth.users u
    join traumasim_private.trainers t on t.email = lower(u.email)
+   left join traumasim_private.trainer_access_requests r on r.email = t.email and r.completed_at is not null
    where u.id = trainer and u.email_confirmed_at is not null
+     and (r.email is null or (r.activated_user_id = u.id and exists (
+       select 1 from auth.sessions s where s.user_id = u.id and s.id::text = auth.jwt()->>'session_id'
+         and s.created_at >= r.completed_at
+     )))
  ) then
    raise exception using errcode = '42501', message = 'Konto nicht für die Ausbilderansicht freigegeben';
  end if;
@@ -1844,6 +1862,132 @@ grant execute on function traumasim_private.book_bus(integer, uuid), public.trau
 grant execute on function traumasim_private.book_car(jsonb, uuid), public.traumasim_book_car(jsonb, uuid) to authenticated;
 grant execute on function public.traumasim_create_custom(jsonb) to authenticated;
 grant execute on function public.traumasim_trainer(text, uuid, text, text) to authenticated;
+
+create or replace function traumasim_private.request_trainer_access(p_email text)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+ address text := lower(btrim(p_email));
+begin
+ if address is null or length(address) > 254 or address !~ '^[a-z0-9.!#$%&''*+/=?^_`{|}~-]+@[a-z0-9-]+([.][a-z0-9-]+)+$' then
+   raise exception using errcode = '22023', message = 'Gib eine gültige E-Mail-Adresse ein.';
+ end if;
+ if not exists (
+   select 1 from auth.users u join traumasim_private.trainers t on t.email = lower(u.email)
+   where t.email = address and u.email_confirmed_at is not null
+ ) then
+   insert into traumasim_private.trainer_access_requests (email) values (address)
+   on conflict (email) do update set requested_at = now()
+   where trainer_access_requests.completed_at is null
+     and trainer_access_requests.requested_at < now() - interval '30 days';
+ end if;
+end;
+$$;
+
+create or replace function traumasim_private.manage_trainer_access(p_action text, p_email text, p_hash text)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+ owner_id uuid := traumasim_private.require_trainer();
+begin
+ if not exists (select 1 from auth.users where id = owner_id and lower(email) = 'phillip.ritter@gmail.com') then
+   raise exception using errcode = '42501', message = 'Die Kontofreigabe ist dem Projektinhaber vorbehalten.';
+ end if;
+ if p_action = 'list' then
+   return coalesce((select jsonb_agg(jsonb_build_object('email', r.email,
+     'expires_at', r.expires_at) order by r.requested_at desc)
+     from (select email, expires_at, requested_at from traumasim_private.trainer_access_requests
+       where completed_at is null and requested_at >= now() - interval '30 days'
+       order by requested_at desc limit 100) r), '[]'::jsonb);
+ end if;
+ if p_action = 'approve' then
+   if p_hash is null or p_hash !~ '^[a-f0-9]{64}$' then
+     raise exception using errcode = '22023', message = 'Die Einladung konnte nicht erstellt werden.';
+   end if;
+   update traumasim_private.trainer_access_requests
+   set invite_hash = p_hash, expires_at = now() + interval '72 hours', activation_id = null, activation_until = null
+   where email = p_email and completed_at is null and (activation_until is null or activation_until < now())
+     and not exists (
+       select 1 from auth.users u join traumasim_private.trainers t on t.email = lower(u.email)
+       where t.email = p_email and u.email_confirmed_at is not null
+     );
+ elsif p_action = 'dismiss' then
+   delete from traumasim_private.trainer_access_requests where email = p_email
+     and completed_at is null and (activation_until is null or activation_until < now());
+ else
+   raise exception using errcode = '22023', message = 'Unbekannte Aktion.';
+ end if;
+ if not found then
+   raise exception using errcode = '22023', message = 'Diese Anfrage ist gerade in Bearbeitung oder bereits erledigt.';
+ end if;
+ return 'true'::jsonb;
+end;
+$$;
+
+-- Only the activation function's server credential can claim and complete an invitation.
+create or replace function traumasim_private.activate_trainer_access(
+ p_action text, p_hash text, p_activation uuid, p_user uuid
+) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+ address text;
+ existing_user uuid;
+begin
+ if p_activation is null then return null; end if;
+ if p_action = 'claim' then
+   update traumasim_private.trainer_access_requests r
+   set activation_id = p_activation, activation_until = now() + interval '2 minutes'
+   where r.invite_hash = p_hash and r.expires_at > now() and r.completed_at is null
+     and (r.activation_until is null or r.activation_until < now())
+     and not exists (
+       select 1 from auth.users u join traumasim_private.trainers t on t.email = lower(u.email)
+       where t.email = r.email and u.email_confirmed_at is not null
+     )
+   returning r.email into address;
+   if not found then return null; end if;
+   select id into existing_user from auth.users where lower(email) = address and not is_sso_user;
+   return jsonb_build_object('email', address, 'user_id', existing_user);
+ elsif p_action = 'finish' then
+   update traumasim_private.trainer_access_requests r
+   set completed_at = clock_timestamp(), activated_user_id = p_user,
+       invite_hash = null, expires_at = null, activation_id = null, activation_until = null
+   where r.invite_hash = p_hash and r.activation_id = p_activation and r.activation_until > now()
+     and exists (select 1 from auth.users u where u.id = p_user
+       and lower(u.email) = r.email and u.email_confirmed_at is not null)
+   returning r.email into address;
+   if not found then return null; end if;
+   insert into traumasim_private.trainers (email) values (address) on conflict do nothing;
+   return jsonb_build_object('email', address);
+ elsif p_action = 'release' then
+   update traumasim_private.trainer_access_requests
+   set activation_id = null, activation_until = null
+   where invite_hash = p_hash and activation_id = p_activation;
+ end if;
+ return null;
+end;
+$$;
+
+create or replace function public.traumasim_request_trainer_access(p_email text)
+returns void language sql security invoker set search_path = '' as $$
+ select traumasim_private.request_trainer_access(p_email);
+$$;
+create or replace function public.traumasim_manage_trainer_access(p_action text, p_email text default null, p_hash text default null)
+returns jsonb language sql security invoker set search_path = '' as $$
+ select traumasim_private.manage_trainer_access(p_action, p_email, p_hash);
+$$;
+create or replace function public.traumasim_activate_trainer_access(p_action text, p_hash text, p_activation uuid, p_user uuid default null)
+returns jsonb language sql security invoker set search_path = '' as $$
+ select traumasim_private.activate_trainer_access(p_action, p_hash, p_activation, p_user);
+$$;
+
+revoke all on function public.traumasim_request_trainer_access(text),
+ traumasim_private.request_trainer_access(text), public.traumasim_manage_trainer_access(text, text, text),
+ traumasim_private.manage_trainer_access(text, text, text),
+ public.traumasim_activate_trainer_access(text, text, uuid, uuid),
+ traumasim_private.activate_trainer_access(text, text, uuid, uuid) from public, anon, authenticated;
+grant usage on schema traumasim_private to service_role;
+grant execute on function public.traumasim_request_trainer_access(text), traumasim_private.request_trainer_access(text) to anon, authenticated;
+grant execute on function public.traumasim_manage_trainer_access(text, text, text),
+ traumasim_private.manage_trainer_access(text, text, text) to authenticated;
+grant execute on function public.traumasim_activate_trainer_access(text, text, uuid, uuid),
+ traumasim_private.activate_trainer_access(text, text, uuid, uuid) to service_role;
 
 notify pgrst, 'reload schema';
 commit;

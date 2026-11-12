@@ -2,10 +2,12 @@
 
 ## Betrieb
 
-1. In der Ausbilderansicht mit einem freigegebenen, bestätigten Supabase-Auth-Konto
-   anmelden. Für die Ersteinrichtung dort E-Mail und Passwort eingeben und
-   „Ausbilderkonto einrichten“ wählen. Danach den Bestätigungslink in der E-Mail
-   öffnen, zur Ausbilderansicht zurückkehren und anmelden. Die Anmeldung
+1. In der Ausbilderansicht mit einem freigegebenen Ausbilderkonto anmelden.
+   Unter **Ausbilderkonto beantragen** können neue Ausbilder ihre E-Mail-Adresse
+   einreichen. Philipp öffnet nach der Anmeldung **Kontofreigaben**, gibt die
+   Anfrage frei und sendet die vorbereitete Einladung aus seinem Gmail-Konto.
+   Der Einladungslink ist einmalig verwendbar und 72 Stunden gültig. Der Empfänger
+   setzt darüber sein Passwort und wird anschließend angemeldet. Die Anmeldung
    bleibt im selben Browserprofil bis zu 24 Stunden gültig. **Abmelden**
    beendet sie auch in weiteren Ausbilder-Tabs desselben Profils.
    Der **Ausbilder-QR** in der Kopfzeile öffnet die Anmeldeseite auf einem
@@ -195,14 +197,15 @@ kann auf einen Lkw oder eine Einklemmungsstelle eingegrenzt werden.
 
 - `supabase/schema.sql` als Datenbankadministrator anwenden. Es aktualisiert
   auch das vorbereitete Schema.
-- Zugelassene E-Mail-Adressen kleingeschrieben in
-  `traumasim_private.trainers(email)` eintragen. Die RPC prüft die serverseitig
-  bestätigte Adresse aus Supabase Auth und bei jeder Übungsaktion den Eigentümer
-  der Übung. Die Liste bleibt in der Datenbank.
-- E-Mail-Bestätigung und Passwortanmeldung in Supabase Auth aktivieren.
-  Für die Rückleitung nach der Bestätigung kann die Pages-Ausbilderadresse in
-  Supabase als Redirect URL hinterlegt werden. Bei eingeschränktem E-Mail-Versand
-  kann der Projektadministrator das Konto über **Authentication → Users** anlegen.
+- Bestehende Zugänge stehen in `traumasim_private.trainers(email)`. Neue
+  Freigaben erteilt das bestätigte Inhaberkonto über die Ausbilderansicht.
+  Die RPC prüft die serverseitig bestätigte Adresse aus Supabase Auth und
+  bei jeder Übungsaktion den Eigentümer der Übung.
+- Für Einladungen die Edge Function `trainer-enrollment` bereitstellen.
+  Die Aktivierung prüft serverseitig das befristete Einladungstoken und setzt
+  über Supabase Auth das gewählte Passwort. Die Einladung wird über das
+  Gmail-Konto des Inhabers versendet. Der Service-Role-Schlüssel bleibt in der
+  Laufzeitumgebung der Edge Function.
 - `supabase-config.js` enthält nur Projekt-URL und Publishable Key.
   Die Rollen `anon` und `authenticated` erhalten keine direkten
   Tabellenrechte. Öffentliche RPCs delegieren an Funktionen im privaten Schema.

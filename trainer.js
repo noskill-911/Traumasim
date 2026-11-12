@@ -9,6 +9,7 @@
   const previewDuration = Number(el('seek').max) * 60;
   const actions = Array.from(document.querySelectorAll('[data-action]'));
   const sessionKey = 'traumasim:trainer-session';
+  const accessOwnerEmail = 'phillip.ritter@gmail.com';
   const stationDraftPrefix = 'traumasim:station-draft:v1:';
   const sessionLifetime = 24 * 60 * 60 * 1000;
   const categoryLabels = {
@@ -49,7 +50,9 @@
   let sharingExercise = null;
   let currentShareEmail = '';
 
-  if (new URLSearchParams(location.hash.slice(1)).has('access_token')) {
+  const initialFragment = new URLSearchParams(location.hash.slice(1));
+  const enrollmentCode = initialFragment.get('einladung');
+  if (initialFragment.has('access_token') || enrollmentCode !== null) {
     history.replaceState(null, '', location.pathname + location.search);
   }
 
@@ -930,9 +933,12 @@
     renderTemplateOptions([]);
     for (const id of ['activeExercises', 'inactiveExercises', 'exerciseTemplates']) el(id).replaceChildren();
     el('workspace').hidden = true;
+    el('trainerAccess').hidden = true;
+    clearTrainerInvitation();
     showView('configuration');
     el('logout').hidden = true;
     el('login').hidden = false;
+    el('requestTrainer').hidden = false;
     if (revoke && current) void api.signOut(current.access_token).catch(() => {});
   }
 
@@ -1458,9 +1464,11 @@
   async function openWorkspace(list) {
     options(el('exercise'), list, 'Übung auswählen');
     el('login').hidden = true;
+    el('requestTrainer').hidden = true;
     el('logout').hidden = false;
     el('workspace').hidden = false;
     message('Als Ausbilder angemeldet.');
+    void refreshTrainerAccess().catch(() => {});
     const shareToken = requestedShareToken();
     if (shareToken) {
       await openSharedExercise(shareToken);
@@ -1481,7 +1489,10 @@
     try {
       await work();
     } catch (error) {
-      if (el('workspace').hidden) el('login').hidden = false;
+      if (el('workspace').hidden && el('activateTrainer').hidden) {
+        el('login').hidden = false;
+        el('requestTrainer').hidden = false;
+      }
       handleError(error, region);
     } finally {
       busy = false;
@@ -1551,29 +1562,108 @@
     }, 'triageSettingsFeedback');
   });
 
+  function clearTrainerInvitation() {
+    el('sendTrainerInvite').hidden = true;
+    el('sendTrainerInvite').removeAttribute('href');
+    el('trainerInviteLinkLabel').hidden = true;
+    el('trainerInviteLink').value = '';
+  }
+
+  function renderTrainerAccessRequests(requests) {
+    const list = el('trainerAccessList');
+    el('trainerAccessCount').textContent = requests.length ? '(' + requests.length + ')' : '';
+    list.replaceChildren(...requests.map((request) => {
+      const row = document.createElement('li');
+      const title = document.createElement('strong');
+      title.textContent = request.email;
+      const actions = document.createElement('div');
+      actions.className = 'trainer-access-actions';
+      const approve = document.createElement('button');
+      const dismiss = document.createElement('button');
+      approve.type = dismiss.type = 'button';
+      approve.textContent = Date.parse(request.expires_at) > Date.now() ? 'Neuen Einladungslink erstellen' : 'Freigeben';
+      dismiss.textContent = 'Entfernen';
+      dismiss.className = 'action-secondary';
+      approve.addEventListener('click', () => void run(async () => {
+        clearTrainerInvitation();
+        const asHex = (bytes) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+        const code = asHex(crypto.getRandomValues(new Uint8Array(32)));
+        const hash = asHex(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code))));
+        await rpc({ p_action: 'approve', p_email: request.email, p_hash: hash }, api.manageTrainerAccess);
+        const invite = new URL(trainerUrl);
+        invite.hash = new URLSearchParams({ einladung: code }).toString();
+        const mail = new URL('https://mail.google.com/mail/');
+        mail.search = new URLSearchParams({ authuser: accessOwnerEmail, view: 'cm', fs: '1', to: request.email,
+          su: 'Dein Ausbilderkonto für TraumaSim',
+          body: 'Hallo,\n\ndein Ausbilderzugang für TraumaSim ist freigegeben. Mit diesem Link kannst du dein Passwort setzen und dich anmelden:\n\n'
+            + invite.href + '\n\nDer Link ist einmalig verwendbar und 72 Stunden gültig.\n\nViele Grüße\nPhilipp' }).toString();
+        el('sendTrainerInvite').href = mail.href;
+        el('sendTrainerInvite').hidden = false;
+        el('trainerInviteLink').value = invite.href;
+        el('trainerInviteLinkLabel').hidden = false;
+        approve.textContent = 'Neuen Einladungslink erstellen';
+        message('Einladung für ' + request.email + ' erstellt. Öffne sie in Gmail und sende sie ab.', 'trainerAccessFeedback');
+      }, 'trainerAccessFeedback'));
+      dismiss.addEventListener('click', () => void run(async () => {
+        await rpc({ p_action: 'dismiss', p_email: request.email }, api.manageTrainerAccess);
+        clearTrainerInvitation();
+        await refreshTrainerAccess();
+      }, 'trainerAccessFeedback'));
+      actions.append(approve, dismiss);
+      row.append(title, actions);
+      return row;
+    }));
+  }
+
+  async function refreshTrainerAccess() {
+    const requests = await rpc({ p_action: 'list' }, api.manageTrainerAccess);
+    el('trainerAccess').hidden = false;
+    renderTrainerAccessRequests(requests);
+    message(requests.length ? '' : 'Keine offenen Kontoanfragen.', 'trainerAccessFeedback');
+  }
+
+  el('reloadTrainerAccess').addEventListener('click', () => void run(refreshTrainerAccess, 'trainerAccessFeedback'));
+
+  el('requestTrainerForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const email = el('requestTrainerEmail').value.trim();
+    void run(async () => {
+      await api.requestTrainerAccess(email);
+      el('notifyTrainerOwner').href = 'mailto:' + accessOwnerEmail + '?subject=' + encodeURIComponent('TraumaSim · Ausbilderkonto')
+        + '&body=' + encodeURIComponent('Hallo Philipp,\n\nich habe ein Ausbilderkonto für ' + email + ' beantragt.');
+      el('notifyTrainerOwner').hidden = false;
+      message('Die Anfrage wurde entgegengenommen. Nach der Freigabe erhältst du einen Einladungslink.', 'requestTrainerFeedback');
+    }, 'requestTrainerFeedback');
+  });
+
+  async function signInTrainer(email, password) {
+    const data = await api.signIn(email, password);
+    el('password').value = '';
+    const list = await api.trainer({ p_action: 'list' }, data.access_token);
+    saveSession(data, crypto.randomUUID(), Date.now() + sessionLifetime);
+    await openWorkspace(list);
+  }
+
   el('login').addEventListener('submit', (event) => {
     event.preventDefault();
-    const email = el('email').value.trim();
-    const password = el('password').value;
-    if (event.submitter?.id === 'register') {
-      if (password.length < 8) {
-        message('Wähle ein Passwort mit mindestens acht Zeichen.');
-        return;
-      }
-      void run(async () => {
-        await api.signUp(email, password, new URL('trainer.html', location.href).href);
-        el('password').value = '';
-        message('Bestätige deine E-Mail-Adresse über den Link in der Nachricht. Öffne anschließend wieder diese Ausbilderansicht und melde dich an.');
-      });
+    void run(() => signInTrainer(el('email').value.trim(), el('password').value));
+  });
+
+  el('activateTrainerForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const password = el('enrollmentPassword').value;
+    if (password !== el('enrollmentConfirm').value) {
+      message('Die beiden Passwörter stimmen nicht überein.', 'enrollmentFeedback');
       return;
     }
     void run(async () => {
-      const data = await api.signIn(email, password);
-      el('password').value = '';
-      const list = await api.trainer({ p_action: 'list' }, data.access_token);
-      saveSession(data, crypto.randomUUID(), Date.now() + sessionLifetime);
-      await openWorkspace(list);
-    });
+      const { email } = await api.activateTrainer(enrollmentCode, password);
+      el('activateTrainerForm').reset();
+      el('activateTrainer').hidden = true;
+      el('email').value = email;
+      message('Das Passwort ist gespeichert. Du kannst dich jetzt anmelden.');
+      await signInTrainer(email, password);
+    }, 'enrollmentFeedback');
   });
 
   el('logout').addEventListener('click', () => {
@@ -2417,7 +2507,12 @@
 
   const saved = readSession();
   loadCarForm();
-  if (saved) {
+  if (enrollmentCode !== null) {
+    el('login').hidden = true;
+    el('requestTrainer').hidden = true;
+    el('activateTrainer').hidden = false;
+    message('Ausbilderkonto einrichten.');
+  } else if (saved) {
     auth = saved;
     persistentSession = true;
     if (Date.now() >= saved.until) {
@@ -2425,6 +2520,7 @@
       message(needsLogin().message);
     } else {
       el('login').hidden = true;
+      el('requestTrainer').hidden = true;
       message('Ausbildersitzung wird geladen …');
       void run(async () => openWorkspace(await rpc({ p_action: 'list' })));
     }

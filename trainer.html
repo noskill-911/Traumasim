@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://pekluohczuojlyxsvght.supabase.co; base-uri 'none'; form-action 'none'">
   <title>TraumaSim · Ausbilderansicht</title>
-  <link rel="stylesheet" href="style.css?v=station-heading">
+  <link rel="stylesheet" href="style.css?v=trainer-enrollment">
 </head>
 <body><main class="trainer-shell">
   <section class="panel page-banner trainer-banner">
@@ -22,10 +22,37 @@
       <label>E-Mail <input id="email" type="email" autocomplete="username" required></label>
       <label>Passwort <input id="password" type="password" autocomplete="current-password" required></label>
       <button>Anmelden</button>
-      <button id="register" class="action-secondary" type="submit">Ausbilderkonto einrichten</button>
     </form>
     <button id="logout" class="action-secondary" hidden>Abmelden</button>
   </section>
+
+  <details id="requestTrainer" class="panel">
+    <summary>Ausbilderkonto beantragen</summary>
+    <form id="requestTrainerForm">
+      <label>E-Mail für das Ausbilderkonto <input id="requestTrainerEmail" type="email" autocomplete="email" maxlength="254" required></label>
+      <button type="submit">Zugang beantragen</button>
+    </form>
+    <p id="requestTrainerFeedback" role="status"></p>
+    <a id="notifyTrainerOwner" hidden>Philipp per E-Mail informieren</a>
+  </details>
+  <section id="activateTrainer" class="panel" hidden>
+    <h2>Passwort für dein Ausbilderkonto setzen</h2>
+    <form id="activateTrainerForm">
+      <label>Neues Passwort (mindestens 12 Zeichen) <input id="enrollmentPassword" type="password" autocomplete="new-password" minlength="12" required></label>
+      <label>Passwort wiederholen <input id="enrollmentConfirm" type="password" autocomplete="new-password" minlength="12" required></label>
+      <button type="submit">Konto aktivieren und anmelden</button>
+    </form>
+    <p id="enrollmentFeedback" role="status"></p>
+    <a href="trainer.html">Zur Anmeldung</a>
+  </section>
+  <details id="trainerAccess" class="panel" hidden>
+    <summary>Kontofreigaben <span id="trainerAccessCount" class="muted small"></span></summary>
+    <button id="reloadTrainerAccess" type="button" class="action-secondary">Anfragen aktualisieren</button>
+    <p id="trainerAccessFeedback" role="status"></p>
+    <ul id="trainerAccessList" class="trainer-access-list"></ul>
+    <a id="sendTrainerInvite" class="action" target="_blank" rel="noopener noreferrer" hidden>Einladung in Gmail öffnen</a>
+    <label id="trainerInviteLinkLabel" hidden>Einladungslink zum Kopieren <input id="trainerInviteLink" readonly></label>
+  </details>
 
   <div id="workspace" hidden>
     <section class="panel workspace-panel">
@@ -462,9 +489,9 @@
 <div id="exercisePrint" class="exercise-print"></div>
 <script src="patients.js?v=verkehrsunfall"></script>
 <script src="supabase-config.js"></script>
-<script src="sync.js?v=station-heading"></script>
+<script src="sync.js?v=trainer-enrollment"></script>
 <script src="vendor/qrcode-generator-2.0.4.js?v=2.0.4"></script>
 <script src="scenario-validation.js?v=triage"></script>
-<script src="trainer.js?v=station-heading"></script>
+<script src="trainer.js?v=trainer-enrollment"></script>
 </body>
 </html>
